@@ -1,6 +1,7 @@
 import os
 import re
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from typing import overload
 
 
@@ -131,3 +132,25 @@ def get_model_from_env(
         raise ValueError(msg)
 
     return get_from_env_fn
+
+
+def format_datetime_relative(old_time: datetime, now: datetime | None = None) -> str:
+    """Format a datetime object to a relative string.
+
+    Args:
+        old_time: The datetime object to format.
+        now: The current datetime object. If not provided, the current time will be used.
+    """
+    now = now or datetime.now()  # noqa: DTZ005
+    today = now.date()
+    yesterday = today - timedelta(days=1)
+    old_date = old_time.date()
+
+    time_part = old_time.strftime("%H:%M")
+
+    if old_date == today:
+        return time_part
+    if old_date == yesterday:
+        return f"Yesterday {time_part}"
+    date_part = old_time.strftime("%Y/%m/%d")
+    return f"{date_part} {time_part}"

@@ -1,10 +1,10 @@
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 from langchain.schema import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from src.llms import SingleTurnChatBase
 from src.prompts.summary import (
@@ -14,7 +14,7 @@ from src.prompts.summary import (
 from src.utils import get_model_from_env, get_provider_from_env
 
 
-class ShortTermMemoryUpdater(SingleTurnChatBase):
+class ShortTermMemoryChat(SingleTurnChatBase):
     """Short-term memory updater for chat models."""
 
     lang: Literal["en", "zh"] = Field(default="zh")
@@ -45,6 +45,22 @@ class ShortTermMemoryUpdater(SingleTurnChatBase):
                 )
         return values
 
+
+class ShortTermMemoryChatUpdater(BaseModel):
+    """Short-term memory updater for chat models."""
+
+    lang: Literal["en", "zh"] = Field(default="zh")
+
+    chain: ShortTermMemoryChat | None = None
+
+    @model_validator(mode="after")
+    def build_chain_if_needed(self) -> Self:
+        """Automatically build the chain if it is not provided."""
+        self.chain = self.chain or ShortTermMemoryChat(
+            lang=self.lang,
+        )
+        return self
+
     def _format_history(
         self,
         history: list[BaseMessage],
@@ -62,14 +78,16 @@ class ShortTermMemoryUpdater(SingleTurnChatBase):
             ]
         )
 
-    def get_memory(self, name: str, history: list[BaseMessage], **kwargs: Any) -> str:
+    def invoke(self, name: str, history: list[BaseMessage], **kwargs: Any) -> str:
         """Get the short-term memory from the model."""
-        message = f"UserName：{name}\nChatHistory:\n" + self._format_history(history)
-        return self.invoke({"input": message} | kwargs)
+        assert self.chain is not None
+        message = f"UserName: {name}\nChatHistory: \n" + self._format_history(history)
+        return self.chain.invoke({"input": message} | kwargs)
 
-    async def aget_memory(
+    async def ainvoke(
         self, name: str, history: list[BaseMessage], **kwargs: Any
     ) -> str:
         """Asynchronously get the short-term memory from the model."""
-        message = f"UserName：{name}\nChatHistory:\n" + self._format_history(history)
-        return await self.ainvoke({"input": message} | kwargs)
+        assert self.chain is not None
+        message = f"UserName: {name}\nChatHistory: \n" + self._format_history(history)
+        return await self.chain.ainvoke({"input": message} | kwargs)
