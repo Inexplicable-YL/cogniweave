@@ -1,21 +1,34 @@
 import os
-from typing import Self
+from typing import Any, Self
 from typing_extensions import override
 
 import openai
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts.chat import (
+    BaseChatPromptTemplate,
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
+from langchain_core.prompts.message import (
+    BaseMessagePromptTemplate,
+)
+from langchain_core.runnables import RunnableSerializable
+from langchain_core.runnables.config import RunnableConfig
 from langchain_openai import ChatOpenAI as BaseChatOpenAI
 from langchain_openai.chat_models.base import global_ssl_context
-from pydantic import Field, SecretStr, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 
-class ChatOpenAI(BaseChatOpenAI):
+class OpenAIModel(BaseChatOpenAI):
     """Wrapper around OpenAI's Chat API, with dynamic env key loading based on provider."""
 
-    provider: str = "openai"
+    provider: str = Field(default="openai")
 
     # Defaults are placeholders; they will be overridden in post-init
     openai_api_key: SecretStr | None = Field(alias="api_key", default=None)
     openai_api_base: str | None = Field(alias="base_url", default=None)
+    openai_proxy: str | None = None
 
     @model_validator(mode="after")
     @override
@@ -38,6 +51,7 @@ class ChatOpenAI(BaseChatOpenAI):
             os.getenv(f"{provider}_API_KEY") or ""
         )
         self.openai_api_base = self.openai_api_base or os.getenv(f"{provider}_API_BASE")
+        self.openai_proxy = self.openai_proxy or os.getenv(f"{provider}_PROXY")
         client_params: dict = {
             "api_key": (
                 self.openai_api_key.get_secret_value() if self.openai_api_key else None
@@ -94,3 +108,48 @@ class ChatOpenAI(BaseChatOpenAI):
             )
             self.async_client = self.root_async_client.chat.completions
         return self
+
+
+class SingleTurnChatBase(BaseModel):
+    """A base class for single-turn chat models."""
+
+    provider: str = Field(default="openai")
+    client: OpenAIModel | None = Field(alias="llm", default=None)
+    prompt: BaseChatPromptTemplate | BaseMessagePromptTemplate | None = None
+    chain: RunnableSerializable[dict[str, Any], str] | None = None
+
+    model_name: str = Field(default="gpt-3.5-turbo", alias="model")
+    temperature: float = Field(default=0.7)
+
+    @model_validator(mode="after")
+    def build_chain_if_needed(self) -> Self:
+        """Automatically build the chain if it is not provided."""
+        if self.chain is None:
+            self.client = self.client or OpenAIModel(
+                provider=self.provider,
+                model=self.model_name,
+                temperature=self.temperature,
+            )
+            self.prompt = self.prompt or SystemMessagePromptTemplate.from_template(
+                "你是一个有帮助的中文助手。请根据以下用户的问题进行简洁明了的回复。"
+            )
+            prompt_template = ChatPromptTemplate.from_messages(
+                [self.prompt, HumanMessagePromptTemplate.from_template("{input}")]
+            )
+            self.chain = prompt_template | self.client | StrOutputParser()
+
+        return self
+
+    def invoke(
+        self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
+    ) -> str:
+        """Synchronous call to the single-turn chat model."""
+        assert self.chain is not None
+        return self.chain.invoke(input, config=config, **kwargs)
+
+    async def ainvoke(
+        self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
+    ) -> str:
+        """Asynchronous call to the single-turn chat model."""
+        assert self.chain is not None
+        return await self.chain.ainvoke(input, config=config, **kwargs)
