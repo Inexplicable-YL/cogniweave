@@ -2,12 +2,12 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
+from langchain_core.load import Serializable
 
 from src.utils import format_datetime_relative
 
 
-class ChatSnippet(BaseModel):
-    user_id: str
+class ChatSnippet(Serializable):
     timestamp: datetime
     chat_summary: str
     topic_tags: list[str] = Field(default_factory=list)

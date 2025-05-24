@@ -52,7 +52,7 @@ dev-dependencies = [
 ]
 
 [tool.ruff]
-line-length = 88
+line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
@@ -82,7 +82,9 @@ ignore = [
     "TRY301",
     "N802",
     "SLF001",
+    "A001",
     "A002",
+    "D",
 ]
 allowed-confusables = ["，", "：", "！", "（", "）"]
 
