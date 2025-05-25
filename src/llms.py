@@ -3,6 +3,9 @@ from typing import Any, Generic, Self, TypeVar, cast
 from typing_extensions import override
 
 import openai
+from langchain_core.messages import (
+    BaseMessage,
+)
 from langchain_core.output_parsers import (
     BaseOutputParser,
     JsonOutputParser,
@@ -27,6 +30,18 @@ from pydantic import BaseModel, Field, SecretStr, model_validator
 
 Output = TypeVar("Output", covariant=True)  # noqa: PLC0105
 PydanticOutput = TypeVar("PydanticOutput", bound=BaseModel, covariant=True)  # noqa: PLC0105
+
+MessageLike = BaseMessagePromptTemplate | BaseMessage | BaseChatPromptTemplate
+
+MessageLikeRepresentation = (
+    MessageLike
+    | tuple[
+        str | type,
+        str | list[dict[str, Any]] | list[object],
+    ]
+    | str
+    | dict[str, Any]
+)
 
 
 class ChatOpenAI(BaseChatOpenAI):
@@ -207,7 +222,7 @@ class SingleTurnChatBase(RunnableSerializable[dict[str, Any], Output], Generic[O
 
     provider: str = Field(default="openai")
     client: BaseChatOpenAI | ChatOpenAI | None = Field(alias="llm", default=None)
-    prompt: BaseChatPromptTemplate | BaseMessagePromptTemplate | None = None
+    prompt: MessageLikeRepresentation | None = None
     parser: BaseOutputParser[Any] | None = None
     chain: RunnableSerializable[dict[str, Any], Output] | None = None
 
@@ -270,10 +285,10 @@ class StringSingleTurnChat(SingleTurnChatBase[str]):
 
     def __init__(
         self,
-        provider: str,
+        provider: str = "openai",
         *,
         llm: BaseChatOpenAI | ChatOpenAI | None = None,
-        prompt: BaseChatPromptTemplate | BaseMessagePromptTemplate | None = None,
+        prompt: MessageLikeRepresentation | None = None,
         model: str = "gpt-3.5-turbo",
         temperature: float = 0.7,
         **kwargs: Any,
@@ -299,10 +314,10 @@ class JsonSingleTurnChat(SingleTurnChatBase[dict[Any, Any]]):
 
     def __init__(
         self,
-        provider: str,
+        provider: str = "openai",
         *,
         llm: BaseChatOpenAI | ChatOpenAI | None = None,
-        prompt: BaseChatPromptTemplate | BaseMessagePromptTemplate | None = None,
+        prompt: MessageLikeRepresentation | None = None,
         model: str = "gpt-3.5-turbo",
         temperature: float = 0.7,
         **kwargs: Any,
@@ -329,12 +344,12 @@ class PydanticSingleTurnChat(SingleTurnChatBase[PydanticOutput], Generic[Pydanti
 
     def __init__(
         self,
-        provider: str,
         template: type[PydanticOutput],
+        provider: str = "openai",
         *,
         structured_output: bool = True,
         llm: BaseChatOpenAI | ChatOpenAI | None = None,
-        prompt: BaseChatPromptTemplate | BaseMessagePromptTemplate | None = None,
+        prompt: MessageLikeRepresentation | None = None,
         model: str = "gpt-4o-mini",
         temperature: float = 0.7,
         **kwargs: Any,
