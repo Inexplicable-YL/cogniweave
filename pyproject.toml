@@ -85,6 +85,7 @@ ignore = [
     "A001",
     "A002",
     "D",
+    "DTZ006",
 ]
 allowed-confusables = ["，", "：", "！", "（", "）"]
 

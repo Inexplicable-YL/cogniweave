@@ -91,10 +91,10 @@ class MessageSegmentsPlaceholder(StringPromptTemplate):
             value = value[-self.n_messages :]
         content: str = ""
         for prompt in value:
-            if isinstance(prompt, MessageSegmentsPromptTemplate):
+            if isinstance(prompt, StringPromptTemplate):
                 inputs = {var: kwargs[var] for var in prompt.input_variables}
                 formatted: str = prompt.format(**inputs)
-                content += "\n" + formatted
+                content += formatted
         return content
 
     @override
@@ -121,10 +121,10 @@ class MessageSegmentsPlaceholder(StringPromptTemplate):
             value = value[-self.n_messages :]
         content: str = ""
         for prompt in value:
-            if isinstance(prompt, MessageSegmentsPromptTemplate):
+            if isinstance(prompt, StringPromptTemplate):
                 inputs = {var: kwargs[var] for var in prompt.input_variables}
                 formatted: str = await prompt.aformat(**inputs)
-                content += "\n" + formatted
+                content += formatted
         return content
 
     @property
@@ -154,9 +154,6 @@ class MessageSegmentsPlaceholder(StringPromptTemplate):
         else:
             title = get_msg_title_repr("Message Segments Placeholder")
         return f"{title}\n\n{var}"
-
-
-class MessageSegmentsPromptTemplate(StringPromptTemplate): ...
 
 
 class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
@@ -293,7 +290,7 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
                     and content[-1]["type"] == "text"
                     and isinstance(content[-1]["text"], str)
                 ):
-                    content[-1]["text"] += "\n" + formatted
+                    content[-1]["text"] += formatted
                 else:
                     content.append({"type": "text", "text": formatted})
             elif isinstance(formatted, dict) and set(formatted.keys()) <= {"detail", "url"}:
@@ -308,7 +305,7 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
                     and formatted["type"] == "text"
                     and isinstance(formatted["text"], str)
                 ):
-                    content[-1]["text"] += "\n" + formatted["text"]
+                    content[-1]["text"] += formatted["text"]
                 else:
                     content.append(formatted)
         return self._msg_class(content=content, additional_kwargs=self.additional_kwargs)
@@ -337,7 +334,7 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
                     and content[-1]["type"] == "text"
                     and isinstance(content[-1]["text"], str)
                 ):
-                    content[-1]["text"] += "\n" + formatted
+                    content[-1]["text"] += formatted
                 else:
                     content.append({"type": "text", "text": formatted})
             elif isinstance(formatted, dict) and set(formatted.keys()) <= {"detail", "url"}:
@@ -352,7 +349,7 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
                     and formatted["type"] == "text"
                     and isinstance(formatted["text"], str)
                 ):
-                    content[-1]["text"] += "\n" + formatted["text"]
+                    content[-1]["text"] += formatted["text"]
                 else:
                     content.append(formatted)
         return self._msg_class(content=content, additional_kwargs=self.additional_kwargs)
