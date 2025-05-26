@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, Literal, Self, cast
 from typing_extensions import override
 
+import anyio
 from langchain.schema import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import (
     SystemMessagePromptTemplate,
@@ -175,16 +176,36 @@ class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemor
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
     ) -> ShortMemoryPromptTemplate:
         """Asynchronously get the short-term memory from the model."""
-        assert self.memory_chain is not None
-        assert self.tags_chain is not None
-
         message = self._format_message(**input)
+
+        chat_summary_result: str | None = None
+        topic_tags_result: list[str] | None = None
+
+        async def _get_chat_summary() -> None:
+            nonlocal chat_summary_result
+            assert self.memory_chain is not None
+            chat_summary_result = await self.memory_chain.ainvoke(
+                {"input": message}, config=config, **kwargs
+            )
+
+        async def _get_topic_tags() -> None:
+            nonlocal topic_tags_result
+            assert self.tags_chain is not None
+            topic_tags_result = (
+                await self.tags_chain.ainvoke({"input": message}, config=config, **kwargs)
+            ).tags
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(_get_chat_summary)
+            tg.start_soon(_get_topic_tags)
+
+        if not chat_summary_result:
+            raise ValueError("Chat summary result is None, please check the model configuration.")
+        if not topic_tags_result:
+            raise ValueError("Topic tags result is None, please check the model configuration.")
+
         return ShortMemoryPromptTemplate.from_template(
             timestamp=datetime.fromtimestamp(cast("int | float", input.get("timestamp"))),
-            chat_summary=await self.memory_chain.ainvoke(
-                {"input": message}, config=config, **kwargs
-            ),
-            topic_tags=(
-                await self.tags_chain.ainvoke({"input": message}, config=config, **kwargs)
-            ).tags,
+            chat_summary=chat_summary_result,
+            topic_tags=topic_tags_result,
         )
