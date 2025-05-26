@@ -50,9 +50,11 @@ class ShortMemoryPromptTemplate(PromptTemplate):
     @model_validator(mode="after")
     def build_partial_variables(self) -> Self:
         """Build the partial variables for the prompt."""
+        # 在 LangChain 中，partial_variables 可以是值或可調用函數
+        # 如果是可調用函數，會在格式化時被調用
         self.partial_variables = {
-            "chat_summary": self.get_chat_summary,
-            "time_str": partial(format_datetime_relative, old_time=self.timestamp),
+            "chat_summary": self.chat_summary,  # 直接使用值
+            "time_str": format_datetime_relative(self.timestamp),  # 直接計算值
         }
         return self
 
@@ -80,15 +82,15 @@ class ShortMemoryPromptTemplate(PromptTemplate):
             partial_variables: Any additional variables to use in the prompt.
             **kwargs: Additional keyword arguments to pass to the parent class.
         """
-        return cast(
-            "ShortMemoryPromptTemplate",
-            super().from_template(
-                template or cls.template,
-                timestamp=timestamp,
-                chat_summary=chat_summary,
-                topic_tags=topic_tags,
-                template_format=template_format or cls.template_format,
-                partial_variables=partial_variables,
-                **kwargs,
-            ),
+        # 創建實例時直接傳遞所有必要的參數
+        instance = cls(
+            template=template or "[{time_str}]\n{chat_summary}",
+            timestamp=timestamp,
+            chat_summary=chat_summary,
+            topic_tags=topic_tags,
+            template_format=template_format,
+            partial_variables=partial_variables or {},
+            input_variables=[],  # 空列表，因為我們使用 partial_variables
+            **kwargs,
         )
+        return instance

@@ -15,6 +15,10 @@ from src.prompt_values.summary import (
     SHORT_TERM_MEMORY_SUMMARY_EN,
     SHORT_TERM_MEMORY_SUMMARY_ZH,
 )
+from src.prompt_values.tagger import (
+    SHORT_TERM_MEMORY_TAGS_EN,
+    SHORT_TERM_MEMORY_TAGS_ZH,
+)
 from src.prompts.generator import ShortMemoryPromptTemplate
 from src.utils import get_model_from_env, get_provider_from_env
 
@@ -80,11 +84,11 @@ class ShortTermTagsChat(PydanticSingleTurnChat[ContextTags]):
         if values.get("prompt") is None:
             if values["lang"] == "zh":
                 values["prompt"] = SystemMessagePromptTemplate.from_template(
-                    ""  # 须补齐 prompt
+                    SHORT_TERM_MEMORY_TAGS_ZH
                 )
             else:
                 values["prompt"] = SystemMessagePromptTemplate.from_template(
-                    ""  # 须补齐 prompt
+                    SHORT_TERM_MEMORY_TAGS_EN
                 )
         return values
 
@@ -170,10 +174,17 @@ class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemor
         if not isinstance(history, list):
             raise TypeError(f"Expected a list for {self.history_variable_key}, got {type(history)}")
         message = f"UserName: {name}\nChatHistory: \n" + self._format_history(history)
+        
+        # 並行執行摘要和標籤提取
+        summary_task = self.memory_chain.ainvoke({"input": message}, config=config, **kwargs)
+        tags_task = self.tags_chain.ainvoke({"input": message}, config=config, **kwargs)
+        
+        # 等待兩個任務完成
+        summary = await summary_task
+        tags_result = await tags_task
+        
         return ShortMemoryPromptTemplate.from_template(
             timestamp=datetime.fromtimestamp(cast("int | float", input.get("timestamp"))),
-            chat_summary=await self.memory_chain.ainvoke(
-                {"input": message}, config=config, **kwargs
-            ),
-            topic_tags=[],
+            chat_summary=summary,
+            topic_tags=tags_result.tags,
         )
