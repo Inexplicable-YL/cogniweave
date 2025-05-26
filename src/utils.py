@@ -1,8 +1,8 @@
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from datetime import datetime, timedelta
-from typing import overload
+from typing import TypeVar, cast, overload
 
 
 class _NoDefaultType:
@@ -10,6 +10,7 @@ class _NoDefaultType:
 
 
 _NoDefault = _NoDefaultType()
+_E = TypeVar("_E", bound=BaseException)
 
 
 @overload
@@ -154,3 +155,28 @@ def format_datetime_relative(old_time: datetime, now: datetime | None = None) ->
         return f"Yesterday {time_part}"
     date_part = old_time.strftime("%Y/%m/%d")
     return f"{date_part} {time_part}"
+
+
+def flatten_exception_group(
+    exc_group: BaseExceptionGroup[_E],
+) -> Generator[_E, None, None]:
+    """递归遍历 BaseExceptionGroup ，并返回一个生成器"""
+    for exc in exc_group.exceptions:
+        if isinstance(exc, BaseExceptionGroup):
+            yield from flatten_exception_group(cast("BaseExceptionGroup[_E]", exc))
+        else:
+            yield exc
+
+
+def handle_exception(
+    # msg: str,
+    # level: Literal["debug", "info", "warning", "error", "critical"] = "error",
+    # **kwargs: Any,
+) -> Callable[[BaseExceptionGroup[Exception]], None]:
+    """递归遍历 BaseExceptionGroup ，并输出日志"""
+
+    def _handle(exc_group: BaseExceptionGroup[Exception]) -> None:
+        for exc in flatten_exception_group(exc_group):
+            pass
+            # 干啥我也不知道，再说吧
+    return _handle
