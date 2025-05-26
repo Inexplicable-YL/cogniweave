@@ -1,6 +1,5 @@
 from .chat import (
     MessageSegmentsPlaceholder,
-    MessageSegmentsPromptTemplate,
     RichAIMessagePromptTemplate,
     RichHumanMessagePromptTemplate,
     RichSystemMessagePromptTemplate,
@@ -8,7 +7,6 @@ from .chat import (
 
 __all__ = [
     "MessageSegmentsPlaceholder",
-    "MessageSegmentsPromptTemplate",
     "RichAIMessagePromptTemplate",
     "RichHumanMessagePromptTemplate",
     "RichSystemMessagePromptTemplate",

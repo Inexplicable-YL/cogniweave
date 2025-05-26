@@ -291,6 +291,7 @@ class StringSingleTurnChat(SingleTurnChatBase[str]):
         prompt: MessageLikeRepresentation | None = None,
         model: str = "gpt-3.5-turbo",
         temperature: float = 0.7,
+        llm_params: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
         params = {
@@ -299,9 +300,9 @@ class StringSingleTurnChat(SingleTurnChatBase[str]):
             "prompt": prompt,
             "model": model,
             "temperature": temperature,
-            "client_params": kwargs,
+            "client_params": llm_params or {},
         }
-        super().__init__(**params)  # type: ignore[arg-type]
+        super().__init__(**params, **kwargs)  # type: ignore[arg-type]
 
 
 class JsonSingleTurnChat(SingleTurnChatBase[dict[Any, Any]]):
@@ -320,6 +321,7 @@ class JsonSingleTurnChat(SingleTurnChatBase[dict[Any, Any]]):
         prompt: MessageLikeRepresentation | None = None,
         model: str = "gpt-3.5-turbo",
         temperature: float = 0.7,
+        llm_params: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
         params = {
@@ -328,9 +330,9 @@ class JsonSingleTurnChat(SingleTurnChatBase[dict[Any, Any]]):
             "prompt": prompt,
             "model": model,
             "temperature": temperature,
-            "client_params": kwargs,
+            "client_params": llm_params or {},
         }
-        super().__init__(**params)  # type: ignore[arg-type]
+        super().__init__(**params, **kwargs)  # type: ignore[arg-type]
 
 
 class PydanticSingleTurnChat(SingleTurnChatBase[PydanticOutput], Generic[PydanticOutput]):
@@ -352,6 +354,7 @@ class PydanticSingleTurnChat(SingleTurnChatBase[PydanticOutput], Generic[Pydanti
         prompt: MessageLikeRepresentation | None = None,
         model: str = "gpt-4o-mini",
         temperature: float = 0.7,
+        llm_params: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
         params = {
@@ -362,9 +365,9 @@ class PydanticSingleTurnChat(SingleTurnChatBase[PydanticOutput], Generic[Pydanti
             "prompt": prompt,
             "model": model,
             "temperature": temperature,
-            "client_params": kwargs,
+            "client_params": llm_params or {},
         }
-        super().__init__(**params)  # type: ignore[arg-type]
+        super().__init__(**params, **kwargs)  # type: ignore[arg-type]
 
     @model_validator(mode="after")
     def build_chain_if_needed(self) -> Self:

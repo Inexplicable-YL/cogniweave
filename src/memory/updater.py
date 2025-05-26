@@ -138,6 +138,19 @@ class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemor
             ]
         )
 
+    def _format_message(
+        self,
+        **kwargs: Any,
+    ) -> str:
+        """Format the message for the model."""
+        name = kwargs.get(self.name_variable_key)
+        if not isinstance(name, str):
+            raise TypeError(f"Expected a string for {self.name_variable_key}, got {type(name)}")
+        history = kwargs.get(self.history_variable_key)
+        if not isinstance(history, list):
+            raise TypeError(f"Expected a list for {self.history_variable_key}, got {type(history)}")
+        return f"UserName: {name}\nChatHistory: \n" + self._format_history(history)
+
     @override
     def invoke(
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
@@ -146,11 +159,7 @@ class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemor
         assert self.memory_chain is not None
         assert self.tags_chain is not None
 
-        name = input.get(self.name_variable_key)
-        history = input.get(self.history_variable_key)
-        if not isinstance(history, list):
-            raise TypeError(f"Expected a list for {self.history_variable_key}, got {type(history)}")
-        message = f"UserName: {name}\nChatHistory: \n" + self._format_history(history)
+        message = self._format_message(**input)
         return ShortMemoryPromptTemplate.from_template(
             timestamp=datetime.fromtimestamp(cast("int | float", input.get("timestamp"))),
             chat_summary=self.memory_chain.invoke({"input": message}, config=config, **kwargs),
@@ -165,15 +174,11 @@ class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemor
         assert self.memory_chain is not None
         assert self.tags_chain is not None
 
-        name = input.get(self.name_variable_key)
-        history = input.get(self.history_variable_key)
-        if not isinstance(history, list):
-            raise TypeError(f"Expected a list for {self.history_variable_key}, got {type(history)}")
-        message = f"UserName: {name}\nChatHistory: \n" + self._format_history(history)
+        message = self._format_message(**input)
         return ShortMemoryPromptTemplate.from_template(
             timestamp=datetime.fromtimestamp(cast("int | float", input.get("timestamp"))),
             chat_summary=await self.memory_chain.ainvoke(
                 {"input": message}, config=config, **kwargs
             ),
-            topic_tags=[],
+            topic_tags=self.tags_chain.invoke({"input": message}, config=config, **kwargs).tags,
         )

@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from functools import partial
-from typing import TYPE_CHECKING, Any, Self, cast
+from typing import Any, ClassVar, Self, cast
 from typing_extensions import override
 
 from langchain_core.prompts.prompt import PromptTemplate
+from langchain_core.prompts.string import PromptTemplateFormat  # noqa: TC002
 from pydantic import Field, model_validator
-
-if TYPE_CHECKING:
-    from langchain_core.prompts.string import PromptTemplateFormat
 
 
 def format_datetime_relative(old_time: datetime, now: datetime | None = None) -> str:
@@ -37,8 +35,13 @@ def format_datetime_relative(old_time: datetime, now: datetime | None = None) ->
 class ShortMemoryPromptTemplate(PromptTemplate):
     """Generative prompt template."""
 
-    template: str = "[{time_str}]\n{chat_summary}"
+    _template: ClassVar[str] = "[{time_str}]\n{chat_summary}"
+    template: str = Field(default=_template)
     """The template to use for the prompt."""
+
+    _template_format: ClassVar[str] = "f-string"
+    template_format: PromptTemplateFormat = Field(default=_template_format)
+
     timestamp: datetime
     chat_summary: str
     topic_tags: list[str] = Field(default_factory=list)
@@ -83,11 +86,11 @@ class ShortMemoryPromptTemplate(PromptTemplate):
         return cast(
             "ShortMemoryPromptTemplate",
             super().from_template(
-                template or cls.template,
+                template or cls._template,
                 timestamp=timestamp,
                 chat_summary=chat_summary,
                 topic_tags=topic_tags,
-                template_format=template_format or cls.template_format,
+                template_format=template_format or cls._template_format,
                 partial_variables=partial_variables,
                 **kwargs,
             ),
