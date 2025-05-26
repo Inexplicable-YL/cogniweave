@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from functools import partial
-from typing import Any, ClassVar, Self, cast
+from typing import Any, ClassVar, Self
 from typing_extensions import override
 
 from langchain_core.prompts.prompt import PromptTemplate
@@ -39,22 +39,15 @@ class ShortMemoryPromptTemplate(PromptTemplate):
     template: str = Field(default=_template)
     """The template to use for the prompt."""
 
-    _template_format: ClassVar[str] = "f-string"
-    template_format: PromptTemplateFormat = Field(default=_template_format)
-
     timestamp: datetime
     chat_summary: str
     topic_tags: list[str] = Field(default_factory=list)
-
-    def get_chat_summary(self) -> str:
-        """Get the chat summary."""
-        return self.chat_summary
 
     @model_validator(mode="after")
     def build_partial_variables(self) -> Self:
         """Build the partial variables for the prompt."""
         self.partial_variables = {
-            "chat_summary": self.get_chat_summary,
+            "chat_summary": self.chat_summary,
             "time_str": partial(format_datetime_relative, old_time=self.timestamp),
         }
         return self
@@ -69,7 +62,6 @@ class ShortMemoryPromptTemplate(PromptTemplate):
         chat_summary: str,
         topic_tags: list[str],
         template_format: PromptTemplateFormat = "f-string",
-        partial_variables: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> ShortMemoryPromptTemplate:
         """Create a new instance of the prompt template from a template string.
@@ -83,15 +75,11 @@ class ShortMemoryPromptTemplate(PromptTemplate):
             partial_variables: Any additional variables to use in the prompt.
             **kwargs: Additional keyword arguments to pass to the parent class.
         """
-        return cast(
-            "ShortMemoryPromptTemplate",
-            super().from_template(
-                template or cls._template,
-                timestamp=timestamp,
-                chat_summary=chat_summary,
-                topic_tags=topic_tags,
-                template_format=template_format or cls._template_format,
-                partial_variables=partial_variables,
-                **kwargs,
-            ),
+        return cls(
+            template=template or cls._template,
+            timestamp=timestamp,
+            chat_summary=chat_summary,
+            topic_tags=topic_tags,
+            template_format=template_format,
+            **kwargs,
         )

@@ -24,6 +24,8 @@ dependencies = [
     "typing_extensions==4.13.2",
     "langchain",
     "langchain_openai",
+    "python-dotenv",
+    "httpx[socks]",
 ]
 
 [project.urls]

@@ -15,6 +15,10 @@ from src.prompt_values.summary import (
     SHORT_TERM_MEMORY_SUMMARY_EN,
     SHORT_TERM_MEMORY_SUMMARY_ZH,
 )
+from src.prompt_values.tagger import (
+    SHORT_TERM_MEMORY_TAGS_EN,
+    SHORT_TERM_MEMORY_TAGS_ZH,
+)
 from src.prompts.generator import ShortMemoryPromptTemplate
 from src.utils import get_model_from_env, get_provider_from_env
 
@@ -80,11 +84,11 @@ class ShortTermTagsChat(PydanticSingleTurnChat[ContextTags]):
         if values.get("prompt") is None:
             if values["lang"] == "zh":
                 values["prompt"] = SystemMessagePromptTemplate.from_template(
-                    ""  # 须补齐 prompt
+                    SHORT_TERM_MEMORY_TAGS_ZH
                 )
             else:
                 values["prompt"] = SystemMessagePromptTemplate.from_template(
-                    ""  # 须补齐 prompt
+                    SHORT_TERM_MEMORY_TAGS_EN
                 )
         return values
 
@@ -180,5 +184,7 @@ class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemor
             chat_summary=await self.memory_chain.ainvoke(
                 {"input": message}, config=config, **kwargs
             ),
-            topic_tags=self.tags_chain.invoke({"input": message}, config=config, **kwargs).tags,
+            topic_tags=(
+                await self.tags_chain.ainvoke({"input": message}, config=config, **kwargs)
+            ).tags,
         )
