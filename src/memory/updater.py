@@ -3,7 +3,7 @@ from typing import Any, Literal, Self, cast
 from typing_extensions import override
 
 import anyio
-from langchain.schema import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import get_buffer_string
 from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
@@ -126,23 +126,6 @@ class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemor
         )
         return self
 
-    def _format_history(
-        self,
-        history: list[BaseMessage],
-    ) -> str:
-        """Format the chat history for the model."""
-        chat_history: list[HumanMessage | AIMessage] = [
-            msg for msg in history if isinstance(msg, (HumanMessage, AIMessage))
-        ]
-        return "\n".join(
-            [
-                f"[User]: {msg.content}"
-                if isinstance(msg, HumanMessage)
-                else f"[Assistant]: {msg.content}"
-                for msg in chat_history
-            ]
-        )
-
     def _format_message(
         self,
         **kwargs: Any,
@@ -154,7 +137,9 @@ class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemor
         history = kwargs.get(self.history_variable_key)
         if not isinstance(history, list):
             raise TypeError(f"Expected a list for {self.history_variable_key}, got {type(history)}")
-        return f"UserName: {name}\nChatHistory: \n" + self._format_history(history)
+        return f"UserName: {name}\nChatHistory: \n" + get_buffer_string(
+            history, human_prefix="[User]", ai_prefix="[Assistant]"
+        )
 
     @override
     def invoke(
