@@ -8,9 +8,9 @@ from langchain_core.runnables import RunnableSerializable
 from langchain_core.runnables.config import RunnableConfig
 from pydantic import BaseModel, Field, model_validator
 
-from prompt_values.base import MultilingualSystemPromptValue
-from prompt_values.summary import ShortTermMemoryPromptValue
-from prompt_values.tagger import ShortTermTagsPromptValue
+from src.prompt_values.base import MultilingualSystemPromptValue
+from src.prompt_values.summary import ShortTermMemoryPromptValue
+from src.prompt_values.tagger import ShortTermTagsPromptValue
 from src.llms import PydanticSingleTurnChat, StringSingleTurnChat
 from src.prompts.generator import ShortMemoryPromptTemplate
 from src.utils import get_model_from_env, get_provider_from_env
@@ -54,6 +54,10 @@ class ShortTermTagsChat(PydanticSingleTurnChat[Literal["zh", "en"], ContextTags]
     )
 
     response_format: dict[str, Any] | type[BaseModel] | None = Field(default=ContextTags)
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize the tag generator"""
+        super().__init__(template=ContextTags, **kwargs)
 
 
 class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemoryPromptTemplate]):
