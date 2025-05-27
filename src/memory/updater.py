@@ -8,7 +8,7 @@ from langchain_core.runnables import RunnableSerializable
 from langchain_core.runnables.config import RunnableConfig
 from pydantic import BaseModel, Field, model_validator
 
-from prompt_values.base import MessageLikeRepresentation, MultilingualSystemPromptValue
+from prompt_values.base import MultilingualSystemPromptValue
 from prompt_values.summary import ShortTermMemoryPromptValue
 from prompt_values.tagger import ShortTermTagsPromptValue
 from src.llms import PydanticSingleTurnChat, StringSingleTurnChat
@@ -27,7 +27,7 @@ class ShortTermMemoryChat(StringSingleTurnChat[Literal["zh", "en"]]):
     )
     temperature: float = 0.7
 
-    prompt: MultilingualSystemPromptValue[Any] | MessageLikeRepresentation = Field(
+    prompt: MultilingualSystemPromptValue[Literal["zh", "en"]] | None = Field(
         default=ShortTermMemoryPromptValue()
     )
 
@@ -49,25 +49,17 @@ class ShortTermTagsChat(PydanticSingleTurnChat[Literal["zh", "en"], ContextTags]
     )
     temperature: float = 0.7
 
-    prompt: MultilingualSystemPromptValue[Any] | MessageLikeRepresentation = Field(
+    prompt: MultilingualSystemPromptValue[Literal["zh", "en"]] | None = Field(
         default=ShortTermTagsPromptValue()
     )
 
-    def __init__(
-        self,
-        **kwargs: Any,
-    ) -> None:
-        """Initialize the chat model."""
-        super().__init__(
-            template=ContextTags,
-            **kwargs,
-        )
+    response_format: dict[str, Any] | type[BaseModel] | None = Field(default=ContextTags)
 
 
 class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemoryPromptTemplate]):
     """Short-term memory updater for chat models."""
 
-    lang: str = Field(default="zh")
+    lang: Literal["zh", "en"] = Field(default="zh")
 
     memory_chain: ShortTermMemoryChat | None = None
     tags_chain: ShortTermTagsChat | None = None

@@ -1,11 +1,8 @@
 import os
-from typing import Any, Generic, Literal, Self, TypeVar, cast
+from typing import Any, Generic, Self, TypeVar, cast
 from typing_extensions import override
 
 import openai
-from langchain_core.messages import (
-    BaseMessage,
-)
 from langchain_core.output_parsers import (
     BaseOutputParser,
     JsonOutputParser,
@@ -13,13 +10,9 @@ from langchain_core.output_parsers import (
     StrOutputParser,
 )
 from langchain_core.prompts.chat import (
-    BaseChatPromptTemplate,
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
     SystemMessagePromptTemplate,
-)
-from langchain_core.prompts.message import (
-    BaseMessagePromptTemplate,
 )
 from langchain_core.runnables import RunnableSerializable
 from langchain_core.runnables.config import RunnableConfig
@@ -32,18 +25,6 @@ from src.prompt_values.base import MultilingualSystemPromptValue
 
 Output = TypeVar("Output", covariant=True)  # noqa: PLC0105
 PydanticOutput = TypeVar("PydanticOutput", bound=BaseModel, covariant=True)  # noqa: PLC0105
-
-MessageLike = BaseMessagePromptTemplate | BaseMessage | BaseChatPromptTemplate
-
-MessageLikeRepresentation = (
-    MessageLike
-    | tuple[
-        str | type,
-        str | list[dict[str, Any]] | list[object],
-    ]
-    | str
-    | dict[str, Any]
-)
 SupportLangType = TypeVar("SupportLangType", bound=str)
 
 
@@ -220,17 +201,17 @@ class OpenAIEmbeddings(BaseOpenAIEmbeddings):
         return self
 
 
-class SingleTurnChatBase(RunnableSerializable[dict[str, Any], Output], Generic[Output]):
+class SingleTurnChatBase(
+    RunnableSerializable[dict[str, Any], Output], Generic[SupportLangType, Output]
+):
     """A base class for single-turn chat models."""
 
-    lang: str = Field(default="zh")
+    lang: SupportLangType
 
     provider: str = Field(default="openai")
     client: BaseChatOpenAI | ChatOpenAI | None = Field(alias="llm", default=None)
 
-    prompt: MultilingualSystemPromptValue[Any] | MessageLikeRepresentation = Field(
-        default=MultilingualSystemPromptValue[Literal["zh", "en"]]()
-    )
+    prompt: MultilingualSystemPromptValue[SupportLangType] | None = None
     parser: BaseOutputParser[Any] | None = None
 
     chain: RunnableSerializable[dict[str, Any], Output] | None = None
@@ -256,17 +237,12 @@ class SingleTurnChatBase(RunnableSerializable[dict[str, Any], Output], Generic[O
                 self.client = cast(
                     "BaseChatOpenAI", self.client.bind(response_format=self.response_format)
                 )
-            if isinstance(self.prompt, MultilingualSystemPromptValue):
-                prompt_template = ChatPromptTemplate.from_messages(
-                    [
-                        *self.prompt.to_messages(lang=self.lang),
-                        HumanMessagePromptTemplate.from_template("{input}"),
-                    ]
-                )
-            else:
-                prompt_template = ChatPromptTemplate.from_messages(
-                    [self.prompt, HumanMessagePromptTemplate.from_template("{input}")]
-                )
+            prompt_template = ChatPromptTemplate.from_messages(
+                [
+                    *(self.prompt.to_messages(lang=self.lang) if self.prompt else []),
+                    HumanMessagePromptTemplate.from_template("{input}"),
+                ]
+            )
             self.parser = self.parser or StrOutputParser()
             self.chain = cast(
                 "RunnableSerializable[dict[str, Any], Output]",
@@ -291,7 +267,7 @@ class SingleTurnChatBase(RunnableSerializable[dict[str, Any], Output], Generic[O
         return await self.chain.ainvoke(input, config=config, **kwargs)
 
 
-class StringSingleTurnChat(SingleTurnChatBase[str], Generic[SupportLangType]):
+class StringSingleTurnChat(SingleTurnChatBase[SupportLangType, str], Generic[SupportLangType]):
     """A single-turn chat model that returns a string response."""
 
     response_format: dict[str, Any] | type[BaseModel] | None = None
@@ -303,9 +279,7 @@ class StringSingleTurnChat(SingleTurnChatBase[str], Generic[SupportLangType]):
         *,
         lang: SupportLangType = "zh",
         llm: BaseChatOpenAI | ChatOpenAI | None = None,
-        prompt: MultilingualSystemPromptValue[SupportLangType]
-        | MessageLikeRepresentation
-        | None = None,
+        prompt: MultilingualSystemPromptValue[SupportLangType] | None = None,
         model: str = "gpt-3.5-turbo",
         temperature: float = 0.7,
         llm_params: dict[str, Any] | None = None,
@@ -323,7 +297,9 @@ class StringSingleTurnChat(SingleTurnChatBase[str], Generic[SupportLangType]):
         super().__init__(**params, **kwargs)  # type: ignore[arg-type]
 
 
-class JsonSingleTurnChat(SingleTurnChatBase[dict[Any, Any]], Generic[SupportLangType]):
+class JsonSingleTurnChat(
+    SingleTurnChatBase[SupportLangType, dict[Any, Any]], Generic[SupportLangType]
+):
     """A single-turn chat model that returns a JSON response."""
 
     response_format: dict[str, Any] | type[BaseModel] | None = Field(
@@ -337,9 +313,7 @@ class JsonSingleTurnChat(SingleTurnChatBase[dict[Any, Any]], Generic[SupportLang
         *,
         lang: SupportLangType = "zh",
         llm: BaseChatOpenAI | ChatOpenAI | None = None,
-        prompt: MultilingualSystemPromptValue[SupportLangType]
-        | MessageLikeRepresentation
-        | None = None,
+        prompt: MultilingualSystemPromptValue[SupportLangType] | None = None,
         model: str = "gpt-3.5-turbo",
         temperature: float = 0.7,
         llm_params: dict[str, Any] | None = None,
@@ -358,7 +332,7 @@ class JsonSingleTurnChat(SingleTurnChatBase[dict[Any, Any]], Generic[SupportLang
 
 
 class PydanticSingleTurnChat(
-    SingleTurnChatBase[PydanticOutput], Generic[SupportLangType, PydanticOutput]
+    SingleTurnChatBase[SupportLangType, PydanticOutput], Generic[SupportLangType, PydanticOutput]
 ):
     """A single-turn chat model that returns a Pydantic model response."""
 
@@ -376,9 +350,7 @@ class PydanticSingleTurnChat(
         lang: SupportLangType = "zh",
         structured_output: bool = True,
         llm: BaseChatOpenAI | ChatOpenAI | None = None,
-        prompt: MultilingualSystemPromptValue[SupportLangType]
-        | MessageLikeRepresentation
-        | None = None,
+        prompt: MultilingualSystemPromptValue[SupportLangType] | None = None,
         model: str = "gpt-4.1-mini",
         temperature: float = 0.7,
         llm_params: dict[str, Any] | None = None,
@@ -422,11 +394,7 @@ class PydanticSingleTurnChat(
 
             prompt_template = ChatPromptTemplate.from_messages(
                 [
-                    *(
-                        self.prompt.to_messages(lang=self.lang)
-                        if isinstance(self.prompt, MultilingualSystemPromptValue)
-                        else [self.prompt]
-                    ),
+                    *(self.prompt.to_messages(lang=self.lang) if self.prompt else []),
                     *(
                         [SystemMessagePromptTemplate.from_template("{format_instructions}")]
                         if not self.structured_output
