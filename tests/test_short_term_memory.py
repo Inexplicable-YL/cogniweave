@@ -1,5 +1,5 @@
 """測試 Short-term Memory 功能的腳本"""
-import asyncio
+import anyio
 import os
 from datetime import datetime
 from typing import Any
@@ -66,7 +66,7 @@ def check_api_key():
         print("請在專案根目錄創建 .env 文件，並添加：")
         print("OPENAI_API_KEY=your_api_key_here")
         return False
-    
+
     print(f"✓ 找到 API Key: {api_key[:10]}...")
     return True
 
@@ -74,45 +74,45 @@ def check_api_key():
 async def test_sync_memory():
     """測試同步版本的短期記憶生成"""
     print("開始測試同步版本...")
-    
+
     # 初始化 updater
     updater = ShortTermMemoryChatUpdater(lang="zh")
-    
+
     # 測試第一個對話
     conv1 = create_test_conversation()
     result1 = updater.invoke(conv1)
     print_memory_result(result1, "對話 1: React 學習")
-    
+
     # 測試第二個對話
     conv2 = create_art_conversation()
     result2 = updater.invoke(conv2)
     print_memory_result(result2, "對話 2: 繪畫分享")
-    
+
     return result1, result2
 
 
 async def test_async_memory():
     """測試異步版本的短期記憶生成"""
     print("\n開始測試異步版本...")
-    
+
     # 初始化 updater
     updater = ShortTermMemoryChatUpdater(lang="zh")
-    
+
     # 測試異步調用
     conv = create_test_conversation()
     result = await updater.ainvoke(conv)
-    
+
     print(f"\n異步結果:")
     print(f"摘要: {result.chat_summary}")
     print(f"標籤: {result.topic_tags}")
-    
+
     return result
 
 
 async def test_english_version():
     """測試英文版本"""
     print("\n開始測試英文版本...")
-    
+
     # 創建英文對話
     english_conv = {
         "name": "James",
@@ -124,22 +124,22 @@ async def test_english_version():
         ],
         "timestamp": datetime.now().timestamp(),
     }
-    
+
     # 使用英文版 updater
     updater = ShortTermMemoryChatUpdater(lang="en")
     result = updater.invoke(english_conv)
-    
+
     print_memory_result(result, "English Conversation: Art Sharing")
-    
+
     return result
 
 
 def test_error_handling():
     """測試錯誤處理"""
     print("\n測試錯誤處理...")
-    
+
     updater = ShortTermMemoryChatUpdater(lang="zh")
-    
+
     # 測試無效輸入
     try:
         invalid_input = {
@@ -153,7 +153,7 @@ def test_error_handling():
         print(f"✓ 成功捕獲類型錯誤: {e}")
     except Exception as e:
         print(f"❌ 捕獲了意外的錯誤類型: {type(e).__name__}: {e}")
-    
+
     # 測試缺少必要欄位
     try:
         missing_field = {
@@ -167,7 +167,7 @@ def test_error_handling():
         print(f"✓ 成功捕獲欄位缺失錯誤: {e}")
     except Exception as e:
         print(f"❌ 捕獲了意外的錯誤類型: {type(e).__name__}: {e}")
-    
+
     print("錯誤處理測試完成")
 
 
@@ -176,35 +176,35 @@ async def main():
     print("=" * 70)
     print("Short-term Memory 測試腳本")
     print("=" * 70)
-    
+
     # 檢查 API key
     if not check_api_key():
         return
-    
+
     # 設置環境變數（如果需要自定義模型）
     if not os.getenv("SHORT_MEMORY_MODEL"):
         os.environ["SHORT_MEMORY_MODEL"] = "openai/gpt-4.1-mini"
         print(f"✓ 設置預設模型: {os.environ['SHORT_MEMORY_MODEL']}")
-    
+
     try:
         # 執行各項測試
         sync_results = await test_sync_memory()
         async_result = await test_async_memory()
         english_result = await test_english_version()
-        
+
         # 錯誤處理測試單獨包裝
         try:
             test_error_handling()
         except Exception as e:
             print(f"錯誤處理測試失敗: {e}")
-        
+
         print("\n測試完成！")
         print(f"共生成了 {len(sync_results) + 1 + 1} 個記憶實例")
-        
+
     except Exception as e:
         print(f"\n❌ 測試過程中發生錯誤: {e}")
         print("請檢查 API key 是否正確，或網路連接是否正常。")
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    anyio.run(main)
