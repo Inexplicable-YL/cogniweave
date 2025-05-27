@@ -1,6 +1,6 @@
-from base import BasePromptValue, MultilingualPromptValue
+from base import BasePromptValue, MultilingualSystemPromptValue
 
 __all__ = [
     "BasePromptValue",
-    "MultilingualPromptValue",
+    "MultilingualSystemPromptValue",
 ]

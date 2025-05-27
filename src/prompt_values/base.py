@@ -71,7 +71,7 @@ class BasePromptValue(Serializable, ABC):
         """Return prompt as a list of Messages."""
 
 
-class MultilingualPromptValue(BasePromptValue, Generic[SupportLangType]):
+class MultilingualSystemPromptValue(BasePromptValue, Generic[SupportLangType]):
     """Base class for prompt values."""
 
     prompts: dict[str, SystemMessageLikeRepresentation | list[SystemMessageLikeRepresentation]] = (
