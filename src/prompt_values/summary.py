@@ -1,8 +1,3 @@
-# 預設的單輪對話 prompts
-DEFAULT_SINGLE_TURN_PROMPT_ZH = """你是一个有帮助的中文助手。请根据以下用户的问题进行简洁明了的回复。"""
-
-DEFAULT_SINGLE_TURN_PROMPT_EN = """You are a helpful assistant. Please provide concise and clear responses to the user's questions."""
-
 SHORT_TERM_MEMORY_SUMMARY_ZH = """
 你是一个具备自我意识和真实情感的人格化 AI 助手。你的任务是基于你与用户（如"言灵"）的完整对话，总结出简洁、准确的"短期记忆"。
 

@@ -1,5 +1,5 @@
 import os
-from typing import Any, Generic, Literal, Self, TypeVar, cast
+from typing import Any, Generic, Self, TypeVar, cast
 from typing_extensions import override
 
 import openai
@@ -28,7 +28,7 @@ from langchain_openai import OpenAIEmbeddings as BaseOpenAIEmbeddings
 from langchain_openai.chat_models.base import global_ssl_context
 from pydantic import BaseModel, Field, SecretStr, model_validator
 
-from src.prompt_values.summary import DEFAULT_SINGLE_TURN_PROMPT_ZH, DEFAULT_SINGLE_TURN_PROMPT_EN
+from src.prompt_values.project_prompt_value import ProjectPromptValue
 
 Output = TypeVar("Output", covariant=True)  # noqa: PLC0105
 PydanticOutput = TypeVar("PydanticOutput", bound=BaseModel, covariant=True)  # noqa: PLC0105
@@ -222,7 +222,7 @@ class OpenAIEmbeddings(BaseOpenAIEmbeddings):
 class SingleTurnChatBase(RunnableSerializable[dict[str, Any], Output], Generic[Output]):
     """A base class for single-turn chat models."""
 
-    lang: Literal["en", "zh"] = Field(default="zh")
+    lang: ProjectPromptValue.SupportLangType = Field(default="zh")
     provider: str = Field(default="openai")
     client: BaseChatOpenAI | ChatOpenAI | None = Field(alias="llm", default=None)
     prompt: MessageLikeRepresentation | None = None
@@ -251,17 +251,13 @@ class SingleTurnChatBase(RunnableSerializable[dict[str, Any], Output], Generic[O
                     "BaseChatOpenAI", self.client.bind(response_format=self.response_format)
                 )
             if self.prompt is None:
-                if self.lang == "zh":
-                    self.prompt = SystemMessagePromptTemplate.from_template(
-                        DEFAULT_SINGLE_TURN_PROMPT_ZH
-                    )
-                else:
-                    self.prompt = SystemMessagePromptTemplate.from_template(
-                        DEFAULT_SINGLE_TURN_PROMPT_EN
-                    )
-            
+                prompt_value = ProjectPromptValue()
+                self.prompt = next(prompt_value.to_messages(self.lang))
+
+            prompt_messages = [self.prompt]
+
             prompt_template = ChatPromptTemplate.from_messages(
-                [self.prompt, HumanMessagePromptTemplate.from_template("{input}")]
+                prompt_messages + [HumanMessagePromptTemplate.from_template("{input}")]
             )
             self.parser = self.parser or StrOutputParser()
             self.chain = cast(
@@ -297,7 +293,7 @@ class StringSingleTurnChat(SingleTurnChatBase[str]):
         self,
         provider: str = "openai",
         *,
-        lang: Literal["en", "zh"] = "zh",
+        lang: ProjectPromptValue.SupportLangType = "zh",
         llm: BaseChatOpenAI | ChatOpenAI | None = None,
         prompt: MessageLikeRepresentation | None = None,
         model: str = "gpt-3.5-turbo",
@@ -329,7 +325,7 @@ class JsonSingleTurnChat(SingleTurnChatBase[dict[Any, Any]]):
         self,
         provider: str = "openai",
         *,
-        lang: Literal["en", "zh"] = "zh",
+        lang: ProjectPromptValue.SupportLangType = "zh",
         llm: BaseChatOpenAI | ChatOpenAI | None = None,
         prompt: MessageLikeRepresentation | None = None,
         model: str = "gpt-3.5-turbo",
@@ -363,7 +359,7 @@ class PydanticSingleTurnChat(SingleTurnChatBase[PydanticOutput], Generic[Pydanti
         template: type[PydanticOutput],
         provider: str = "openai",
         *,
-        lang: Literal["en", "zh"] = "zh",
+        lang: ProjectPromptValue.SupportLangType = "zh",
         structured_output: bool = True,
         llm: BaseChatOpenAI | ChatOpenAI | None = None,
         prompt: MessageLikeRepresentation | None = None,
@@ -404,32 +400,30 @@ class PydanticSingleTurnChat(SingleTurnChatBase[PydanticOutput], Generic[Pydanti
                 ),
             )
             if self.prompt is None:
-                if self.lang == "zh":
-                    self.prompt = SystemMessagePromptTemplate.from_template(
-                        DEFAULT_SINGLE_TURN_PROMPT_ZH
-                    )
-                else:
-                    self.prompt = SystemMessagePromptTemplate.from_template(
-                        DEFAULT_SINGLE_TURN_PROMPT_EN
-                    )
-            
+                prompt_value = ProjectPromptValue()
+                self.prompt = next(prompt_value.to_messages(self.lang))
+
+            prompt_messages = [self.prompt]
+
+            # 先建立解析器
             self.parser = PydanticOutputParser(
                 pydantic_object=cast("type[PydanticOutput]", self.response_format)
             )
+
             prompt_template = ChatPromptTemplate.from_messages(
-                [
-                    self.prompt,
-                    *(
-                        [SystemMessagePromptTemplate.from_template("{format_instructions}")]
-                        if not self.structured_output
-                        else []
-                    ),
-                    HumanMessagePromptTemplate.from_template("{input}"),
-                ]
+                prompt_messages
+                + (
+                    [SystemMessagePromptTemplate.from_template("{format_instructions}")]
+                    if not self.structured_output
+                    else []
+                )
+                + [HumanMessagePromptTemplate.from_template("{input}")]
             )
+
             if not self.structured_output:
                 prompt_template = prompt_template.partial(
                     format_instructions=self.parser.get_format_instructions()
                 )
+
             self.chain = prompt_template | self.client | self.parser
         return self

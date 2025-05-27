@@ -1,17 +1,15 @@
 from datetime import datetime
-from typing import Any, Literal, Self, cast
+from typing import Any, Self, cast
 from typing_extensions import override
 
 import anyio
 from langchain_core.messages import get_buffer_string
-from langchain_core.prompts import (
-    SystemMessagePromptTemplate,
-)
 from langchain_core.runnables import RunnableSerializable
 from langchain_core.runnables.config import RunnableConfig
 from pydantic import BaseModel, Field, model_validator
 
 from src.llms import PydanticSingleTurnChat, StringSingleTurnChat
+from src.prompt_values.project_prompt_value import ProjectPromptValue
 from src.prompt_values.summary import (
     SHORT_TERM_MEMORY_SUMMARY_EN,
     SHORT_TERM_MEMORY_SUMMARY_ZH,
@@ -27,7 +25,7 @@ from src.utils import get_model_from_env, get_provider_from_env
 class ShortTermMemoryChat(StringSingleTurnChat):
     """Short-term memory updater for chat models."""
 
-    lang: Literal["en", "zh"] = Field(default="zh")
+    lang: ProjectPromptValue.SupportLangType = Field(default="zh")
 
     provider: str = Field(
         default_factory=get_provider_from_env("SHORT_MEMORY_MODEL", default="openai")
@@ -45,14 +43,11 @@ class ShortTermMemoryChat(StringSingleTurnChat):
     ) -> dict[str, Any]:
         """Set the prompt based on the language."""
         if values.get("prompt") is None:
-            if values["lang"] == "zh":
-                values["prompt"] = SystemMessagePromptTemplate.from_template(
-                    SHORT_TERM_MEMORY_SUMMARY_ZH
-                )
-            else:
-                values["prompt"] = SystemMessagePromptTemplate.from_template(
-                    SHORT_TERM_MEMORY_SUMMARY_EN
-                )
+            prompt_value = ProjectPromptValue(
+                zh=SHORT_TERM_MEMORY_SUMMARY_ZH,
+                en=SHORT_TERM_MEMORY_SUMMARY_EN,
+            )
+            values["prompt"] = next(prompt_value.to_messages(values["lang"]))
         return values
 
 
@@ -65,7 +60,7 @@ class ContextTags(BaseModel):
 class ShortTermTagsChat(PydanticSingleTurnChat[ContextTags]):
     """Short-term memory updater for chat models."""
 
-    lang: Literal["en", "zh"] = Field(default="zh")
+    lang: ProjectPromptValue.SupportLangType = Field(default="zh")
 
     provider: str = Field(
         default_factory=get_provider_from_env("SHORT_MEMORY_MODEL", default="openai")
@@ -83,14 +78,11 @@ class ShortTermTagsChat(PydanticSingleTurnChat[ContextTags]):
     ) -> dict[str, Any]:
         """Set the prompt based on the language."""
         if values.get("prompt") is None:
-            if values["lang"] == "zh":
-                values["prompt"] = SystemMessagePromptTemplate.from_template(
-                    SHORT_TERM_MEMORY_TAGS_ZH
-                )
-            else:
-                values["prompt"] = SystemMessagePromptTemplate.from_template(
-                    SHORT_TERM_MEMORY_TAGS_EN
-                )
+            prompt_value = ProjectPromptValue(
+                zh=SHORT_TERM_MEMORY_TAGS_ZH,
+                en=SHORT_TERM_MEMORY_TAGS_EN,
+            )
+            values["prompt"] = next(prompt_value.to_messages(values["lang"]))
         return values
 
     def __init__(
@@ -107,7 +99,7 @@ class ShortTermTagsChat(PydanticSingleTurnChat[ContextTags]):
 class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemoryPromptTemplate]):
     """Short-term memory updater for chat models."""
 
-    lang: Literal["en", "zh"] = Field(default="zh")
+    lang: ProjectPromptValue.SupportLangType = Field(default="zh")
 
     memory_chain: ShortTermMemoryChat | None = None
     tags_chain: ShortTermTagsChat | None = None
