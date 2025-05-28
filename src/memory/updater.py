@@ -53,8 +53,6 @@ class ShortTermTagsChat(PydanticSingleTurnChat[Literal["zh", "en"], ContextTags]
         default=ShortTermTagsPromptValue()
     )
 
-    response_format: dict[str, Any] | type[BaseModel] | None = Field(default=ContextTags)
-
 
 class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemoryPromptTemplate]):
     """Short-term memory updater for chat models."""

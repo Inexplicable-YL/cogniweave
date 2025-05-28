@@ -19,7 +19,7 @@ from langchain_core.runnables.config import RunnableConfig
 from langchain_openai import ChatOpenAI as BaseChatOpenAI
 from langchain_openai import OpenAIEmbeddings as BaseOpenAIEmbeddings
 from langchain_openai.chat_models.base import global_ssl_context
-from pydantic import BaseModel, Field, SecretStr, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator, PrivateAttr
 
 from src.prompt_values.base import MultilingualSystemPromptValue
 from src.typing import (
@@ -276,29 +276,6 @@ class StringSingleTurnChat(SingleTurnChatBase[SupportLangType, str], Generic[Sup
     response_format: dict[str, Any] | type[BaseModel] | None = None
     parser: BaseOutputParser[Any] | None = StrOutputParser()
 
-    def __init__(
-        self,
-        provider: str = "openai",
-        *,
-        lang: SupportLangType = "zh",
-        llm: BaseChatOpenAI | ChatOpenAI | NotGiven | None = NOT_GIVEN,
-        prompt: MultilingualSystemPromptValue[SupportLangType] | NotGiven | None = NOT_GIVEN,
-        model: str = "gpt-3.5-turbo",
-        temperature: float = 0.7,
-        llm_params: dict[str, Any] | NotGiven | None = NOT_GIVEN,
-        **kwargs: Any,
-    ) -> None:
-        params = remove_not_given_params(
-            lang=lang,
-            provider=provider,
-            llm=llm,
-            prompt=prompt,
-            model=model,
-            temperature=temperature,
-            client_params=llm_params,
-        )
-        super().__init__(**params, **kwargs)  # type: ignore[arg-type]
-
 
 class JsonSingleTurnChat(
     SingleTurnChatBase[SupportLangType, dict[Any, Any]], Generic[SupportLangType]
@@ -310,71 +287,20 @@ class JsonSingleTurnChat(
     )
     parser: BaseOutputParser[Any] | None = JsonOutputParser()
 
-    def __init__(
-        self,
-        provider: str = "openai",
-        *,
-        lang: SupportLangType = "zh",
-        llm: BaseChatOpenAI | ChatOpenAI | NotGiven | None = NOT_GIVEN,
-        prompt: MultilingualSystemPromptValue[SupportLangType] | NotGiven | None = NOT_GIVEN,
-        model: str = "gpt-3.5-turbo",
-        temperature: float = 0.7,
-        llm_params: dict[str, Any] | NotGiven | None = NOT_GIVEN,
-        **kwargs: Any,
-    ) -> None:
-        params = remove_not_given_params(
-            lang=lang,
-            provider=provider,
-            llm=llm,
-            prompt=prompt,
-            model=model,
-            temperature=temperature,
-            client_params=llm_params,
-        )
-        super().__init__(**params, **kwargs)  # type: ignore[arg-type]
-
 
 class PydanticSingleTurnChat(
     SingleTurnChatBase[SupportLangType, PydanticOutput], Generic[SupportLangType, PydanticOutput]
 ):
     """A single-turn chat model that returns a Pydantic model response."""
 
-    response_format: dict[str, Any] | type[BaseModel] | None = None
-
     structured_output: bool = True
     """Whether to use structured output."""
     parser: BaseOutputParser[Any] | None = None
 
-    def __init__(
-        self,
-        response_format: type[PydanticOutput],
-        provider: str = "openai",
-        *,
-        lang: SupportLangType = "zh",
-        structured_output: bool = True,
-        llm: BaseChatOpenAI | ChatOpenAI | NotGiven | None = NOT_GIVEN,
-        prompt: MultilingualSystemPromptValue[SupportLangType] | NotGiven | None = NOT_GIVEN,
-        model: str = "gpt-3.5-turbo",
-        temperature: float = 0.7,
-        llm_params: dict[str, Any] | NotGiven | None = NOT_GIVEN,
-        **kwargs: Any,
-    ) -> None:
-        params = remove_not_given_params(
-            lang=lang,
-            provider=provider,
-            response_format=response_format,
-            structured_output=structured_output,
-            llm=llm,
-            prompt=prompt,
-            model=model,
-            temperature=temperature,
-            client_params=llm_params,
-        )
-        super().__init__(**params, **kwargs)  # type: ignore[arg-type]
-
     @model_validator(mode="after")
     def build_chain_if_needed(self) -> Self:
         """Automatically build the chain if it is not provided."""
+        self.response_format = self.response_format or self.OutputType
         if self.chain is None:
             self.client = self.client or ChatOpenAI(
                 provider=self.provider,
