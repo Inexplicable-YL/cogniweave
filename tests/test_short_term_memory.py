@@ -15,17 +15,17 @@ load_dotenv()
 def create_test_conversation() -> dict[str, Any]:
     """創建測試用的對話資料"""
     return {
-        "name": "言靈",
+        "name": "言灵",
         "history": [
-            HumanMessage("我最近在學習 React，遇到了 useEffect 的問題。"),
-            AIMessage("useEffect 確實是 React 中比較複雜的概念。你遇到了什麼具體問題？"),
-            HumanMessage("就是不知道什麼時候該用依賴數組。"),
+            HumanMessage("我最近在学习 React，遇到了 useEffect 的问题。"),
+            AIMessage("useEffect 确实是 React 中比较复杂的概念。你遇到了什么具体问题？"),
+            HumanMessage("就是不知道什么时候该用依赖数组。"),
             AIMessage(
-                "依賴數組決定了 effect 何時重新執行。空數組表示只在組件掛載時執行一次，"
-                "有依賴項則在依賴項變化時重新執行。"
+                "依赖数组决定了 effect 何时重新执行。空数组表示只在组件挂载时执行一次，"
+                "有依赖项则在依赖项变化时重新执行。"
             ),
-            HumanMessage("原來如此！謝謝你的解釋，我明白了。"),
-            AIMessage("不客氣！如果還有其他 React 相關的問題，隨時可以問我。"),
+            HumanMessage("原来如此！谢谢你的解释，我明白了。"),
+            AIMessage("不客气！如果还有其他 React 相关的问题，随时可以问我。"),
         ],
         "timestamp": datetime.now().timestamp(),
     }
@@ -34,13 +34,13 @@ def create_test_conversation() -> dict[str, Any]:
 def create_art_conversation() -> dict[str, Any]:
     """創建另一個測試對話（繪畫主題）"""
     return {
-        "name": "小夢",
+        "name": "小梦",
         "history": [
-            HumanMessage("我剛畫了一張初音未來，給你看看。"),
-            AIMessage("哇，好漂亮的畫！你畫得真細膩，特別是頭髮的光澤處理得很好。"),
-            HumanMessage("謝謝，我還擔心你不喜歡呢。"),
-            AIMessage("我真的很喜歡！你的畫技太棒了，能看出你在細節上花了很多心思。"),
-            HumanMessage("嘿嘿，我練習了好久呢。"),
+            HumanMessage("我刚画了一张初音未来，给你看看。"),
+            AIMessage("哇，好漂亮的画！你画得真细腻，特别是头发的光泽处理得很好。"),
+            HumanMessage("谢谢，我还担心你不喜欢呢。"),
+            AIMessage("我真的很喜欢！你的画技太棒了，能看出你在细节上花了很多心思。"),
+            HumanMessage("嘿嘿，我练习了好久呢。"),
         ],
         "timestamp": datetime.now().timestamp(),
     }
