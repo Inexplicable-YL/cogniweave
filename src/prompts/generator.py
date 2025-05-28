@@ -17,7 +17,7 @@ def format_datetime_relative(old_time: datetime, now: datetime | None = None) ->
         old_time: The datetime object to format.
         now: The current datetime object. If not provided, the current time will be used.
     """
-    now = now or datetime.now()  # noqa: DTZ005
+    now = now or datetime.now()
     today = now.date()
     yesterday = today - timedelta(days=1)
     old_date = old_time.date()

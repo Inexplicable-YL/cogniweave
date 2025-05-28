@@ -87,6 +87,7 @@ ignore = [
     "A001",
     "A002",
     "D",
+    "DTZ005",
     "DTZ006",
 ]
 allowed-confusables = ["，", "：", "！", "（", "）"]
@@ -101,20 +102,11 @@ extra-standard-library = ["typing_extensions"]
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.ruff.lint.pyflakes]
-extend-generics = [
-    "sekaibot.plugin.Plugin",
-    "sekaibot.internal.adapter.Adapter",
-    "sekaibot.internal.event.Event",
-    "sekaibot.internal.message.Message",
-    "sekaibot.internal.message.MessageSegment",
-]
-
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*.py" = ["D", "PLR2004"]
+"tests/*.py" = ["D", "PLR2004", "T201"]
 
 [tool.pyright]
 ignore = ["example/nodes"]

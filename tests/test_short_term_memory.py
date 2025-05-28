@@ -1,9 +1,10 @@
 """測試 Short-term Memory 功能的腳本"""
-import anyio
+
 import os
 from datetime import datetime
 from typing import Any
 
+import anyio
 from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -11,6 +12,7 @@ from src.memory.updater import ShortTermMemoryChatUpdater
 from src.prompts.generator import ShortMemoryPromptTemplate
 
 load_dotenv()
+
 
 def create_test_conversation() -> dict[str, Any]:
     """創建測試用的對話資料"""
@@ -48,17 +50,17 @@ def create_art_conversation() -> dict[str, Any]:
 
 def print_memory_result(result: ShortMemoryPromptTemplate, title: str) -> None:
     """格式化輸出記憶結果"""
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print(f"{title}")
-    print(f"{'='*50}")
+    print(f"{'=' * 50}")
     print(f"時間戳記: {result.timestamp}")
     print(f"標籤: {result.topic_tags}")
-    print(f"\n格式化後的記憶:")
+    print("\n格式化後的記憶:")
     print(result.format())
-    print(f"{'='*50}\n")
+    print(f"{'=' * 50}\n")
 
 
-def check_api_key():
+def check_api_key() -> bool:
     """檢查 API key 是否設置"""
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -71,7 +73,7 @@ def check_api_key():
     return True
 
 
-async def test_sync_memory():
+async def test_sync_memory() -> tuple[ShortMemoryPromptTemplate, ShortMemoryPromptTemplate]:
     """測試同步版本的短期記憶生成"""
     print("開始測試同步版本...")
 
@@ -91,7 +93,7 @@ async def test_sync_memory():
     return result1, result2
 
 
-async def test_async_memory():
+async def test_async_memory() -> ShortMemoryPromptTemplate:
     """測試異步版本的短期記憶生成"""
     print("\n開始測試異步版本...")
 
@@ -102,14 +104,14 @@ async def test_async_memory():
     conv = create_test_conversation()
     result = await updater.ainvoke(conv)
 
-    print(f"\n異步結果:")
+    print("\n異步結果:")
     print(f"摘要: {result.chat_summary}")
     print(f"標籤: {result.topic_tags}")
 
     return result
 
 
-async def test_english_version():
+async def test_english_version() -> ShortMemoryPromptTemplate:
     """測試英文版本"""
     print("\n開始測試英文版本...")
 
@@ -134,7 +136,7 @@ async def test_english_version():
     return result
 
 
-def test_error_handling():
+def test_error_handling() -> None:
     """測試錯誤處理"""
     print("\n測試錯誤處理...")
 
@@ -171,7 +173,7 @@ def test_error_handling():
     print("錯誤處理測試完成")
 
 
-async def main():
+async def main() -> None:
     """主測試函數"""
     print("=" * 70)
     print("Short-term Memory 測試腳本")

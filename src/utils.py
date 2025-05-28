@@ -4,8 +4,7 @@ from collections.abc import Callable, Generator
 from datetime import datetime, timedelta
 from typing import Any, TypeVar, cast, overload
 
-from src.typing import NotGiven, NOT_GIVEN
-
+from src.typing import NOT_GIVEN, NotGiven
 
 _E = TypeVar("_E", bound=BaseException)
 
@@ -176,12 +175,9 @@ def handle_exception(
         for exc in flatten_exception_group(exc_group):
             pass
             # 干啥我也不知道，再说吧
+
     return _handle
 
 
 def remove_not_given_params(**kwages: Any) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in kwages.items()
-        if not isinstance(value, NotGiven)
-    }
+    return {key: value for key, value in kwages.items() if not isinstance(value, NotGiven)}

@@ -1,20 +1,18 @@
-from typing import ( 
-    TypeVar, 
+from typing import (  # noqa: A005
+    Literal,
     TypeVar,
-    Union,
-    Literal, 
 )
 from typing_extensions import override
+
 from pydantic import BaseModel
 
-__all__ = [
-
-]
+__all__ = []
 Output = TypeVar("Output", covariant=True)  # noqa: PLC0105
 PydanticOutput = TypeVar("PydanticOutput", bound=BaseModel, covariant=True)  # noqa: PLC0105
 SupportLangType = TypeVar("SupportLangType", bound=str)
 
 _T = TypeVar("_T")
+
 
 class NotGiven:
     """
@@ -41,5 +39,5 @@ class NotGiven:
         return "NOT_GIVEN"
 
 
-NotGivenOr = Union[_T, NotGiven]
+NotGivenOr = _T | NotGiven
 NOT_GIVEN = NotGiven()
