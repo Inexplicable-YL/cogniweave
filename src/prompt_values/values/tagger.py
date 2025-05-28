@@ -28,15 +28,6 @@ SHORT_TERM_MEMORY_TAGS_ZH = """
 
 ---
 
-【输出格式】
-
-请严格遵守并仅以如下JSON 格式输出，包含一个 "tags" 数组：
-{{
-    "tags": ["徕卡R系列", "相机", "电视机"]
-}}
-
----
-
 请提取最准确、最有代表性的话题标签。
 """
 
@@ -67,13 +58,6 @@ Tags should not repeat or overlap each other.
 "KAMITSUBAKI Studio", "Virtual YouTuber", "Hololive"
 "Leica", "BMW M Series", "Shinkansen", "Dove Chocolate"
 "Hatsune Miku", "Steve Jobs", "Rockefeller"
-
-【Output Format】
-
-Please strictly follow and output only in the following JSON format, including a "tags" array:
-{
-"tags": ["Leica R Series", "Camera", "Television"]
-}
 
 Extract the most accurate and representative topic tags.
 """
