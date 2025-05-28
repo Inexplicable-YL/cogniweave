@@ -24,6 +24,7 @@ dependencies = [
     "typing_extensions==4.13.2",
     "langchain",
     "langchain_openai",
+    "langchain-community==0.3.24",
     "python-dotenv",
     "httpx[socks]",
 ]
