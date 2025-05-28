@@ -22,11 +22,14 @@ from langchain_openai.chat_models.base import global_ssl_context
 from pydantic import BaseModel, Field, SecretStr, model_validator
 
 from src.prompt_values.base import MultilingualSystemPromptValue
-
-Output = TypeVar("Output", covariant=True)  # noqa: PLC0105
-PydanticOutput = TypeVar("PydanticOutput", bound=BaseModel, covariant=True)  # noqa: PLC0105
-SupportLangType = TypeVar("SupportLangType", bound=str)
-
+from src.typing import (
+    NOT_GIVEN,
+    Output,
+    PydanticOutput,
+    SupportLangType,
+    NotGiven,
+)
+from src.utils import remove_not_given_params
 
 class ChatOpenAI(BaseChatOpenAI):
     """Wrapper around OpenAI's Chat API, with dynamic env key loading based on provider."""
@@ -278,22 +281,22 @@ class StringSingleTurnChat(SingleTurnChatBase[SupportLangType, str], Generic[Sup
         provider: str = "openai",
         *,
         lang: SupportLangType = "zh",
-        llm: BaseChatOpenAI | ChatOpenAI | None = None,
-        prompt: MultilingualSystemPromptValue[SupportLangType] | None = None,
+        llm: BaseChatOpenAI | ChatOpenAI | NotGiven | None = NOT_GIVEN,
+        prompt: MultilingualSystemPromptValue[SupportLangType] | NotGiven | None = NOT_GIVEN,
         model: str = "gpt-3.5-turbo",
         temperature: float = 0.7,
-        llm_params: dict[str, Any] | None = None,
+        llm_params: dict[str, Any] | NotGiven | None = NOT_GIVEN,
         **kwargs: Any,
     ) -> None:
-        params = {
-            "lang": lang,
-            "provider": provider,
-            "llm": llm,
-            "prompt": prompt,
-            "model": model,
-            "temperature": temperature,
-            "client_params": llm_params or {},
-        }
+        params = remove_not_given_params(
+            lang=lang,
+            provider=provider,
+            llm=llm,
+            prompt=prompt,
+            model=model,
+            temperature=temperature,
+            client_params=llm_params,
+        )
         super().__init__(**params, **kwargs)  # type: ignore[arg-type]
 
 
@@ -312,22 +315,22 @@ class JsonSingleTurnChat(
         provider: str = "openai",
         *,
         lang: SupportLangType = "zh",
-        llm: BaseChatOpenAI | ChatOpenAI | None = None,
-        prompt: MultilingualSystemPromptValue[SupportLangType] | None = None,
+        llm: BaseChatOpenAI | ChatOpenAI | NotGiven | None = NOT_GIVEN,
+        prompt: MultilingualSystemPromptValue[SupportLangType] | NotGiven | None = NOT_GIVEN,
         model: str = "gpt-3.5-turbo",
         temperature: float = 0.7,
-        llm_params: dict[str, Any] | None = None,
+        llm_params: dict[str, Any] | NotGiven | None = NOT_GIVEN,
         **kwargs: Any,
     ) -> None:
-        params = {
-            "lang": lang,
-            "provider": provider,
-            "llm": llm,
-            "prompt": prompt,
-            "model": model,
-            "temperature": temperature,
-            "client_params": llm_params or {},
-        }
+        params = remove_not_given_params(
+            lang=lang,
+            provider=provider,
+            llm=llm,
+            prompt=prompt,
+            model=model,
+            temperature=temperature,
+            client_params=llm_params,
+        )
         super().__init__(**params, **kwargs)  # type: ignore[arg-type]
 
 
@@ -344,29 +347,29 @@ class PydanticSingleTurnChat(
 
     def __init__(
         self,
-        template: type[PydanticOutput],
+        response_format: type[PydanticOutput],
         provider: str = "openai",
         *,
         lang: SupportLangType = "zh",
         structured_output: bool = True,
-        llm: BaseChatOpenAI | ChatOpenAI | None = None,
-        prompt: MultilingualSystemPromptValue[SupportLangType] | None = None,
-        model: str = "gpt-4.1-mini",
+        llm: BaseChatOpenAI | ChatOpenAI | NotGiven | None = NOT_GIVEN,
+        prompt: MultilingualSystemPromptValue[SupportLangType] | NotGiven | None = NOT_GIVEN,
+        model: str = "gpt-3.5-turbo",
         temperature: float = 0.7,
-        llm_params: dict[str, Any] | None = None,
+        llm_params: dict[str, Any] | NotGiven | None = NOT_GIVEN,
         **kwargs: Any,
     ) -> None:
-        params = {
-            "lang": lang,
-            "provider": provider,
-            "response_format": template,
-            "structured_output": structured_output,
-            "llm": llm,
-            "prompt": prompt,
-            "model": model,
-            "temperature": temperature,
-            "client_params": llm_params or {},
-        }
+        params = remove_not_given_params(
+            lang=lang,
+            provider=provider,
+            response_format=response_format,
+            structured_output=structured_output,
+            llm=llm,
+            prompt=prompt,
+            model=model,
+            temperature=temperature,
+            client_params=llm_params,
+        )
         super().__init__(**params, **kwargs)  # type: ignore[arg-type]
 
     @model_validator(mode="after")

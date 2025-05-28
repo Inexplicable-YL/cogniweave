@@ -55,10 +55,6 @@ class ShortTermTagsChat(PydanticSingleTurnChat[Literal["zh", "en"], ContextTags]
 
     response_format: dict[str, Any] | type[BaseModel] | None = Field(default=ContextTags)
 
-    def __init__(self, **kwargs: Any) -> None:
-        """Initialize the tag generator"""
-        super().__init__(template=ContextTags, **kwargs)
-
 
 class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemoryPromptTemplate]):
     """Short-term memory updater for chat models."""

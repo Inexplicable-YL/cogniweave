@@ -2,14 +2,11 @@ import os
 import re
 from collections.abc import Callable, Generator
 from datetime import datetime, timedelta
-from typing import TypeVar, cast, overload
+from typing import Any, TypeVar, cast, overload
+
+from src.typing import NotGiven, NOT_GIVEN
 
 
-class _NoDefaultType:
-    """Type to indicate no default value is provided."""
-
-
-_NoDefault = _NoDefaultType()
 _E = TypeVar("_E", bound=BaseException)
 
 
@@ -35,7 +32,7 @@ def get_provider_from_env(
     key: str,
     /,
     *,
-    default: str | _NoDefaultType | None = _NoDefault,
+    default: str | NotGiven | None = NOT_GIVEN,
     error_message: str | None = None,
 ) -> Callable[[], str] | Callable[[], str | None]:
     """Create a factory method that gets a value from an environment variable.
@@ -96,7 +93,7 @@ def get_model_from_env(
     key: str,
     /,
     *,
-    default: str | _NoDefaultType | None = _NoDefault,
+    default: str | NotGiven | None = NOT_GIVEN,
     error_message: str | None = None,
 ) -> Callable[[], str] | Callable[[], str | None]:
     """Create a factory method that gets a value from an environment variable.
@@ -180,3 +177,11 @@ def handle_exception(
             pass
             # 干啥我也不知道，再说吧
     return _handle
+
+
+def remove_not_given_params(**kwages: Any) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in kwages.items()
+        if not isinstance(value, NotGiven)
+    }

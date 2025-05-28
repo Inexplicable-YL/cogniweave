@@ -19,6 +19,8 @@ from langchain_core.prompts.message import (
 from langchain_core.prompts.string import PromptTemplateFormat
 from pydantic import Field
 
+from src.typing import SupportLangType
+
 MessageLike = BaseMessagePromptTemplate | BaseMessage | BaseChatPromptTemplate
 
 MessageLikeRepresentation = (
@@ -39,8 +41,6 @@ DEFAULT_SINGLE_TURN_PROMPT_ZH = (
 )
 
 DEFAULT_SINGLE_TURN_PROMPT_EN = """You are a helpful assistant. Please provide concise and clear responses to the user's questions."""
-
-SupportLangType = TypeVar("SupportLangType", bound=str)
 
 
 class BasePromptValue(Serializable, ABC):
