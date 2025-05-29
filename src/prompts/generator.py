@@ -100,6 +100,7 @@ class ShortMemoryPromptTemplate(PromptTemplate):
         )
 
     def to_template_dict(self) -> ShortMemoryTemplateDict:
+        """Convert the prompt template to a dictionary."""
         return ShortMemoryTemplateDict(
             template=self.template,
             timestamp=self.timestamp.timestamp(),
@@ -123,7 +124,7 @@ class ShortMemoryPromptTemplate(PromptTemplate):
         cls,
         obj: Any,
     ) -> ShortMemoryPromptTemplate | list[ShortMemoryPromptTemplate]:
-        """"""
+        """Load a prompt template from a dictionary."""
 
         def _load(
             obj: dict[Any, Any] | list[dict[Any, Any]],

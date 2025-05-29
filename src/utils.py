@@ -1,11 +1,29 @@
+import asyncio
 import os
 import re
-from collections.abc import Callable, Generator
+from collections.abc import (
+    AsyncGenerator,
+    Callable,
+    Coroutine,
+    Generator,
+)
+from contextlib import AbstractContextManager as ContextManager
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from typing import Any, TypeVar, cast, overload
+from functools import partial
+from typing import (
+    Any,
+    TypeVar,
+    cast,
+    overload,
+)
+from typing_extensions import ParamSpec
 
 from src.typing import NOT_GIVEN, NotGiven
 
+_T = TypeVar("_T")
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 _E = TypeVar("_E", bound=BaseException)
 
 
@@ -180,4 +198,56 @@ def handle_exception(
 
 
 def remove_not_given_params(**kwages: Any) -> dict[str, Any]:
+    """Remove not given parameters."""
     return {key: value for key, value in kwages.items() if not isinstance(value, NotGiven)}
+
+
+def sync_func_wrapper(
+    func: Callable[_P, _R], *, to_thread: bool = False
+) -> Callable[_P, Coroutine[None, None, _R]]:
+    """包装一个同步函数为异步函数。
+
+    Args:
+        func: 待包装的同步函数。
+        to_thread: 是否在独立的线程中运行同步函数。默认为 `False`。
+
+    Returns:
+        异步函数。
+    """
+    if to_thread:
+
+        async def _wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+            loop = asyncio.get_running_loop()
+            func_call = partial(func, *args, **kwargs)
+            return await loop.run_in_executor(None, func_call)
+
+    else:
+
+        async def _wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+            return func(*args, **kwargs)
+
+    return _wrapper
+
+
+@asynccontextmanager
+async def sync_ctx_manager_wrapper(
+    cm: ContextManager[_T], *, to_thread: bool = False
+) -> AsyncGenerator[_T, None]:
+    """将同步上下文管理器包装为异步上下文管理器。
+
+    Args:
+        cm: 待包装的同步上下文管理器。
+        to_thread: 是否在独立的线程中运行同步函数。默认为 `False`。
+
+    Returns:
+        异步上下文管理器。
+    """
+    try:
+        yield await sync_func_wrapper(cm.__enter__, to_thread=to_thread)()
+    except Exception as e:
+        if not await sync_func_wrapper(cm.__exit__, to_thread=to_thread)(
+            type(e), e, e.__traceback__
+        ):
+            raise
+    else:
+        await sync_func_wrapper(cm.__exit__, to_thread=to_thread)(None, None, None)
