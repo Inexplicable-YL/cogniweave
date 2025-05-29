@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from functools import partial
-from typing import Any, ClassVar, Self
+from typing import Any, ClassVar, Self, TypedDict, overload
 from typing_extensions import override
 
 from langchain_core.prompts.prompt import PromptTemplate
@@ -32,6 +32,14 @@ def format_datetime_relative(old_time: datetime, now: datetime | None = None) ->
     return f"{date_part} {time_part}"
 
 
+class ShortMemoryTemplateDict(TypedDict):
+    template: str
+    timestamp: float | int
+    chat_summary: str
+    topic_tags: list[str]
+    template_format: PromptTemplateFormat
+
+
 class ShortMemoryPromptTemplate(PromptTemplate):
     """Generative prompt template."""
 
@@ -42,6 +50,11 @@ class ShortMemoryPromptTemplate(PromptTemplate):
     timestamp: datetime
     chat_summary: str
     topic_tags: list[str] = Field(default_factory=list)
+
+    @classmethod
+    @override
+    def get_lc_namespace(cls) -> list[str]:
+        return ["src", "prompts", "generator"]
 
     @model_validator(mode="after")
     def build_partial_variables(self) -> Self:
@@ -58,7 +71,7 @@ class ShortMemoryPromptTemplate(PromptTemplate):
         cls,
         template: str | None = None,
         *,
-        timestamp: datetime,
+        timestamp: datetime | float | int,
         chat_summary: str,
         topic_tags: list[str],
         template_format: PromptTemplateFormat = "f-string",
@@ -75,6 +88,8 @@ class ShortMemoryPromptTemplate(PromptTemplate):
             partial_variables: Any additional variables to use in the prompt.
             **kwargs: Additional keyword arguments to pass to the parent class.
         """
+        if isinstance(timestamp, float | int):
+            timestamp = datetime.fromtimestamp(timestamp)
         return cls(
             template=template or cls._template,
             timestamp=timestamp,
@@ -83,3 +98,36 @@ class ShortMemoryPromptTemplate(PromptTemplate):
             template_format=template_format,
             **kwargs,
         )
+    
+    def to_template_dict(self) -> ShortMemoryTemplateDict:
+        return ShortMemoryTemplateDict(
+            template=self.template,
+            timestamp=self.timestamp.timestamp(),
+            chat_summary=self.chat_summary,
+            topic_tags=self.topic_tags,
+            template_format=self.template_format,
+        )
+
+    @overload
+    @classmethod
+    def load(cls, obj: ShortMemoryTemplateDict | dict[Any, Any]) -> ShortMemoryPromptTemplate: ...
+    
+    @overload
+    @classmethod
+    def load(cls, obj: list[ShortMemoryTemplateDict | dict[Any, Any]]) -> list[ShortMemoryPromptTemplate]: ...
+
+    @classmethod
+    def load(
+        cls, obj: Any,
+    ) -> ShortMemoryPromptTemplate | list[ShortMemoryPromptTemplate]:
+        """"""
+        def _load(
+            obj: dict[Any, Any] | list[dict[Any, Any]],
+        ) -> Any:
+            if isinstance(obj, dict):
+                template_obj = ShortMemoryTemplateDict(**obj)
+                return ShortMemoryPromptTemplate.from_template(**template_obj)
+            if isinstance(obj, list):
+                return [_load(o) for o in obj]
+            
+        return _load(obj)
