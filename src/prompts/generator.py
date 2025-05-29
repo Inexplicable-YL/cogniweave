@@ -71,7 +71,7 @@ class ShortMemoryPromptTemplate(PromptTemplate):
         cls,
         template: str | None = None,
         *,
-        timestamp: datetime | float | int,
+        timestamp: datetime | float,
         chat_summary: str,
         topic_tags: list[str],
         template_format: PromptTemplateFormat = "f-string",
@@ -98,7 +98,7 @@ class ShortMemoryPromptTemplate(PromptTemplate):
             template_format=template_format,
             **kwargs,
         )
-    
+
     def to_template_dict(self) -> ShortMemoryTemplateDict:
         return ShortMemoryTemplateDict(
             template=self.template,
@@ -111,16 +111,20 @@ class ShortMemoryPromptTemplate(PromptTemplate):
     @overload
     @classmethod
     def load(cls, obj: ShortMemoryTemplateDict | dict[Any, Any]) -> ShortMemoryPromptTemplate: ...
-    
+
     @overload
     @classmethod
-    def load(cls, obj: list[ShortMemoryTemplateDict | dict[Any, Any]]) -> list[ShortMemoryPromptTemplate]: ...
+    def load(
+        cls, obj: list[ShortMemoryTemplateDict | dict[Any, Any]]
+    ) -> list[ShortMemoryPromptTemplate]: ...
 
     @classmethod
     def load(
-        cls, obj: Any,
+        cls,
+        obj: Any,
     ) -> ShortMemoryPromptTemplate | list[ShortMemoryPromptTemplate]:
         """"""
+
         def _load(
             obj: dict[Any, Any] | list[dict[Any, Any]],
         ) -> Any:
@@ -129,5 +133,6 @@ class ShortMemoryPromptTemplate(PromptTemplate):
                 return ShortMemoryPromptTemplate.from_template(**template_obj)
             if isinstance(obj, list):
                 return [_load(o) for o in obj]
-            
+            return obj
+
         return _load(obj)
