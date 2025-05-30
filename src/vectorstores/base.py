@@ -41,6 +41,7 @@ class UninitializedWarning(UserWarning):
 class LazyFAISS(FAISS):
     _save_path: SavePath | None = None
     _uninitialized: bool = False
+    _uninitialized_kwargs: dict[str, Any] | None = None
 
     @override
     def __getattribute__(self, name: str) -> Any:
@@ -86,16 +87,15 @@ class LazyFAISS(FAISS):
         docstore = kwargs.pop("docstore", InMemoryDocstore())
         index_to_docstore_id = kwargs.pop("index_to_docstore_id", {})
 
-        self.index = index
-        self.docstore = docstore
-        self.index_to_docstore_id = index_to_docstore_id
-        self.distance_strategy = distance_strategy
-        self._normalize_L2 = normalize_L2
-        if self.distance_strategy != DistanceStrategy.EUCLIDEAN_DISTANCE and self._normalize_L2:
-            warnings.warn(
-                f"Normalizing L2 is not applicable for metric type: {self.distance_strategy}",
-                stacklevel=2,
-            )
+        self._FAISS__init__(
+            embedding_function=self.embedding_function,
+            index=index,
+            docstore=docstore,
+            index_to_docstore_id=index_to_docstore_id,
+            normalize_L2=normalize_L2,
+            distance_strategy=distance_strategy,
+            **kwargs,
+        )
 
     def _FAISS__add(
         self,
@@ -105,7 +105,7 @@ class LazyFAISS(FAISS):
         ids: list[str] | None = None,
     ) -> list[str]:
         if self._uninitialized:
-            self.__init(list(embeddings))
+            self.__init(list(embeddings), **(self._uninitialized_kwargs or {}))
             self._uninitialized = False
         return super()._FAISS__add(texts, embeddings, metadatas, ids)  # type: ignore
 
@@ -152,6 +152,7 @@ class LazyFAISS(FAISS):
             vector._uninitialized = True
             vector._save_path = {"folder_path": path, "index_name": index_name}
             vector.embedding_function = embeddings
+            vector._uninitialized_kwargs = kwargs
             return vector
 
         # load index separately since it is not picklable

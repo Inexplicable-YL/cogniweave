@@ -1,10 +1,13 @@
 from collections.abc import Iterable
 from typing import Any
+from pydantic import BaseModel
 
 from .base import LazyFAISS
 
 
-class TagsVector(LazyFAISS):
+class TagsVector(BaseModel):
+    vector: LazyFAISS
+
     def add_tags(
         self,
         tags: Iterable[str],
