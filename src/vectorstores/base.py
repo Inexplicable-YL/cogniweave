@@ -21,8 +21,9 @@ from langchain_community.vectorstores.utils import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
+    from langchain_core.documents import Document
     from langchain_core.embeddings import Embeddings
 
 logger = logging.getLogger(__name__)
@@ -227,3 +228,59 @@ class LazyFAISS(FAISS):
                 to_thread.run_sync, faiss.write_index, self.index, str(path / f"{index_name}.faiss")
             )
             tg.start_soon(to_thread.run_sync, _write_pickle, path / f"{index_name}.pkl")
+
+    def similarity_search_with_score_by_threshold(
+        self,
+        query: str,
+        k: int = 4,
+        filter: Callable | dict[str, Any] | None = None,
+        fetch_k: int = 20,
+        min_score: float | None = None,
+        **kwargs: Any,
+    ) -> list[tuple[Document, float]]:
+        """Search for similar documents with scores, filtered by minimum similarity score.
+
+        Args:
+            query: Text to look up documents similar to.
+            k: Number of Documents to return. Defaults to 4.
+            filter: Filter by metadata. Defaults to None.
+            fetch_k: Number of Documents to fetch before filtering. Defaults to 20.
+            min_score: Minimum similarity score threshold.
+                    Results with scores below this threshold will be filtered out.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            List of documents with similarity scores.
+        """
+
+        return super().similarity_search_with_score(
+            query, k, filter=filter, fetch_k=fetch_k, score_threshold=min_score, **kwargs
+        )
+
+    async def asimilarity_search_with_score_by_threshold(
+        self,
+        query: str,
+        k: int = 4,
+        filter: Callable | dict[str, Any] | None = None,
+        fetch_k: int = 20,
+        min_score: float | None = None,
+        **kwargs: Any,
+    ) -> list[tuple[Document, float]]:
+        """Asynchronously search for similar documents with scores, filtered by minimum similarity score.
+
+        Args:
+            query: Text to look up documents similar to.
+            k: Number of Documents to return. Defaults to 4.
+            filter: Filter by metadata. Defaults to None.
+            fetch_k: Number of Documents to fetch before filtering. Defaults to 20.
+            min_score: Minimum similarity score threshold.
+                    Results with scores below this threshold will be filtered out.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            List of documents with similarity scores.
+        """
+
+        return await super().asimilarity_search_with_score(
+            query, k, filter=filter, fetch_k=fetch_k, score_threshold=min_score, **kwargs
+        )
