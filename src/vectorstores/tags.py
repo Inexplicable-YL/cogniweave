@@ -7,16 +7,13 @@ from pathlib import Path
 from typing import Any, TypedDict, cast
 
 import anyio
+import numpy as np
 from anyio import to_thread
 from langchain_community.docstore.base import AddableMixin, Docstore
 from langchain_community.docstore.in_memory import InMemoryDocstore
 from langchain_community.vectorstores.faiss import dependable_faiss_import
-from langchain_community.vectorstores.utils import (
-    DistanceStrategy,
-)
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from pydantic import BaseModel
 
 from src.utils import sync_func_wrapper
 
@@ -32,7 +29,7 @@ class DocumentMeta(TypedDict):
     metadata: dict[Any, Any] | None
 
 
-class TagsVector(BaseModel):
+class TagsVector:
     vector: LazyFAISS
 
     folder_path: str
@@ -48,7 +45,7 @@ class TagsVector(BaseModel):
         **kwargs: Any,
     ) -> None:
         path = Path(folder_path)
-        docstore = faiss_index = faiss_docstore = faiss_index_to_docstore_id = None
+        metastore = faiss_index = faiss_docstore = faiss_index_to_docstore_id = None
 
         if (path / f"{index_name}.faiss").exists():
             # load index separately since it is not picklable
@@ -59,22 +56,18 @@ class TagsVector(BaseModel):
             # load docstore and index_to_docstore_id
             with (path / f"{index_name}.pkl").open("rb") as f:
                 (
-                    docstore,
+                    metastore,
                     faiss_docstore,
                     faiss_index_to_docstore_id,
                 ) = pickle.load(  # ignore[pickle]: explicit-opt-in  # noqa: S301
                     f
                 )
-        vector = LazyFAISS(
+        self.vector = LazyFAISS(
             embeddings, faiss_index, faiss_docstore, faiss_index_to_docstore_id, **kwargs
         )
-
-        super().__init__(
-            vector=vector,
-            folder_path=folder_path,
-            index_name=index_name,
-            docstore=docstore or InMemoryDocstore(),
-        )
+        self.folder_path = folder_path
+        self.index_name = index_name
+        self.metastore = metastore or InMemoryDocstore()
 
     @staticmethod
     def _build_document(
@@ -165,7 +158,7 @@ class TagsVector(BaseModel):
         embedding: list[float],
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         **kwargs: Any,
     ) -> list[tuple[Document, float]]:
         """
@@ -193,21 +186,24 @@ class TagsVector(BaseModel):
                 - Document: the retrieved document
                 - float: similarity score (lower means more similar, usually L2 distance)
         """
-        tag_docs = self.vector.similarity_search_with_score_by_vector(
-            embedding, k=k if filter is None else fetch_k, **kwargs
+        tag_docs_and_scores = self.vector.similarity_search_with_score_by_vector(
+            embedding, k=fetch_k if filter is None else fetch_k * 2, **kwargs
         )
+        relevance_score_fn = self.vector._select_relevance_score_fn()
+        if relevance_score_fn is None:
+            raise ValueError(
+                "relevance_score_fn must be provided to FAISS constructor to normalize scores"
+            )
+        tag_docs = [(doc, relevance_score_fn(score)) for doc, score in tag_docs_and_scores]
+
         file_map = defaultdict(float)
         for _d, _s in tag_docs:
             metadata = cast("TagDucumentId", _d.metadata)
             for file_id in metadata["file_id"]:
                 file_map[file_id] += _s
 
-        sort_reverse = self.vector.distance_strategy in (
-            DistanceStrategy.MAX_INNER_PRODUCT,
-            DistanceStrategy.JACCARD,
-        )
         doc_map: list[tuple[str, float]] = sorted(
-            file_map.items(), key=lambda item: item[1], reverse=sort_reverse
+            file_map.items(), key=lambda item: item[1], reverse=True
         )
 
         docs = []
@@ -228,17 +224,17 @@ class TagsVector(BaseModel):
                     docs.append((doc, doc_score))
             else:
                 docs.append((doc, doc_score))
-            if len(docs) >= k:
-                break
 
-        return docs
+        if kwargs.get("extract_high_score", False):
+            return self.extract_high_score(docs, fallback_k=k, **kwargs)
+        return docs[:k]
 
     async def asimilarity_search_with_score_by_vector(
         self,
         embedding: list[float],
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         **kwargs: Any,
     ) -> list[tuple[Document, float]]:
         """
@@ -280,7 +276,7 @@ class TagsVector(BaseModel):
         query: str,
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         **kwargs: Any,
     ) -> list[tuple[Document, float]]:
         """Return docs most similar to query.
@@ -313,7 +309,7 @@ class TagsVector(BaseModel):
         query: str,
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         **kwargs: Any,
     ) -> list[tuple[Document, float]]:
         """Return docs most similar to query asynchronously.
@@ -346,7 +342,7 @@ class TagsVector(BaseModel):
         embedding: list[float],
         k: int = 4,
         filter: dict[str, Any] | None = None,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         **kwargs: Any,
     ) -> list[Document]:
         """Return docs most similar to embedding vector.
@@ -378,7 +374,7 @@ class TagsVector(BaseModel):
         embedding: list[float],
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         **kwargs: Any,
     ) -> list[Document]:
         """Return docs most similar to embedding vector asynchronously.
@@ -410,7 +406,7 @@ class TagsVector(BaseModel):
         query: str,
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         **kwargs: Any,
     ) -> list[Document]:
         """Return docs most similar to query.
@@ -435,7 +431,7 @@ class TagsVector(BaseModel):
         query: str,
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         **kwargs: Any,
     ) -> list[Document]:
         """Return docs most similar to query asynchronously.
@@ -460,9 +456,10 @@ class TagsVector(BaseModel):
         embedding: list[float],
         *,
         k: int = 4,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         lambda_mult: float = 0.5,
         filter: Callable | dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> list[tuple[Document, float]]:
         """Return docs and their similarity scores selected using the maximal marginal
             relevance.
@@ -483,24 +480,27 @@ class TagsVector(BaseModel):
             List of Documents and similarity scores selected by maximal marginal
                 relevance and score for each.
         """
-        tag_docs = self.vector.max_marginal_relevance_search_with_score_by_vector(
+        tag_docs_and_scores = self.vector.max_marginal_relevance_search_with_score_by_vector(
             embedding,
-            k=k if filter is None else fetch_k,
-            fetch_k=fetch_k if filter is None else fetch_k * 5,
+            k=fetch_k if filter is None else fetch_k * 2,
+            fetch_k=fetch_k * 2 if filter is None else fetch_k * 4,
             lambda_mult=lambda_mult,
         )
+        relevance_score_fn = self.vector._select_relevance_score_fn()
+        if relevance_score_fn is None:
+            raise ValueError(
+                "relevance_score_fn must be provided to FAISS constructor to normalize scores"
+            )
+        tag_docs = [(doc, relevance_score_fn(score)) for doc, score in tag_docs_and_scores]
+
         file_map = defaultdict(float)
         for _d, _s in tag_docs:
             metadata = cast("TagDucumentId", _d.metadata)
             for file_id in metadata["file_id"]:
                 file_map[file_id] += _s
 
-        sort_reverse = self.vector.distance_strategy in (
-            DistanceStrategy.MAX_INNER_PRODUCT,
-            DistanceStrategy.JACCARD,
-        )
         doc_map: list[tuple[str, float]] = sorted(
-            file_map.items(), key=lambda item: item[1], reverse=sort_reverse
+            file_map.items(), key=lambda item: item[1], reverse=True
         )
 
         docs = []
@@ -521,19 +521,20 @@ class TagsVector(BaseModel):
                     docs.append((doc, doc_score))
             else:
                 docs.append((doc, doc_score))
-            if len(docs) >= k:
-                break
 
-        return docs
+        if kwargs.get("extract_high_score", False):
+            return self.extract_high_score(docs, fallback_k=k, **kwargs)
+        return docs[:k]
 
     async def amax_marginal_relevance_search_with_score_by_vector(
         self,
         embedding: list[float],
         *,
         k: int = 4,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         lambda_mult: float = 0.5,
         filter: Callable | dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> list[tuple[Document, float]]:
         """Return docs and their similarity scores selected using the maximal marginal
             relevance.
@@ -563,15 +564,17 @@ class TagsVector(BaseModel):
             fetch_k=fetch_k,
             lambda_mult=lambda_mult,
             filter=filter,
+            **kwargs,
         )
 
     def max_marginal_relevance_search_by_vector(
         self,
         embedding: list[float],
         k: int = 4,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         lambda_mult: float = 0.5,
         filter: Callable | dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> list[Document]:
         """Return docs selected using the maximal marginal relevance.
 
@@ -591,7 +594,7 @@ class TagsVector(BaseModel):
             List of Documents selected by maximal marginal relevance.
         """
         docs_and_scores = self.max_marginal_relevance_search_with_score_by_vector(
-            embedding, k=k, fetch_k=fetch_k, lambda_mult=lambda_mult, filter=filter
+            embedding, k=k, fetch_k=fetch_k, lambda_mult=lambda_mult, filter=filter, **kwargs
         )
         return [doc for doc, _ in docs_and_scores]
 
@@ -599,9 +602,10 @@ class TagsVector(BaseModel):
         self,
         embedding: list[float],
         k: int = 4,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         lambda_mult: float = 0.5,
         filter: Callable | dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> list[Document]:
         """Return docs selected using the maximal marginal relevance asynchronously.
 
@@ -621,7 +625,7 @@ class TagsVector(BaseModel):
             List of Documents selected by maximal marginal relevance.
         """
         docs_and_scores = await self.amax_marginal_relevance_search_with_score_by_vector(
-            embedding, k=k, fetch_k=fetch_k, lambda_mult=lambda_mult, filter=filter
+            embedding, k=k, fetch_k=fetch_k, lambda_mult=lambda_mult, filter=filter, **kwargs
         )
         return [doc for doc, _ in docs_and_scores]
 
@@ -629,9 +633,10 @@ class TagsVector(BaseModel):
         self,
         query: str,
         k: int = 4,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         lambda_mult: float = 0.5,
         filter: Callable | dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> list[Document]:
         """Return docs selected using the maximal marginal relevance.
 
@@ -657,15 +662,17 @@ class TagsVector(BaseModel):
             fetch_k=fetch_k,
             lambda_mult=lambda_mult,
             filter=filter,
+            **kwargs,
         )
 
     async def amax_marginal_relevance_search(
         self,
         query: str,
         k: int = 4,
-        fetch_k: int = 20,
+        fetch_k: int = 5,
         lambda_mult: float = 0.5,
         filter: Callable | dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> list[Document]:
         """Return docs selected using the maximal marginal relevance asynchronously.
 
@@ -691,6 +698,7 @@ class TagsVector(BaseModel):
             fetch_k=fetch_k,
             lambda_mult=lambda_mult,
             filter=filter,
+            **kwargs,
         )
 
     def delete_docs(self, ids: list[str] | None = None, **kwargs: Any) -> bool | None:  # noqa: ARG002
@@ -796,3 +804,50 @@ class TagsVector(BaseModel):
                 str(path / f"{self.index_name}.faiss"),
             )
             tg.start_soon(to_thread.run_sync, _write_pickle, path / f"{self.index_name}.pkl")
+
+    @staticmethod
+    def extract_high_score(
+        results: list[tuple[Document, float]],
+        *,
+        min_relative_jump: float = 0.7,
+        soft_threshold: float = 1,
+        fallback_k: int = 3,
+        min_gap: float = 0.5,
+        **kwargs: Any,  # noqa: ARG004
+    ) -> list[tuple[Document, float]]:
+        if not results:
+            return []
+        if len(results) == 1:
+            return results if results[0][1] > soft_threshold else []
+        if len(results) == 2:  # noqa: PLR2004
+            return (
+                [results[0]]
+                if results[0][1] - results[1][1] > min_gap
+                else (results if results[0][1] + results[1][1] > soft_threshold * 2 else [])
+            )
+
+        sorted_results = sorted(results, key=lambda x: x[1], reverse=True)
+        scores = np.array([s for _, s in sorted_results])
+        n = len(scores)
+        x = np.arange(n)
+        y = scores
+
+        line_start, line_end = np.array([0, y[0]]), np.array([n - 1, y[-1]])
+        line_vec = line_end - line_start
+        line_vec_norm = line_vec / np.linalg.norm(line_vec)
+        vec_from_start = np.stack([x, y], axis=1) - line_start
+        proj_lengths = np.dot(vec_from_start, line_vec_norm)
+        proj_points = np.outer(proj_lengths, line_vec_norm) + line_start
+        distances = np.linalg.norm(vec_from_start - proj_points, axis=1)
+        knee_idx = int(np.argmax(distances))
+
+        max_jump = distances[knee_idx]
+        score_range = y[0] - y[-1]
+        relative_jump = max_jump / (score_range + 1e-8)
+        if relative_jump > min_relative_jump and knee_idx >= 1:
+            return sorted_results[: min(knee_idx, fallback_k)]
+
+        if scores.mean() >= soft_threshold:
+            return sorted_results[:fallback_k]
+
+        return []
