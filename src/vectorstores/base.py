@@ -1,15 +1,10 @@
 from __future__ import annotations
 
-import inspect
 import logging
 import pickle
 import warnings
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    TypedDict,
-)
+from typing import TYPE_CHECKING, Any, TypedDict
 from typing_extensions import override
 
 import anyio
@@ -19,12 +14,13 @@ from langchain_community.vectorstores.faiss import FAISS, dependable_faiss_impor
 from langchain_community.vectorstores.utils import (
     DistanceStrategy,
 )
+from langchain_core.embeddings import Embeddings
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
+    from langchain_community.docstore.base import Docstore
     from langchain_core.documents import Document
-    from langchain_core.embeddings import Embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -40,36 +36,35 @@ class UninitializedWarning(UserWarning):
 
 class LazyFAISS(FAISS):
     _save_path: SavePath | None = None
-    _uninitialized: bool = False
-    _uninitialized_kwargs: dict[str, Any] | None = None
 
-    @override
-    def __getattribute__(self, name: str) -> Any:
-        obj = super().__getattribute__(name)
-        if (
-            super().__getattribute__("_uninitialized")
-            and callable(obj)
-            and not name.startswith("_")
-            and "add" not in name
-        ):
-            if "search" in name:
-                warnings.warn(
-                    f"Cannot call '{name}' before initialization. "
-                    f"Only 'add' methods are allowed when _uninitialized=True.",
-                    UninitializedWarning,
-                    stacklevel=2,
-                )
-                return (
-                    lambda *_args, **_kwargs: to_thread.run_sync(list)
-                    if inspect.iscoroutinefunction(obj)
-                    else []
-                )
-            raise RuntimeError(
-                f"Cannot access '{name}' before initialization. "
-                f"Only 'add' methods are allowed when _uninitialized=True."
+    def __init__(
+        self,
+        embedding_function: Callable[[str], list[float]] | Embeddings,
+        index: Any | None = None,
+        docstore: Docstore | None = None,
+        index_to_docstore_id: dict[int, str] | None = None,
+        relevance_score_fn: Callable[[float], float] | None = None,
+        normalize_L2: bool = False,  # noqa: N803
+        distance_strategy: DistanceStrategy = DistanceStrategy.EUCLIDEAN_DISTANCE,
+    ) -> None:
+        """Initialize with necessary components."""
+        if not isinstance(embedding_function, Embeddings):
+            logger.warning(
+                "`embedding_function` is expected to be an Embeddings object, support "
+                "for passing in a function will soon be removed."
             )
-
-        return obj
+        self.embedding_function = embedding_function
+        self.index = index
+        self.docstore = docstore or InMemoryDocstore()
+        self.index_to_docstore_id = index_to_docstore_id or {}
+        self.distance_strategy = distance_strategy
+        self.override_relevance_score_fn = relevance_score_fn
+        self._normalize_L2 = normalize_L2
+        if self.distance_strategy != DistanceStrategy.EUCLIDEAN_DISTANCE and self._normalize_L2:
+            warnings.warn(
+                f"Normalizing L2 is not applicable for metric type: {self.distance_strategy}",
+                stacklevel=2,
+            )
 
     def __init(
         self,
@@ -84,10 +79,10 @@ class LazyFAISS(FAISS):
         else:
             # Default to L2, currently other metric types not initialized.
             index = faiss.IndexFlatL2(len(embeddings[0]))
-        docstore = kwargs.pop("docstore", InMemoryDocstore())
-        index_to_docstore_id = kwargs.pop("index_to_docstore_id", {})
+        docstore = self.docstore or kwargs.pop("docstore", InMemoryDocstore())
+        index_to_docstore_id = self.index_to_docstore_id or kwargs.pop("index_to_docstore_id", {})
 
-        self._FAISS__init__(
+        super().__init__(
             embedding_function=self.embedding_function,
             index=index,
             docstore=docstore,
@@ -104,10 +99,135 @@ class LazyFAISS(FAISS):
         metadatas: Iterable[dict] | None = None,
         ids: list[str] | None = None,
     ) -> list[str]:
-        if self._uninitialized:
-            self.__init(list(embeddings), **(self._uninitialized_kwargs or {}))
-            self._uninitialized = False
+        if self.index is None:
+            self.__init(list(embeddings))
         return super()._FAISS__add(texts, embeddings, metadatas, ids)  # type: ignore
+
+    @override
+    def similarity_search_with_score_by_vector(
+        self,
+        embedding: list[float],
+        k: int = 4,
+        filter: Callable | dict[str, Any] | None = None,
+        fetch_k: int = 20,
+        **kwargs: Any,
+    ) -> list[tuple[Document, float]]:
+        """Return docs most similar to query.
+
+        Args:
+            embedding: Embedding vector to look up documents similar to.
+            k: Number of Documents to return. Defaults to 4.
+            filter (Optional[Union[Callable, Dict[str, Any]]]): Filter by metadata.
+                Defaults to None. If a callable, it must take as input the
+                metadata dict of Document and return a bool.
+            fetch_k: (Optional[int]) Number of Documents to fetch before filtering.
+                      Defaults to 20.
+            **kwargs: kwargs to be passed to similarity search. Can include:
+                score_threshold: Optional, a floating point value between 0 to 1 to
+                    filter the resulting set of retrieved docs
+
+        Returns:
+            List of documents most similar to the query text and L2 distance
+            in float for each. Lower score represents more similarity.
+        """
+        if self.index is None:
+            warnings.warn(
+                "Cannot similarity search before initialization. "
+                "Only 'add' methods are allowed when FAISS is uninitialized.",
+                UninitializedWarning,
+                stacklevel=2,
+            )
+            return []
+        return super().similarity_search_with_score_by_vector(
+            embedding, k, filter, fetch_k, **kwargs
+        )
+
+    @override
+    def max_marginal_relevance_search_with_score_by_vector(
+        self,
+        embedding: list[float],
+        *,
+        k: int = 4,
+        fetch_k: int = 20,
+        lambda_mult: float = 0.5,
+        filter: Callable | dict[str, Any] | None = None,
+    ) -> list[tuple[Document, float]]:
+        """Return docs and their similarity scores selected using the maximal marginal
+            relevance.
+
+        Maximal marginal relevance optimizes for similarity to query AND diversity
+        among selected documents.
+
+        Args:
+            embedding: Embedding to look up documents similar to.
+            k: Number of Documents to return. Defaults to 4.
+            fetch_k: Number of Documents to fetch before filtering to
+                     pass to MMR algorithm.
+            lambda_mult: Number between 0 and 1 that determines the degree
+                        of diversity among the results with 0 corresponding
+                        to maximum diversity and 1 to minimum diversity.
+                        Defaults to 0.5.
+        Returns:
+            List of Documents and similarity scores selected by maximal marginal
+                relevance and score for each.
+        """
+        if self.index is None:
+            warnings.warn(
+                "Cannot max marginal relevance search before initialization. "
+                "Only 'add' methods are allowed when FAISS is uninitialized.",
+                UninitializedWarning,
+                stacklevel=2,
+            )
+            return []
+        return super().max_marginal_relevance_search_with_score_by_vector(
+            embedding, k=k, fetch_k=fetch_k, lambda_mult=lambda_mult, filter=filter
+        )
+
+    @override
+    def delete(self, ids: list[str] | None = None, **kwargs: Any) -> bool | None:
+        """Delete by ID. These are the IDs in the vectorstore.
+
+        Args:
+            ids: List of ids to delete.
+
+        Returns:
+            Optional[bool]: True if deletion is successful,
+            False otherwise, None if not implemented.
+        """
+        if self.index is None:
+            warnings.warn(
+                "Cannot delete before initialization. "
+                "Only 'add' methods are allowed when FAISS is uninitialized.",
+                UninitializedWarning,
+                stacklevel=2,
+            )
+            return None
+        return super().delete(ids, **kwargs)
+
+    @override
+    def merge_from(self, target: FAISS) -> None:
+        """Merge another FAISS object with the current one.
+
+        Add the target FAISS to the current one.
+
+        Args:
+            target: FAISS object you wish to merge into the current one
+
+        Returns:
+            None.
+        """
+        if self.index is None:
+            warnings.warn(
+                "Merging into an uninitialized FAISS object. "
+                "The current object has been replaced with the target.",
+                UninitializedWarning,
+                stacklevel=2,
+            )
+            self.index = target.index
+            self.docstore = target.docstore
+            self.index_to_docstore_id = target.index_to_docstore_id
+            return
+        super().merge_from(target)
 
     @classmethod
     @override
@@ -147,26 +267,22 @@ class LazyFAISS(FAISS):
                 "the internet.)."
             )
         path = Path(folder_path)
-        if not ((path / f"{index_name}.faiss").exists() and (path / f"{index_name}.pkl").exists()):
-            vector = object.__new__(LazyFAISS)
-            vector._uninitialized = True
-            vector._save_path = {"folder_path": path, "index_name": index_name}
-            vector.embedding_function = embeddings
-            vector._uninitialized_kwargs = kwargs
-            return vector
+        index = docstore = index_to_docstore_id = None
 
-        # load index separately since it is not picklable
-        faiss = dependable_faiss_import()
-        index = faiss.read_index(str(path / f"{index_name}.faiss"))
+        if (path / f"{index_name}.faiss").exists():
+            # load index separately since it is not picklable
+            faiss = dependable_faiss_import()
+            index = faiss.read_index(str(path / f"{index_name}.faiss"))
 
-        # load docstore and index_to_docstore_id
-        with (path / f"{index_name}.pkl").open("rb") as f:
-            (
-                docstore,
-                index_to_docstore_id,
-            ) = pickle.load(  # ignore[pickle]: explicit-opt-in  # noqa: S301
-                f
-            )
+        if (path / f"{index_name}.pkl").exists():
+            # load docstore and index_to_docstore_id
+            with (path / f"{index_name}.pkl").open("rb") as f:
+                (
+                    docstore,
+                    index_to_docstore_id,
+                ) = pickle.load(  # ignore[pickle]: explicit-opt-in  # noqa: S301
+                    f
+                )
         vector = cls(embeddings, index, docstore, index_to_docstore_id, **kwargs)
         vector._save_path = {"folder_path": path, "index_name": index_name}
         return vector
