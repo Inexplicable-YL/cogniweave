@@ -1,49 +1,68 @@
+from __future__ import annotations
+
 import hashlib
 import pickle
 import uuid
 from collections import defaultdict
-from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Generic, TypedDict, cast
 
 import anyio
 import numpy as np
 from anyio import to_thread
-from langchain_community.docstore.base import AddableMixin, Docstore
-from langchain_community.docstore.in_memory import InMemoryDocstore
 from langchain_community.vectorstores.faiss import dependable_faiss_import
 from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
 
 from src.utils import sync_func_wrapper
 
 from .base import LazyFAISS
+from .meta import MetaData, MetaStore, MetaType
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Sequence
+
+    from langchain_core.embeddings import Embeddings
 
 
 class TagDucumentId(TypedDict):
-    file_id: list[str]
+    file_ids: list[str]
 
 
-class DocumentMeta(TypedDict):
-    tag_hashs: list[str]
-    metadata: dict[Any, Any] | None
-
-
-class TagsVector:
+class TagsVector(Generic[MetaType]):
     vector: LazyFAISS
 
     folder_path: str
     index_name: str
 
-    metastore: Docstore
+    metastore: MetaStore[tuple[list[str], MetaData[MetaType]]]
+
+    auto_save: bool
 
     def __init__(
         self,
         folder_path: str,
         index_name: str,
         embeddings: Embeddings,
+        *,
+        allow_dangerous_deserialization: bool = False,
+        auto_save: bool = False,
         **kwargs: Any,
     ) -> None:
+        """Initialize with FAISS index, docstore, and index_to_docstore_id."""
+        if not allow_dangerous_deserialization:
+            raise ValueError(
+                "The de-serialization relies loading a pickle file. "
+                "Pickle files can be modified to deliver a malicious payload that "
+                "results in execution of arbitrary code on your machine."
+                "You will need to set `allow_dangerous_deserialization` to `True` to "
+                "enable deserialization. If you do this, make sure that you "
+                "trust the source of the data. For example, if you are loading a "
+                "file that you created, and know that no one else has modified the "
+                "file, then this is safe to do. Do not set this to `True` if you are "
+                "loading a file from an untrusted source (e.g., some random site on "
+                "the internet.)."
+            )
+
         path = Path(folder_path)
         metastore = faiss_index = faiss_docstore = faiss_index_to_docstore_id = None
 
@@ -62,45 +81,40 @@ class TagsVector:
                 ) = pickle.load(  # ignore[pickle]: explicit-opt-in  # noqa: S301
                     f
                 )
+
         self.vector = LazyFAISS(
             embeddings, faiss_index, faiss_docstore, faiss_index_to_docstore_id, **kwargs
         )
         self.folder_path = folder_path
         self.index_name = index_name
-        self.metastore = metastore or InMemoryDocstore()
+        self.metastore = metastore or MetaStore[tuple[list[str], MetaData[MetaType]]]()
+        self.auto_save = auto_save
 
     @staticmethod
-    def _build_document(
-        tag_hashs: list[str], content: str, metadata: dict[str, Any] | None = None
-    ) -> Document:
-        return Document(
-            page_content=content, metadata=DocumentMeta(tag_hashs=tag_hashs, metadata=metadata)
-        )
+    def _build_meta(
+        tag_hashs: list[str], id_: str, content: MetaType, metadata: dict[Any, Any] | None = None
+    ) -> tuple[list[str], MetaData[MetaType]]:
+        return (tag_hashs, MetaData(id=id_, content=content, metadata=metadata or {}))
 
     def add_tags(
         self,
         tags: Iterable[str],
-        content: str,
+        content: MetaType,
         metadata: dict[Any, Any] | None = None,
         id_: str | None = None,
         **kwargs: Any,
     ) -> list[str]:
-        if not isinstance(self.metastore, AddableMixin):
-            raise TypeError(
-                "If trying to add texts, the underlying docstore should support "
-                f"adding items, which {self.metastore} does not"
-            )
-
         # register a new document
         hashs = [hashlib.sha256(tag.encode("utf-8")).hexdigest() for tag in tags]
         doc_id = id_ or str(uuid.uuid4())
-        self.metastore.add({doc_id: self._build_document(hashs, content, metadata)})
+        self.metastore.add({doc_id: self._build_meta(hashs, doc_id, content, metadata)})
 
         # add documents id to tags store
         unload_tags = {}
         for _hash, _tag in zip(hashs, tags, strict=True):
             if isinstance(tag_doc := self.vector.docstore.search(_hash), Document):
-                cast("TagDucumentId", tag_doc.metadata)["file_id"].append(doc_id)
+                if doc_id not in (_id_list := cast("TagDucumentId", tag_doc.metadata)["file_ids"]):
+                    _id_list.append(doc_id)
             else:
                 unload_tags[_hash] = _tag
 
@@ -108,37 +122,35 @@ class TagsVector:
         if unload_tags:
             self.vector.add_texts(
                 unload_tags.values(),
-                metadatas=[dict(TagDucumentId(file_id=[doc_id])) for _ in unload_tags.values()],
+                metadatas=[dict(TagDucumentId(file_ids=[doc_id])) for _ in unload_tags.values()],
                 ids=list(unload_tags.keys()),
                 **kwargs,
             )
+
+        if self.auto_save:
+            self.save_local()
 
         return hashs
 
     async def aadd_tags(
         self,
         tags: Iterable[str],
-        content: str,
+        content: MetaType,
         metadata: dict[Any, Any] | None = None,
         id_: str | None = None,
         **kwargs: Any,
     ) -> list[str]:
-        if not isinstance(self.metastore, AddableMixin):
-            raise TypeError(
-                "If trying to add texts, the underlying docstore should support "
-                f"adding items, which {self.metastore} does not"
-            )
-
         # register a new document
         hashs = [hashlib.sha256(tag.encode("utf-8")).hexdigest() for tag in tags]
         doc_id = id_ or str(uuid.uuid4())
-        self.metastore.add({doc_id: self._build_document(hashs, content, metadata)})
+        self.metastore.add({doc_id: self._build_meta(hashs, doc_id, content, metadata)})
 
         # add documents id to tags store
         unload_tags = {}
         for _hash, _tag in zip(hashs, tags, strict=True):
             if isinstance(tag_doc := self.vector.docstore.search(_hash), Document):
-                cast("TagDucumentId", tag_doc.metadata)["file_id"].append(doc_id)
+                if doc_id not in (_id_list := cast("TagDucumentId", tag_doc.metadata)["file_ids"]):
+                    _id_list.append(doc_id)
             else:
                 unload_tags[_hash] = _tag
 
@@ -146,10 +158,13 @@ class TagsVector:
         if unload_tags:
             await self.vector.aadd_texts(
                 unload_tags.values(),
-                metadatas=[dict(TagDucumentId(file_id=[doc_id])) for _ in unload_tags.values()],
+                metadatas=[dict(TagDucumentId(file_ids=[doc_id])) for _ in unload_tags.values()],
                 ids=list(unload_tags.keys()),
                 **kwargs,
             )
+
+        if self.auto_save:
+            await self.asave_local()
 
         return hashs
 
@@ -158,9 +173,9 @@ class TagsVector:
         embedding: list[float],
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         **kwargs: Any,
-    ) -> list[tuple[Document, float]]:
+    ) -> list[tuple[MetaData[MetaType], float]]:
         """
         Perform similarity search over tag-based vector index and return top-k documents with scores.
 
@@ -182,7 +197,7 @@ class TagsVector:
                     filter the resulting set of retrieved docs
 
         Returns:
-            list[tuple[Document, float]]: A list of tuples containing:
+            list[tuple[MetaData[MetaType], float]]: A list of tuples containing:
                 - Document: the retrieved document
                 - float: similarity score (lower means more similar, usually L2 distance)
         """
@@ -197,28 +212,27 @@ class TagsVector:
         tag_docs = [(doc, relevance_score_fn(score)) for doc, score in tag_docs_and_scores]
 
         file_map = defaultdict(float)
-        for _d, _s in tag_docs:
+        for i, _doc_score in enumerate(tag_docs):
+            _d, _s = _doc_score
             metadata = cast("TagDucumentId", _d.metadata)
-            for file_id in metadata["file_id"]:
-                file_map[file_id] += _s
+            _decay = self._inverse_decay(i, decay_rate=kwargs.get("decay_rate", fetch_k / 2.5))
+            for file_id in metadata["file_ids"]:
+                file_map[file_id] += _decay * _s
 
         doc_map: list[tuple[str, float]] = sorted(
             file_map.items(), key=lambda item: item[1], reverse=True
         )
 
-        docs = []
+        docs: list[tuple[MetaData[MetaType], float]] = []
 
         if filter is not None:
             filter_func = self.vector._create_filter_func(filter)
 
         for doc_id, doc_score in doc_map:
             _doc = self.metastore.search(doc_id)
-            if not isinstance(_doc, Document):
+            if isinstance(_doc, str):
                 raise TypeError(f"Could not find document for id {doc_id}, got {_doc}")
-            doc = Document(
-                page_content=_doc.page_content,
-                metadata=cast("DocumentMeta", _doc.metadata)["metadata"],
-            )
+            doc = _doc[1]
             if filter is not None:
                 if filter_func(doc.metadata):  # type: ignore
                     docs.append((doc, doc_score))
@@ -226,7 +240,7 @@ class TagsVector:
                 docs.append((doc, doc_score))
 
         if kwargs.get("extract_high_score", False):
-            return self.extract_high_score(docs, fallback_k=k, **kwargs)
+            return self._extract_high_score(docs, k=k, **kwargs)
         return docs[:k]
 
     async def asimilarity_search_with_score_by_vector(
@@ -234,9 +248,9 @@ class TagsVector:
         embedding: list[float],
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         **kwargs: Any,
-    ) -> list[tuple[Document, float]]:
+    ) -> list[tuple[MetaData[MetaType], float]]:
         """
         Perform similarity search over tag-based vector index and return top-k documents with scores.
 
@@ -258,7 +272,7 @@ class TagsVector:
                     filter the resulting set of retrieved docs
 
         Returns:
-            list[tuple[Document, float]]: A list of tuples containing:
+            list[tuple[MetaData[MetaType], float]]: A list of tuples containing:
                 - Document: the retrieved document
                 - float: similarity score (lower means more similar, usually L2 distance)
         """
@@ -276,9 +290,9 @@ class TagsVector:
         query: str,
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         **kwargs: Any,
-    ) -> list[tuple[Document, float]]:
+    ) -> list[tuple[MetaData[MetaType], float]]:
         """Return docs most similar to query.
 
         Args:
@@ -309,9 +323,9 @@ class TagsVector:
         query: str,
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         **kwargs: Any,
-    ) -> list[tuple[Document, float]]:
+    ) -> list[tuple[MetaData[MetaType], float]]:
         """Return docs most similar to query asynchronously.
 
         Args:
@@ -342,9 +356,9 @@ class TagsVector:
         embedding: list[float],
         k: int = 4,
         filter: dict[str, Any] | None = None,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         **kwargs: Any,
-    ) -> list[Document]:
+    ) -> list[MetaData[MetaType]]:
         """Return docs most similar to embedding vector.
 
         Args:
@@ -374,9 +388,9 @@ class TagsVector:
         embedding: list[float],
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         **kwargs: Any,
-    ) -> list[Document]:
+    ) -> list[MetaData[MetaType]]:
         """Return docs most similar to embedding vector asynchronously.
 
         Args:
@@ -406,9 +420,9 @@ class TagsVector:
         query: str,
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         **kwargs: Any,
-    ) -> list[Document]:
+    ) -> list[MetaData[MetaType]]:
         """Return docs most similar to query.
 
         Args:
@@ -431,9 +445,9 @@ class TagsVector:
         query: str,
         k: int = 4,
         filter: Callable | dict[str, Any] | None = None,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         **kwargs: Any,
-    ) -> list[Document]:
+    ) -> list[MetaData[MetaType]]:
         """Return docs most similar to query asynchronously.
 
         Args:
@@ -456,11 +470,11 @@ class TagsVector:
         embedding: list[float],
         *,
         k: int = 4,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         lambda_mult: float = 0.5,
         filter: Callable | dict[str, Any] | None = None,
         **kwargs: Any,
-    ) -> list[tuple[Document, float]]:
+    ) -> list[tuple[MetaData[MetaType], float]]:
         """Return docs and their similarity scores selected using the maximal marginal
             relevance.
 
@@ -494,28 +508,27 @@ class TagsVector:
         tag_docs = [(doc, relevance_score_fn(score)) for doc, score in tag_docs_and_scores]
 
         file_map = defaultdict(float)
-        for _d, _s in tag_docs:
+        for i, _doc_score in enumerate(tag_docs):
+            _d, _s = _doc_score
             metadata = cast("TagDucumentId", _d.metadata)
-            for file_id in metadata["file_id"]:
-                file_map[file_id] += _s
+            _decay = self._inverse_decay(i, decay_rate=kwargs.get("decay_rate", fetch_k / 2.5))
+            for file_id in metadata["file_ids"]:
+                file_map[file_id] += _decay * _s
 
         doc_map: list[tuple[str, float]] = sorted(
             file_map.items(), key=lambda item: item[1], reverse=True
         )
 
-        docs = []
+        docs: list[tuple[MetaData[MetaType], float]] = []
 
         if filter is not None:
             filter_func = self.vector._create_filter_func(filter)
 
         for doc_id, doc_score in doc_map:
             _doc = self.metastore.search(doc_id)
-            if not isinstance(_doc, Document):
+            if isinstance(_doc, str):
                 raise TypeError(f"Could not find document for id {doc_id}, got {_doc}")
-            doc = Document(
-                page_content=_doc.page_content,
-                metadata=cast("DocumentMeta", _doc.metadata)["metadata"],
-            )
+            doc = _doc[1]
             if filter is not None:
                 if filter_func(doc.metadata):  # type: ignore
                     docs.append((doc, doc_score))
@@ -523,7 +536,7 @@ class TagsVector:
                 docs.append((doc, doc_score))
 
         if kwargs.get("extract_high_score", False):
-            return self.extract_high_score(docs, fallback_k=k, **kwargs)
+            return self._extract_high_score(docs, k=k, **kwargs)
         return docs[:k]
 
     async def amax_marginal_relevance_search_with_score_by_vector(
@@ -531,11 +544,11 @@ class TagsVector:
         embedding: list[float],
         *,
         k: int = 4,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         lambda_mult: float = 0.5,
         filter: Callable | dict[str, Any] | None = None,
         **kwargs: Any,
-    ) -> list[tuple[Document, float]]:
+    ) -> list[tuple[MetaData[MetaType], float]]:
         """Return docs and their similarity scores selected using the maximal marginal
             relevance.
 
@@ -571,11 +584,11 @@ class TagsVector:
         self,
         embedding: list[float],
         k: int = 4,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         lambda_mult: float = 0.5,
         filter: Callable | dict[str, Any] | None = None,
         **kwargs: Any,
-    ) -> list[Document]:
+    ) -> list[MetaData[MetaType]]:
         """Return docs selected using the maximal marginal relevance.
 
         Maximal marginal relevance optimizes for similarity to query AND diversity
@@ -602,11 +615,11 @@ class TagsVector:
         self,
         embedding: list[float],
         k: int = 4,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         lambda_mult: float = 0.5,
         filter: Callable | dict[str, Any] | None = None,
         **kwargs: Any,
-    ) -> list[Document]:
+    ) -> list[MetaData[MetaType]]:
         """Return docs selected using the maximal marginal relevance asynchronously.
 
         Maximal marginal relevance optimizes for similarity to query AND diversity
@@ -633,11 +646,11 @@ class TagsVector:
         self,
         query: str,
         k: int = 4,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         lambda_mult: float = 0.5,
         filter: Callable | dict[str, Any] | None = None,
         **kwargs: Any,
-    ) -> list[Document]:
+    ) -> list[MetaData[MetaType]]:
         """Return docs selected using the maximal marginal relevance.
 
         Maximal marginal relevance optimizes for similarity to query AND diversity
@@ -669,11 +682,11 @@ class TagsVector:
         self,
         query: str,
         k: int = 4,
-        fetch_k: int = 5,
+        fetch_k: int = 20,
         lambda_mult: float = 0.5,
         filter: Callable | dict[str, Any] | None = None,
         **kwargs: Any,
-    ) -> list[Document]:
+    ) -> list[MetaData[MetaType]]:
         """Return docs selected using the maximal marginal relevance asynchronously.
 
         Maximal marginal relevance optimizes for similarity to query AND diversity
@@ -715,7 +728,7 @@ class TagsVector:
             raise ValueError("No ids provided to delete.")
 
         missing_ids = set()
-        id_doc_map: dict[str, Document] = {}
+        id_doc_map: dict[str, tuple[list[str], MetaData[MetaType]]] = {}
 
         for id_ in ids:
             doc = self.metastore.search(id_)
@@ -733,16 +746,19 @@ class TagsVector:
         self.metastore.delete(list(id_doc_map.keys()))
 
         tag_doc_cache = {}
-        for doc_id, doc in id_doc_map.items():
-            metadata = cast("DocumentMeta", doc.metadata)
-            for tag in metadata["tag_hashs"]:
+        for doc_id, _doc in id_doc_map.items():
+            tag_hashs, doc = _doc
+            for tag in tag_hashs:
                 if tag not in tag_doc_cache:
                     tag_doc_cache[tag] = self.vector.docstore.search(tag)
                 tag_doc = tag_doc_cache[tag]
                 if isinstance(tag_doc, Document):
-                    cast("TagDucumentId", tag_doc.metadata)["file_id"].remove(doc_id)
+                    cast("TagDucumentId", tag_doc.metadata)["file_ids"].remove(doc_id)
                 else:
                     return None
+
+        if self.auto_save:
+            self.save_local()
 
         return True
 
@@ -756,7 +772,16 @@ class TagsVector:
             Optional[bool]: True if deletion is successful,
             False otherwise, None if not implemented.
         """
-        return self.vector.delete(ids, **kwargs)
+        result = self.vector.delete(ids, **kwargs)
+
+        if self.auto_save:
+            self.save_local()
+
+        return result
+
+    def get_by_ids(self, ids: Sequence[str], /) -> list[MetaData[MetaType]]:
+        docs = [self.metastore.search(id_) for id_ in ids]
+        return [doc[1] for doc in docs if not isinstance(doc, str)]
 
     def save_local(self) -> None:
         """Save FAISS index, docstore, and index_to_docstore_id to disk.
@@ -806,15 +831,15 @@ class TagsVector:
             tg.start_soon(to_thread.run_sync, _write_pickle, path / f"{self.index_name}.pkl")
 
     @staticmethod
-    def extract_high_score(
-        results: list[tuple[Document, float]],
+    def _extract_high_score(
+        results: list[tuple[MetaData[MetaType], float]],
         *,
-        min_relative_jump: float = 0.7,
+        k: int = 3,
+        min_relative_jump: float = 0.3,
         soft_threshold: float = 1,
-        fallback_k: int = 3,
         min_gap: float = 0.5,
         **kwargs: Any,  # noqa: ARG004
-    ) -> list[tuple[Document, float]]:
+    ) -> list[tuple[MetaData[MetaType], float]]:
         if not results:
             return []
         if len(results) == 1:
@@ -845,9 +870,32 @@ class TagsVector:
         score_range = y[0] - y[-1]
         relative_jump = max_jump / (score_range + 1e-8)
         if relative_jump > min_relative_jump and knee_idx >= 1:
-            return sorted_results[: min(knee_idx, fallback_k)]
+            return sorted_results[: min(knee_idx, k)]
 
         if scores.mean() >= soft_threshold:
-            return sorted_results[:fallback_k]
+            return sorted_results[:k]
 
         return []
+
+    @staticmethod
+    def _inverse_decay(value: float, *, decay_rate: float = 1) -> float:
+        """
+        Applies an inverse decay function of the form: decay_rate / (value + decay_rate).
+
+        This function returns a smoothly decreasing value as `value` increases,
+        commonly used for scenarios like learning rate decay, influence reduction, or weighting schemes.
+
+        Args:
+            value (float): The input value (e.g., time step, iteration, or magnitude).
+            decay_rate (float): The decay factor controlling the rate of decay. Must be > 0.
+
+        Returns:
+            float: The decayed output in the range (0, 1], decreasing as `value` increases.
+
+        Raises:
+            ValueError: If decay_rate is not positive.
+        """
+        if decay_rate <= 0:
+            raise ValueError("decay_rate must be a positive number.")
+
+        return decay_rate / (value + decay_rate)

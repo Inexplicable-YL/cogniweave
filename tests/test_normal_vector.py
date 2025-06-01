@@ -61,7 +61,7 @@ queries = [
 
 # 查询并打印相似结果
 for query in queries:
-    results = TagsVector.extract_high_score(
+    results = TagsVector._extract_high_score(
         vectorstore._similarity_search_with_relevance_scores(query, k=4), min_relative_jump=0.3
     )
     print(f"\n查询: {query}")

@@ -1,10 +1,12 @@
 from src.llms import OpenAIEmbeddings
 from src.vectorstores.tags import TagsVector
 
-tags_vector = TagsVector(
+tags_vector = TagsVector[str](
     folder_path="./.cache",
     index_name="index",
     embeddings=OpenAIEmbeddings(),
+    allow_dangerous_deserialization=True,
+    auto_save=True,
 )
 
 # 多类型标签 + 语义文本
@@ -36,12 +38,10 @@ samples = [
 
 
 # 添加数据
-for tags, text, metadata in samples:
-    tags_vector.add_tags(tags, text, metadata)
-
-# 保存索引
-# tags_vector.save_local()
-
+'''for i, sample in enumerate(samples):
+    print(f"添加数据 {i}: {sample[1]}")
+    tags_vector.add_tags(*sample, id_=str(i))'''
+tags_vector.delete_docs(["18"])
 # 查询测试
 queries = [
     "我今天喝了杯拿铁，整个人都放松了",
@@ -68,17 +68,4 @@ for query in queries:
     results = tags_vector.similarity_search_with_score(query, extract_high_score=True)
     print(f"\n查询: {query}")
     for doc, score in results:
-        print(f"- 内容: {doc.page_content} | 分数: {score:.4f}")
-
-
-"""results_high_gap = [
-    ("doc1", 1.25),
-    ("doc2", 1.22),
-    ("doc3", 1.20),
-    ("doc4", 0.75),
-    ("doc5", 0.73),
-    ("doc6", 0.71),
-    ("doc7", 0.7),
-    ("doc8", 0.69),
-]
-print(TagsVector.extract_high_score(results_high_gap, fallback_k=2))"""
+        print(f"- 内容: {doc.content} | 分数: {score:.4f}")
