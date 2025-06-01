@@ -1,15 +1,32 @@
+from pydantic import BaseModel
+
 from src.llms import OpenAIEmbeddings
 from src.vectorstores.tags import TagsVector
 
-tags_vector = TagsVector[str](
-    folder_path="./.cache",
-    index_name="index",
+
+# 定义测试用的 Pydantic 模型
+class ContentItem(BaseModel):
+    text: str
+    category: str
+
+
+# 创建两种类型的 TagsVector 实例
+str_vector = TagsVector[str](
+    folder_path="./.str_cache",
+    index_name="index-str",
     embeddings=OpenAIEmbeddings(),
     allow_dangerous_deserialization=True,
     auto_save=True,
 )
 
-# 多类型标签 + 语义文本
+model_vector = TagsVector[ContentItem](
+    folder_path="./.model_cache",
+    index_name="index-model",
+    embeddings=OpenAIEmbeddings(),
+    allow_dangerous_deserialization=True,
+    auto_save=True,
+)
+
 samples = [
     (["生日", "朋友", "惊喜"], "今天是我的生日，朋友们为我准备了惊喜派对。", {"category": "事件"}),
     (["分手", "悲伤", "独处"], "我们分手了，我一个人坐在路边哭了很久。", {"category": "情感"}),
@@ -36,36 +53,56 @@ samples = [
     (["下雨", "情绪低落"], "连着几天下雨，感觉心情都被压抑了。", {"category": "天气"}),
 ]
 
-
-# 添加数据
-'''for i, sample in enumerate(samples):
-    print(f"添加数据 {i}: {sample[1]}")
-    tags_vector.add_tags(*sample, id_=str(i))'''
-tags_vector.delete_docs(["18"])
-# 查询测试
-queries = [
-    "我今天喝了杯拿铁，整个人都放松了",
-    "最近压力太大了，工作完全压得我喘不过气",
-    "我真的很想念我的小猫，它总是趴在我身边陪着我",
-    "高考失败了，我感觉人生都灰暗了",
-    "去山里静养几天，听着鸟叫，内心得到平静",
-    "看到中国选手拿金牌那一刻我眼泪都下来了",
-    "刚从云南回来，那里风景太美了，好想再去一次",
-    "听了一场震撼的演唱会，感觉自己被音乐治愈了",
-    "这几天一直下雨，心情特别低落",
-    "我们终于分手了，我走在街头，不知该去哪",
-    "我妈今天做了我最爱吃的红烧肉，超幸福",
-    "朋友们为我办了个派对，真的超级感动",
-    "昨晚喝了一杯新品奶茶，甜到心坎里",
-    "我看到量子计算的新闻，未来真的很奇妙",
-    "我家猫最近老往我身上跳，好有安全感",
-    "高铁又晚点了，我真的受够了出差",
+# 为模型类型创建转换后的样本数据
+model_samples = [
+    (tags, ContentItem(text=text, category=metadata["category"]), metadata)
+    for tags, text, metadata in samples
 ]
 
 
-# 查询结果打印
-for query in queries:
-    results = tags_vector.similarity_search_with_score(query, extract_high_score=True)
-    print(f"\n查询: {query}")
-    for doc, score in results:
-        print(f"- 内容: {doc.content} | 分数: {score:.4f}")
+def run_tests(vector: TagsVector, samples: list[tuple], vector_type: str) -> None:
+    """通用测试运行函数"""
+    print(f"\n===== 测试 {vector_type} 类型 =====")
+
+    # 添加数据
+    for i, sample in enumerate(samples):
+        print(f"添加数据 {i}: {sample[1].text if hasattr(sample[1], 'text') else sample[1]}")
+        vector.add_tags(*sample, id_=str(i))
+
+    # 删除最后一个文档
+    vector.delete_docs([str(len(samples) - 1)])
+    print(f"已删除文档 {len(samples) - 1}")
+
+    # 查询测试
+    queries = [
+        "我今天喝了杯拿铁，整个人都放松了",
+        "最近压力太大了，工作完全压得我喘不过气",
+        "我真的很想念我的小猫，它总是趴在我身边陪着我",
+        "高考失败了，我感觉人生都灰暗了",
+        "去山里静养几天，听着鸟叫，内心得到平静",
+        "看到中国选手拿金牌那一刻我眼泪都下来了",
+        "刚从云南回来，那里风景太美了，好想再去一次",
+        "听了一场震撼的演唱会，感觉自己被音乐治愈了",
+        "这几天一直下雨，心情特别低落",
+        "我们终于分手了，我走在街头，不知该去哪",
+        "我妈今天做了我最爱吃的红烧肉，超幸福",
+        "朋友们为我办了个派对，真的超级感动",
+        "昨晚喝了一杯新品奶茶，甜到心坎里",
+        "我看到量子计算的新闻，未来真的很奇妙",
+        "我家猫最近老往我身上跳，好有安全感",
+        "高铁又晚点了，我真的受够了出差",
+    ]
+
+    # 查询结果打印
+    for query in queries:
+        results = vector.similarity_search_with_score(query, extract_high_score=True)
+        print(f"\n查询: {query}")
+        for doc, score in results:
+            print(f"- 内容: {doc.content} | 分数: {score:.4f} | 元数据: {doc.metadata}")
+
+
+# 运行字符串类型测试
+#run_tests(str_vector, samples, "字符串")
+
+# 运行模型类型测试
+run_tests(model_vector, model_samples, "Pydantic 模型")

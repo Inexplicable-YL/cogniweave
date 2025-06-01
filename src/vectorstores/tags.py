@@ -772,8 +772,17 @@ class TagsVector(Generic[MetaType]):
             Optional[bool]: True if deletion is successful,
             False otherwise, None if not implemented.
         """
-        result = self.vector.delete(ids, **kwargs)
+        if ids is None:
+            raise ValueError("No ids provided to delete.")
+        doc_ids: set[str] = set()
+        for id_ in ids:
+            if isinstance(tag_doc := self.metastore.search(id_), Document):
+                doc_ids.update(cast("TagDucumentId", tag_doc.metadata)["file_ids"])
+        for doc_id in doc_ids:
+            if not isinstance(doc := self.metastore.search(doc_id), str):
+                doc[0][:] = list(set(doc[0]) - set(ids))
 
+        result = self.vector.delete(ids, **kwargs)
         if self.auto_save:
             self.save_local()
 
