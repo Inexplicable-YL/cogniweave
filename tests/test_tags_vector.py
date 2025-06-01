@@ -12,7 +12,7 @@ class ContentItem(BaseModel):
 
 # 创建两种类型的 TagsVector 实例
 str_vector = TagsVector[str](
-    folder_path="./.str_cache",
+    folder_path="./.cache/str_cache",
     index_name="index-str",
     embeddings=OpenAIEmbeddings(),
     allow_dangerous_deserialization=True,
@@ -20,7 +20,7 @@ str_vector = TagsVector[str](
 )
 
 model_vector = TagsVector[ContentItem](
-    folder_path="./.model_cache",
+    folder_path="./.cache/model_cache",
     index_name="index-model",
     embeddings=OpenAIEmbeddings(),
     allow_dangerous_deserialization=True,
@@ -64,14 +64,25 @@ def run_tests(vector: TagsVector, samples: list[tuple], vector_type: str) -> Non
     """通用测试运行函数"""
     print(f"\n===== 测试 {vector_type} 类型 =====")
 
-    # 添加数据
-    for i, sample in enumerate(samples):
-        print(f"添加数据 {i}: {sample[1].text if hasattr(sample[1], 'text') else sample[1]}")
-        vector.add_tags(*sample, id_=str(i))
+    # 准备批量添加数据
+    tags_group = [sample[0] for sample in samples]
+    contents = [sample[1] for sample in samples]
+    metadatas = [sample[2] for sample in samples]
+    ids = [str(i) for i in range(len(samples))]
 
-    # 删除最后一个文档
+    # 测试批量添加
+    print("批量添加数据...")
+    vector.add_tags_group(tags_group, contents, metadatas, ids)
+
+    # 测试单个添加（作为对照）
+    """print("\n单个添加数据（对照）...")
+    for i, sample in enumerate(samples, start=len(samples)):
+        print(f"添加数据 {i}: {sample[1].text if hasattr(sample[1], 'text') else sample[1]}")
+        vector.add_tags(*sample, id_=str(i))"""
+
+    # 删除最后一个文档（批量添加的）
     vector.delete_docs([str(len(samples) - 1)])
-    print(f"已删除文档 {len(samples) - 1}")
+    print(f"\n已删除文档 {len(samples) - 1}")
 
     # 查询测试
     queries = [
