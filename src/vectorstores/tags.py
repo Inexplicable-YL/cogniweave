@@ -103,7 +103,7 @@ class TagsVector(Generic[MetaType]):
         metadata: dict[Any, Any] | None = None,
         id_: str | None = None,
         **kwargs: Any,
-    ) -> list[str]:
+    ) -> tuple[list[str], str]:
         # register a new document
         hashs = [hashlib.sha256(tag.encode("utf-8")).hexdigest() for tag in tags]
         doc_id = id_ or str(uuid.uuid4())
@@ -130,7 +130,7 @@ class TagsVector(Generic[MetaType]):
         if self.auto_save:
             self.save_local()
 
-        return hashs
+        return (hashs, doc_id)
 
     async def aadd_tags(
         self,
@@ -139,7 +139,7 @@ class TagsVector(Generic[MetaType]):
         metadata: dict[Any, Any] | None = None,
         id_: str | None = None,
         **kwargs: Any,
-    ) -> list[str]:
+    ) -> tuple[list[str], str]:
         # register a new document
         hashs = [hashlib.sha256(tag.encode("utf-8")).hexdigest() for tag in tags]
         doc_id = id_ or str(uuid.uuid4())
@@ -166,7 +166,133 @@ class TagsVector(Generic[MetaType]):
         if self.auto_save:
             await self.asave_local()
 
-        return hashs
+        return (hashs, doc_id)
+
+    def add_tags_group(
+        self,
+        tags_group: list[Iterable[str]],
+        contents: list[MetaType],
+        metadatas: list[dict[Any, Any]] | None = None,
+        ids: list[str] | None = None,
+        **kwargs: Any,
+    ) -> list[tuple[list[str], str]]:
+        if len(tags_group) != len(contents):
+            raise ValueError("The length of tags_group and contents must be the same.")
+
+        n = len(tags_group)
+
+        metadatas = metadatas or [{}] * n
+        ids = ids or [str(uuid.uuid4()) for _ in range(n)]
+
+        result: list[tuple[list[str], str]] = []
+        all_unload_tags: dict[str, str] = {}  # hash -> tag
+        all_tag_metadata: dict[str, list[str]] = defaultdict(list)  # hash -> doc_id list
+
+        metastore_data = {}
+
+        for i in range(n):
+            tags = tags_group[i]
+            content = contents[i]
+            metadata = metadatas[i]
+            doc_id = ids[i]
+
+            hashs = [hashlib.sha256(tag.encode("utf-8")).hexdigest() for tag in tags]
+            metastore_data[doc_id] = self._build_meta(hashs, doc_id, content, metadata)
+
+            for _hash, _tag in zip(hashs, tags, strict=True):
+                tag_doc = self.vector.docstore.search(_hash)
+                if isinstance(tag_doc, Document):
+                    tag_meta = cast("TagDucumentId", tag_doc.metadata)
+                    if doc_id not in tag_meta["file_ids"]:
+                        tag_meta["file_ids"].append(doc_id)
+                else:
+                    all_unload_tags[_hash] = _tag
+                    all_tag_metadata[_hash].append(doc_id)
+
+            result.append((hashs, doc_id))
+
+        # Update metastore
+        self.metastore.add(metastore_data)
+
+        # Batch add new tag documents in one call
+        if all_unload_tags:
+            self.vector.add_texts(
+                all_unload_tags.values(),
+                metadatas=[
+                    dict(TagDucumentId(file_ids=all_tag_metadata[_hash]))
+                    for _hash in all_unload_tags
+                ],
+                ids=list(all_unload_tags.keys()),
+                **kwargs,
+            )
+
+        if self.auto_save:
+            self.save_local()
+
+        return result
+
+    async def aadd_tags_group(
+        self,
+        tags_group: list[Iterable[str]],
+        contents: list[MetaType],
+        metadatas: list[dict[Any, Any]] | None = None,
+        ids: list[str] | None = None,
+        **kwargs: Any,
+    ) -> list[tuple[list[str], str]]:
+        if len(tags_group) != len(contents):
+            raise ValueError("The length of tags_group and contents must be the same.")
+
+        n = len(tags_group)
+
+        metadatas = metadatas or [{}] * n
+        ids = ids or [str(uuid.uuid4()) for _ in range(n)]
+
+        result: list[tuple[list[str], str]] = []
+        all_unload_tags: dict[str, str] = {}  # hash -> tag
+        all_tag_metadata: dict[str, list[str]] = defaultdict(list)  # hash -> doc_id list
+
+        metastore_data = {}
+
+        for i in range(n):
+            tags = tags_group[i]
+            content = contents[i]
+            metadata = metadatas[i]
+            doc_id = ids[i]
+
+            hashs = [hashlib.sha256(tag.encode("utf-8")).hexdigest() for tag in tags]
+            metastore_data[doc_id] = self._build_meta(hashs, doc_id, content, metadata)
+
+            for _hash, _tag in zip(hashs, tags, strict=True):
+                tag_doc = self.vector.docstore.search(_hash)
+                if isinstance(tag_doc, Document):
+                    tag_meta = cast("TagDucumentId", tag_doc.metadata)
+                    if doc_id not in tag_meta["file_ids"]:
+                        tag_meta["file_ids"].append(doc_id)
+                else:
+                    all_unload_tags[_hash] = _tag
+                    all_tag_metadata[_hash].append(doc_id)
+
+            result.append((hashs, doc_id))
+
+        # Update metastore
+        self.metastore.add(metastore_data)
+
+        # Batch add new tag documents in one call
+        if all_unload_tags:
+            await self.vector.aadd_texts(
+                all_unload_tags.values(),
+                metadatas=[
+                    dict(TagDucumentId(file_ids=all_tag_metadata[_hash]))
+                    for _hash in all_unload_tags
+                ],
+                ids=list(all_unload_tags.keys()),
+                **kwargs,
+            )
+
+        if self.auto_save:
+            self.save_local()
+
+        return result
 
     def similarity_search_with_score_by_vector(
         self,
