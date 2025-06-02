@@ -93,8 +93,9 @@ class ShortTermMemoryMaker(RunnableSerializable[dict[str, Any], ShortMemoryPromp
         history = kwargs.get(self.history_variable_key)
         if not isinstance(history, list):
             raise TypeError(f"Expected a list for {self.history_variable_key}, got {type(history)}")
-        return f"UserName: {name}\nChatHistory: \n" + get_buffer_string(
-            history, human_prefix="[User]", ai_prefix="[Assistant]"
+        return (
+            f"<UserName>{name}</UserName>\n"
+            f"<ChatHistory>\n{get_buffer_string(history, human_prefix='[User]', ai_prefix='[Assistant]')}\n</ChatHistory>"
         )
 
     @override
@@ -252,10 +253,12 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], str]):
     ) -> str:
         """Extract new long-term memory items from ChatHistory only, without merging."""
         assert self.extract_chain is not None
+
         history = input.get(self.history_variable_key, [])
         if not isinstance(history, list):
             raise TypeError(f"Expected a list for {self.history_variable_key}, got {type(history)}")
         extract_input = {"input": f"<ChatHistory>\n{self._format_message(history)}\n</ChatHistory>"}
+
         return self.extract_chain.invoke(extract_input, config=config, **kwargs)
 
     @override
@@ -278,22 +281,10 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], str]):
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
     ) -> str:
         assert self.extract_chain is not None
+
         history = input.get(self.history_variable_key, [])
         if not isinstance(history, list):
             raise TypeError(f"Expected a list for {self.history_variable_key}, got {type(history)}")
         extract_input = {"input": f"<ChatHistory>\n{self._format_message(history)}\n</ChatHistory>"}
+
         return await self.extract_chain.ainvoke(extract_input, config=config, **kwargs)
-
-
-class ShortTermMemoryUpdater(BaseModel):
-    """Short-term memory updater for chat models."""
-
-    lang: Literal["zh", "en"] = Field(default="zh")
-
-    memory_maker: ShortTermMemoryMaker | None = None
-
-    @model_validator(mode="after")
-    def build_chain_if_needed(self) -> Self:
-        """Automatically build the chain if it is not provided."""
-        self.memory_maker = self.memory_maker or ShortTermMemoryMaker(lang=self.lang)
-        return self
