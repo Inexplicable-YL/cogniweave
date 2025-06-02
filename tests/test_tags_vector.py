@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 
-from src.llms import OpenAIEmbeddings
-from src.vectorstores.tags import TagsVector
+from cogniweave.llms import OpenAIEmbeddings
+from cogniweave.vectorstores.tags import TagsVector
 
 
 # 定义测试用的 Pydantic 模型
@@ -113,7 +113,7 @@ def run_tests(vector: TagsVector, samples: list[tuple], vector_type: str) -> Non
 
 
 # 运行字符串类型测试
-#run_tests(str_vector, samples, "字符串")
+# run_tests(str_vector, samples, "字符串")
 
 # 运行模型类型测试
 run_tests(model_vector, model_samples, "Pydantic 模型")

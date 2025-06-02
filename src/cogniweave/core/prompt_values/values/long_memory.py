@@ -9,7 +9,7 @@ LONG_TERM_MEMORY_EXTRACT_ZH = (
 LONG_TERM_MEMORY_EXTRACT_EN = (
     "You are a long-term memory extractor. Read the content inside the <ChatHistory> tag and extract user facts or knowledge that should be stored permanently. "
     "The information should revolve around the user's profile, preferences, life experiences, etc. "
-    "Output these \"long-term memory items\" as a JSON array string, one concise fact per element, without merging with or deduplicating against existing memory."
+    'Output these "long-term memory items" as a JSON array string, one concise fact per element, without merging with or deduplicating against existing memory.'
 )
 
 LONG_TERM_MEMORY_UPDATE_ZH = (
@@ -23,7 +23,7 @@ LONG_TERM_MEMORY_UPDATE_ZH = (
 
 LONG_TERM_MEMORY_UPDATE_EN = (
     "You are a long-term memory manager. Read the content inside the <ChatHistory> tag and extract user facts or knowledge that should be stored permanently. "
-    "Output these \"long-term memory items\" as a JSON array string, one concise fact per element. "
+    'Output these "long-term memory items" as a JSON array string, one concise fact per element. '
     "Existing long-term memory items are inside the <CurrentLTM> tag; merge the new items with the old ones, remove duplicates, and preserve the logical order before outputting."
     "Return only the JSON array string without any additional text or explanations."
-) 
+)

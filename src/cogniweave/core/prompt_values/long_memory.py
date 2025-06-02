@@ -1,5 +1,6 @@
 from typing import Any, Literal
-from src.prompt_values.base import MultilingualSystemPromptValue
+
+from cogniweave.prompt_values import MultilingualSystemPromptValue
 
 from .values.long_memory import (
     LONG_TERM_MEMORY_EXTRACT_EN,
@@ -8,11 +9,13 @@ from .values.long_memory import (
     LONG_TERM_MEMORY_UPDATE_ZH,
 )
 
+
 class LongTermMemoryExtractPromptValue(MultilingualSystemPromptValue[Literal["zh", "en"]]):
     """Long-term memory extraction system prompt wrapper."""
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(zh=LONG_TERM_MEMORY_EXTRACT_ZH, en=LONG_TERM_MEMORY_EXTRACT_EN, **kwargs)
+
 
 class LongTermMemoryPromptValue(MultilingualSystemPromptValue[Literal["zh", "en"]]):
     """Long-term memory system prompt wrapper."""

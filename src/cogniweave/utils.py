@@ -19,7 +19,7 @@ from typing import (
 )
 from typing_extensions import ParamSpec
 
-from src.typing import NOT_GIVEN, NotGiven
+from cogniweave.typing import NOT_GIVEN, NotGiven
 
 _T = TypeVar("_T")
 _P = ParamSpec("_P")

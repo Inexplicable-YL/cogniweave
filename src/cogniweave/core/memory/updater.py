@@ -10,19 +10,19 @@ from langchain_core.runnables import RunnableSerializable
 from langchain_core.runnables.config import RunnableConfig
 from pydantic import BaseModel, Field, model_validator
 
-from src.llms import PydanticSingleTurnChat, StringSingleTurnChat
-from src.prompt_values.base import MultilingualSystemPromptValue
-from src.prompt_values.long_memory import (
+from cogniweave.core.prompt_values.long_memory import (
     LongTermMemoryExtractPromptValue,
     LongTermMemoryPromptValue,
 )
-from src.prompt_values.summary import ShortTermMemoryPromptValue
-from src.prompt_values.tagger import ShortTermTagsPromptValue
-from src.prompts.generator import ShortMemoryPromptTemplate
-from src.utils import get_model_from_env, get_provider_from_env
+from cogniweave.core.prompt_values.summary import ShortTermMemoryPromptValue
+from cogniweave.core.prompt_values.tagger import ShortTermTagsPromptValue
+from cogniweave.llms import PydanticSingleTurnChat, StringSingleTurnChat
+from cogniweave.prompt_values import MultilingualSystemPromptValue
+from cogniweave.prompts.generator import ShortMemoryPromptTemplate
+from cogniweave.utils import get_model_from_env, get_provider_from_env
 
 
-class SummaryMaker(StringSingleTurnChat[Literal["zh", "en"]]):
+class ShortTermSummary(StringSingleTurnChat[Literal["zh", "en"]]):
     """Short-term memory updater for chat models."""
 
     provider: str = Field(
@@ -44,7 +44,7 @@ class ContextTags(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
-class TagsMaker(PydanticSingleTurnChat[Literal["zh", "en"], ContextTags]):
+class ShortTermTags(PydanticSingleTurnChat[Literal["zh", "en"], ContextTags]):
     """Short-term memory updater for chat models."""
 
     provider: str = Field(
@@ -65,8 +65,8 @@ class ShortTermMemoryMaker(RunnableSerializable[dict[str, Any], ShortMemoryPromp
 
     lang: Literal["zh", "en"] = Field(default="zh")
 
-    memory_chain: SummaryMaker | None = None
-    tags_chain: TagsMaker | None = None
+    memory_chain: ShortTermSummary | None = None
+    tags_chain: ShortTermTags | None = None
 
     name_variable_key: str = Field(default="name")
     history_variable_key: str = Field(default="history")
@@ -74,10 +74,10 @@ class ShortTermMemoryMaker(RunnableSerializable[dict[str, Any], ShortMemoryPromp
     @model_validator(mode="after")
     def build_chain_if_needed(self) -> Self:
         """Automatically build the chain if it is not provided."""
-        self.memory_chain = self.memory_chain or SummaryMaker(
+        self.memory_chain = self.memory_chain or ShortTermSummary(
             lang=self.lang,
         )
-        self.tags_chain = self.tags_chain or TagsMaker(
+        self.tags_chain = self.tags_chain or ShortTermTags(
             lang=self.lang,
         )
         return self
@@ -152,7 +152,7 @@ class ShortTermMemoryMaker(RunnableSerializable[dict[str, Any], ShortMemoryPromp
         )
 
 
-class LongTermMemoryChat(StringSingleTurnChat[Literal["zh", "en"]]):
+class LongTermSummary(StringSingleTurnChat[Literal["zh", "en"]]):
     """Long-term memory summarize"""
 
     provider: str = Field(
@@ -168,12 +168,12 @@ class LongTermMemoryChat(StringSingleTurnChat[Literal["zh", "en"]]):
     )
 
 
-class LongTermMemoryUpdater(RunnableSerializable[dict[str, Any], str]):
+class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], str]):
     """Update and persist the long-term memory prompt."""
 
     lang: Literal["zh", "en"] = Field(default="zh")
-    chat_chain: LongTermMemoryChat | None = None
-    extract_chain: LongTermMemoryChat | None = None
+    chat_chain: LongTermSummary | None = None
+    extract_chain: LongTermSummary | None = None
 
     store_path: str = Field(default="./data/long_memory.json")
 
@@ -181,14 +181,14 @@ class LongTermMemoryUpdater(RunnableSerializable[dict[str, Any], str]):
 
     @model_validator(mode="after")
     def build_chain_if_needed(self) -> Self:
-        self.extract_chain = self.extract_chain or LongTermMemoryChat(
+        self.extract_chain = self.extract_chain or LongTermSummary(
             lang=self.lang,
             prompt=LongTermMemoryExtractPromptValue(),
             model_name="o3",
             temperature=1.0,
         )
 
-        self.chat_chain = self.chat_chain or LongTermMemoryChat(
+        self.chat_chain = self.chat_chain or LongTermSummary(
             lang=self.lang,
             prompt=LongTermMemoryPromptValue(),
             model_name="gpt-4.1-mini",

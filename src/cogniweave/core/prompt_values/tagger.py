@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from src.prompt_values.base import MultilingualSystemPromptValue
+from cogniweave.prompt_values import MultilingualSystemPromptValue
 
 from .values.tagger import (
     SHORT_TERM_MEMORY_TAGS_EN,

@@ -25,8 +25,8 @@ from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI as BaseChatOpenAI
 from pydantic import BaseModel, Field, model_validator
 
-from src.prompt_values.base import MultilingualSystemPromptValue
-from src.typing import (
+from cogniweave.prompt_values import MultilingualSystemPromptValue
+from cogniweave.typing import (
     MessageLikeRepresentation,
     Output,
     PydanticOutput,

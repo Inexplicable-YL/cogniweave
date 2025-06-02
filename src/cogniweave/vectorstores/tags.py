@@ -13,7 +13,7 @@ from anyio import to_thread
 from langchain_community.vectorstores.faiss import dependable_faiss_import
 from langchain_core.documents import Document
 
-from src.utils import sync_func_wrapper
+from cogniweave.utils import sync_func_wrapper
 
 from .base import LazyFAISS
 from .meta import MetaData, MetaStore, MetaType

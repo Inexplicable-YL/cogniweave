@@ -8,8 +8,8 @@ import anyio
 from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage
 
-from src.core.memory.updater import ShortTermMemoryMaker
-from src.prompts.generator import ShortMemoryPromptTemplate
+from cogniweave.core.memory.updater import ShortTermMemoryMaker
+from cogniweave.prompts.generator import ShortMemoryPromptTemplate
 
 load_dotenv()
 
