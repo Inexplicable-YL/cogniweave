@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage
 
 from cogniweave.core.memory.updater import ShortTermMemoryMaker
-from cogniweave.prompts.generator import ShortMemoryPromptTemplate
+from cogniweave.core.prompts.short_memory import ShortMemoryPromptTemplate
 
 load_dotenv()
 
