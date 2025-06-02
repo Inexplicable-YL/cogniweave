@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from functools import partial
-from typing import Any, ClassVar, Self, TypedDict, overload
+from typing import Any, ClassVar, Self
 from typing_extensions import override
 
 from langchain_core.prompts.prompt import PromptTemplate
@@ -30,14 +30,6 @@ def format_datetime_relative(old_time: datetime, now: datetime | None = None) ->
         return f"Yesterday {time_part}"
     date_part = old_time.strftime("%Y/%m/%d")
     return f"{date_part} {time_part}"
-
-
-class ShortMemoryTemplateDict(TypedDict):
-    template: str
-    timestamp: float | int
-    chat_summary: str
-    topic_tags: list[str]
-    template_format: PromptTemplateFormat
 
 
 class ShortMemoryPromptTemplate(PromptTemplate):
@@ -98,42 +90,3 @@ class ShortMemoryPromptTemplate(PromptTemplate):
             template_format=template_format,
             **kwargs,
         )
-
-    def to_template_dict(self) -> ShortMemoryTemplateDict:
-        """Convert the prompt template to a dictionary."""
-        return ShortMemoryTemplateDict(
-            template=self.template,
-            timestamp=self.timestamp.timestamp(),
-            chat_summary=self.chat_summary,
-            topic_tags=self.topic_tags,
-            template_format=self.template_format,
-        )
-
-    @overload
-    @classmethod
-    def load(cls, obj: ShortMemoryTemplateDict | dict[Any, Any]) -> ShortMemoryPromptTemplate: ...
-
-    @overload
-    @classmethod
-    def load(
-        cls, obj: list[ShortMemoryTemplateDict | dict[Any, Any]]
-    ) -> list[ShortMemoryPromptTemplate]: ...
-
-    @classmethod
-    def load(
-        cls,
-        obj: Any,
-    ) -> ShortMemoryPromptTemplate | list[ShortMemoryPromptTemplate]:
-        """Load a prompt template from a dictionary."""
-
-        def _load(
-            obj: dict[Any, Any] | list[dict[Any, Any]],
-        ) -> Any:
-            if isinstance(obj, dict):
-                template_obj = ShortMemoryTemplateDict(**obj)
-                return ShortMemoryPromptTemplate.from_template(**template_obj)
-            if isinstance(obj, list):
-                return [_load(o) for o in obj]
-            return obj
-
-        return _load(obj)
