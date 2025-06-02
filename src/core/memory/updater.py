@@ -16,7 +16,7 @@ from src.prompts.generator import ShortMemoryPromptTemplate
 from src.utils import get_model_from_env, get_provider_from_env
 
 
-class ShortTermMemoryChat(StringSingleTurnChat[Literal["zh", "en"]]):
+class SummaryMaker(StringSingleTurnChat[Literal["zh", "en"]]):
     """Short-term memory updater for chat models."""
 
     provider: str = Field(
@@ -38,7 +38,7 @@ class ContextTags(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
-class ShortTermTagsChat(PydanticSingleTurnChat[Literal["zh", "en"], ContextTags]):
+class TagsMaker(PydanticSingleTurnChat[Literal["zh", "en"], ContextTags]):
     """Short-term memory updater for chat models."""
 
     provider: str = Field(
@@ -54,13 +54,13 @@ class ShortTermTagsChat(PydanticSingleTurnChat[Literal["zh", "en"], ContextTags]
     )
 
 
-class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemoryPromptTemplate]):
+class ShortTermMemoryMaker(RunnableSerializable[dict[str, Any], ShortMemoryPromptTemplate]):
     """Short-term memory updater for chat models."""
 
     lang: Literal["zh", "en"] = Field(default="zh")
 
-    memory_chain: ShortTermMemoryChat | None = None
-    tags_chain: ShortTermTagsChat | None = None
+    memory_chain: SummaryMaker | None = None
+    tags_chain: TagsMaker | None = None
 
     name_variable_key: str = Field(default="name")
     history_variable_key: str = Field(default="history")
@@ -68,10 +68,10 @@ class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemor
     @model_validator(mode="after")
     def build_chain_if_needed(self) -> Self:
         """Automatically build the chain if it is not provided."""
-        self.memory_chain = self.memory_chain or ShortTermMemoryChat(
+        self.memory_chain = self.memory_chain or SummaryMaker(
             lang=self.lang,
         )
-        self.tags_chain = self.tags_chain or ShortTermTagsChat(
+        self.tags_chain = self.tags_chain or TagsMaker(
             lang=self.lang,
         )
         return self
@@ -144,3 +144,16 @@ class ShortTermMemoryChatUpdater(RunnableSerializable[dict[str, Any], ShortMemor
             chat_summary=chat_summary_result,
             topic_tags=topic_tags_result,
         )
+
+class ShortTermMemoryUpdater(BaseModel):
+    """Short-term memory updater for chat models."""
+
+    lang: Literal["zh", "en"] = Field(default="zh")
+
+    memory_maker: ShortTermMemoryMaker | None = None
+
+    @model_validator(mode="after")
+    def build_chain_if_needed(self) -> Self:
+        """Automatically build the chain if it is not provided."""
+        self.memory_maker = self.memory_maker or ShortTermMemoryMaker(lang=self.lang)
+        return self

@@ -8,7 +8,7 @@ import anyio
 from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage
 
-from src.memory.updater import ShortTermMemoryChatUpdater
+from src.core.memory.updater import ShortTermMemoryMaker
 from src.prompts.generator import ShortMemoryPromptTemplate
 
 load_dotenv()
@@ -78,7 +78,7 @@ async def test_sync_memory() -> tuple[ShortMemoryPromptTemplate, ShortMemoryProm
     print("開始測試同步版本...")
 
     # 初始化 updater
-    updater = ShortTermMemoryChatUpdater(lang="zh")
+    updater = ShortTermMemoryMaker(lang="zh")
 
     # 測試第一個對話
     conv1 = create_test_conversation()
@@ -98,7 +98,7 @@ async def test_async_memory() -> ShortMemoryPromptTemplate:
     print("\n開始測試異步版本...")
 
     # 初始化 updater
-    updater = ShortTermMemoryChatUpdater(lang="zh")
+    updater = ShortTermMemoryMaker(lang="zh")
 
     # 測試異步調用
     conv = create_test_conversation()
@@ -128,7 +128,7 @@ async def test_english_version() -> ShortMemoryPromptTemplate:
     }
 
     # 使用英文版 updater
-    updater = ShortTermMemoryChatUpdater(lang="en")
+    updater = ShortTermMemoryMaker(lang="en")
     result = updater.invoke(english_conv)
 
     print_memory_result(result, "English Conversation: Art Sharing")
@@ -140,7 +140,7 @@ def test_error_handling() -> None:
     """測試錯誤處理"""
     print("\n測試錯誤處理...")
 
-    updater = ShortTermMemoryChatUpdater(lang="zh")
+    updater = ShortTermMemoryMaker(lang="zh")
 
     # 測試無效輸入
     try:

@@ -1,12 +1,29 @@
-from typing import (  # noqa: A005
-    Literal,
-    TypeVar,
-)
+from collections.abc import Callable
+from typing import Any, Literal, TypeVar
 from typing_extensions import override
 
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.messages import BaseMessage
+from langchain_core.prompts.chat import BaseChatPromptTemplate
+from langchain_core.prompts.message import BaseMessagePromptTemplate
 from pydantic import BaseModel
 
 __all__ = []
+
+MessageLike = BaseMessagePromptTemplate | BaseMessage | BaseChatPromptTemplate
+
+MessageLikeRepresentation = (
+    MessageLike
+    | tuple[
+        str | type,
+        str | list[dict[str, Any]] | list[object],
+    ]
+    | str
+    | dict[str, Any]
+)
+
+GetSessionHistoryCallable = Callable[..., BaseChatMessageHistory]
+
 Output = TypeVar("Output", covariant=True)  # noqa: PLC0105
 PydanticOutput = TypeVar("PydanticOutput", bound=BaseModel, covariant=True)  # noqa: PLC0105
 SupportLangType = TypeVar("SupportLangType", bound=str)

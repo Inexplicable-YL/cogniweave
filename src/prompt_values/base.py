@@ -9,7 +9,6 @@ from langchain_core.messages import (
     SystemMessage,
 )
 from langchain_core.prompts.chat import (
-    BaseChatPromptTemplate,
     SystemMessagePromptTemplate,
     _create_template_from_message_type,
 )
@@ -19,21 +18,10 @@ from langchain_core.prompts.message import (
 from langchain_core.prompts.string import PromptTemplateFormat
 from pydantic import Field
 
-from src.typing import SupportLangType
+from src.prompts import RichSystemMessagePromptTemplate
+from src.typing import MessageLike, SupportLangType
 
-MessageLike = BaseMessagePromptTemplate | BaseMessage | BaseChatPromptTemplate
-
-MessageLikeRepresentation = (
-    MessageLike
-    | tuple[
-        str | type,
-        str | list[dict[str, Any]] | list[object],
-    ]
-    | str
-    | dict[str, Any]
-)
-
-SystemMessageLike = SystemMessage | SystemMessagePromptTemplate
+SystemMessageLike = SystemMessage | SystemMessagePromptTemplate | RichSystemMessagePromptTemplate
 SystemMessageLikeRepresentation = SystemMessageLike | str
 
 DEFAULT_SINGLE_TURN_PROMPT_ZH = (
