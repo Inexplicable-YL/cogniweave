@@ -7,7 +7,11 @@ from pydantic import BaseModel, Field, model_validator
 
 from cogniweave.core.prompt_values.end_detector import EndDetectorPromptValue
 from cogniweave.llms import PydanticSingleTurnChat
+from cogniweave.prompt_values import MultilingualSystemPromptValue
 from cogniweave.utils import get_model_from_env, get_provider_from_env
+
+if TYPE_CHECKING:
+    from langchain_core.runnables.config import RunnableConfig
 
 
 class ConversationEndResult(BaseModel):
@@ -15,25 +19,28 @@ class ConversationEndResult(BaseModel):
 
     end: bool = Field(..., description="Whether the user wants to end the conversation.")
 
-class ConversationEndClassifier(
-    PydanticSingleTurnChat[Literal["zh", "en"], ConversationEndResult]
-):
+
+class ConversationEndClassifier(PydanticSingleTurnChat[Literal["zh", "en"], ConversationEndResult]):
+    """Conversation end detector."""
+
     provider: str = Field(
         default_factory=get_provider_from_env("END_DETECTOR_MODEL", default="openai")
     )
     model_name: str = Field(
         default_factory=get_model_from_env("END_DETECTOR_MODEL", default="gpt-4.1-nano")
     )
-    temperature: float = 1.0    #add some randomness, does not affect that much tbh.
+    temperature: float = 1.0  # add some randomness, does not affect that much tbh.
+
+    prompt: MultilingualSystemPromptValue[Literal["zh", "en"]] | None = Field(
+        default=EndDetectorPromptValue()
+    )
+
+
+class ConversationEndDetector(RunnableSerializable[dict[str, Any], bool]):
+    """Conversation end detector."""
+
     lang: Literal["zh", "en"] = Field(default="zh")
-    prompt: EndDetectorPromptValue | None = Field(default=EndDetectorPromptValue())
 
-
-class ConversationEndDetector(
-    RunnableSerializable[dict[str, Any], ConversationEndResult]
-):
-
-    lang: Literal["zh", "en"] = Field(default="zh")
     classifier: ConversationEndClassifier | None = None
     messages_variable_key: str = Field(default="messages")
 
@@ -52,8 +59,8 @@ class ConversationEndDetector(
         input: dict[str, Any],
         config: "RunnableConfig | None" = None,
         **kwargs: Any,
-    ) -> ConversationEndResult:
-        messages = cast(list[Any], input.get(self.messages_variable_key, []))
+    ) -> bool:
+        messages = cast("list[Any]", input.get(self.messages_variable_key, []))
         if not isinstance(messages, list):
             raise TypeError(
                 f"Expected list for '{self.messages_variable_key}', got {type(messages)}",
@@ -61,7 +68,7 @@ class ConversationEndDetector(
 
         serialized = self._serialize_messages(messages)
         assert self.classifier is not None, "Inner classifier not initialized"
-        return self.classifier.invoke({"input": serialized}, config=config, **kwargs)
+        return self.classifier.invoke({"input": serialized}, config=config, **kwargs).end
 
     @override
     async def ainvoke(
@@ -69,8 +76,8 @@ class ConversationEndDetector(
         input: dict[str, Any],
         config: "RunnableConfig | None" = None,
         **kwargs: Any,
-    ) -> ConversationEndResult:
-        messages = cast(list[Any], input.get(self.messages_variable_key, []))
+    ) -> bool:
+        messages = cast("list[Any]", input.get(self.messages_variable_key, []))
         if not isinstance(messages, list):
             raise TypeError(
                 f"Expected list for '{self.messages_variable_key}', got {type(messages)}",
@@ -78,8 +85,4 @@ class ConversationEndDetector(
 
         serialized = self._serialize_messages(messages)
         assert self.classifier is not None, "Inner classifier not initialized"
-        return await self.classifier.ainvoke({"input": serialized}, config=config, **kwargs)
-
-
-if TYPE_CHECKING:
-    from langchain_core.runnables.config import RunnableConfig
+        return (await self.classifier.ainvoke({"input": serialized}, config=config, **kwargs)).end
