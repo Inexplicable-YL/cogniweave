@@ -902,7 +902,7 @@ class TagsVector(Generic[MetaType]):
             raise ValueError("No ids provided to delete.")
         doc_ids: set[str] = set()
         for id_ in ids:
-            if isinstance(tag_doc := self.metastore.search(id_), Document):
+            if isinstance(tag_doc := self.vector.docstore.search(id_), Document):
                 doc_ids.update(cast("TagDucumentId", tag_doc.metadata)["file_ids"])
         for doc_id in doc_ids:
             if not isinstance(doc := self.metastore.search(doc_id), str):
