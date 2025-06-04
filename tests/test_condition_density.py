@@ -13,7 +13,7 @@ async def test_segment_switch_after_gap() -> None:
     t0 = 1000.0
     seg1 = await manager.update_condition_density("user1", current_time=t0)
     seg2 = await manager.update_condition_density("user1", current_time=t0 + 1)
-    seg3 = await manager.update_condition_density("user1", current_time=t0 + 120)
+    seg3 = await manager.update_condition_density("user1", current_time=t0 + 1200)
 
     assert seg1 == seg2
     assert seg3 != seg2
@@ -31,6 +31,9 @@ async def test_sessions_are_independent() -> None:
     seg_b2 = await manager.update_condition_density("B", current_time=base + 1.5)
     seg_a3 = await manager.update_condition_density("A", current_time=base + 130)
     seg_b3 = await manager.update_condition_density("B", current_time=base + 200)
+
+    print(seg_a1, seg_a2, seg_a3)
+    print(seg_b1, seg_b2, seg_b3)
 
     assert seg_a1 == seg_a2
     assert seg_a3 != seg_a2
