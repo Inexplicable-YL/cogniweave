@@ -1,22 +1,18 @@
 import asyncio
+import itertools
 import math
+import statistics
 import time
 import uuid
 from collections import defaultdict, deque
 from enum import Enum
-from typing import Self
 
-import statistics
 from pydantic import BaseModel, PrivateAttr
 
 
-class Sigmoid:
+def Sigmoid(x: float, lower: float, upper: float, midpoint: float, steepness: float) -> float:
     """provide sigmoid function for growth and decay calculations."""
-
-    @staticmethod
-    def f(x: float, lower: float, upper: float, midpoint: float, steepness: float) -> float:
-        """compute a sigmoid value."""
-        return lower + (upper - lower) / (1 + math.exp(-steepness * (x - midpoint)))
+    return lower + (upper - lower) / (1 + math.exp(-steepness * (x - midpoint)))
 
 
 class DensityStrategy(str, Enum):
@@ -80,7 +76,7 @@ class WeightedAverageCalculator:
             self._cached_weights[num] = weights
 
         weights = self._cached_weights[num]
-        weighted_sum = sum(w * val for w, val in zip(weights, intervals))
+        weighted_sum = sum(w * val for w, val in zip(weights, intervals, strict=False))
         weight_total = sum(weights)
         weighted_avg = weighted_sum / weight_total
         return max(float(weighted_avg), 1e-9)
@@ -97,7 +93,7 @@ class DynamicDecayCalculator:
         avg_interval: current average time interval
         decay_factor: base decay coefficient
         """
-        dynamic_decay = decay_factor * Sigmoid.f(
+        dynamic_decay = decay_factor * Sigmoid(
             avg_interval, lower=0.5, upper=1.5, midpoint=6, steepness=1.5
         )
         return math.exp(-0.7 * dynamic_decay * avg_interval)
@@ -125,7 +121,7 @@ class DensityCalculator:
     def _auto_select_strategy(self, avg_interval: float) -> DensityStrategy:
         """select best strategy based on recent interval trends."""
         self.recent_avg_intervals.append(avg_interval)
-        if len(self.recent_avg_intervals) < 2:
+        if len(self.recent_avg_intervals) < 2:  # noqa: PLR2004
             trend = avg_interval
         else:
             trend = statistics.fmean(self.recent_avg_intervals)
@@ -133,7 +129,7 @@ class DensityCalculator:
                 std_dev = statistics.pstdev(self.recent_avg_intervals)
             else:
                 std_dev = 0.0
-            if std_dev > 2:
+            if std_dev > 2:  # noqa: PLR2004
                 return DensityStrategy.EXPONENTIALLY_WEIGHTED_MOVING_AVERAGE
 
         if trend < self.auto_threshold_low:
@@ -180,11 +176,8 @@ class DensityCalculator:
         return float(result) * DynamicDecayCalculator.compute(avg_interval, self.decay_factor)
 
 
-class AsyncConditionDensityManager(BaseModel):
+class ConditionDensityManager(BaseModel):
     """Manage density weights with adaptive segmentation."""
-
-    class Config:
-        arbitrary_types_allowed = True
 
     # exposed configuration
     time_window: float | None = None
@@ -207,14 +200,14 @@ class AsyncConditionDensityManager(BaseModel):
 
     # non-init internal state
     _session_timestamps: dict[str, TimeWheel] = PrivateAttr(default_factory=dict)
-    _session_weights: dict[str, float] = PrivateAttr(default_factory=dict)
+    _session_weights: dict[str, float] = PrivateAttr(default=defaultdict(lambda: 1.0))
     _last_timestamp: dict[str, float] = PrivateAttr(default_factory=dict)
-    _intervals: dict[str, deque[float]] = PrivateAttr(default_factory=dict)
-    _message_count: dict[str, int] = PrivateAttr(default_factory=dict)
+    _intervals: dict[str, deque[float]] = PrivateAttr(default=defaultdict(lambda: deque(maxlen=5)))
+    _message_count: dict[str, int] = PrivateAttr(default=defaultdict(int))
     _segment_id_per_key: dict[str, str] = PrivateAttr(default_factory=dict)
     _density_calculator: DensityCalculator | None = PrivateAttr(default=None)
     _weighted_avg_calc: WeightedAverageCalculator | None = PrivateAttr(default=None)
-    _lock: asyncio.Lock | None = PrivateAttr(default=None)
+    _alock: asyncio.Lock = PrivateAttr(default=asyncio.Lock())
     _prune_task: asyncio.Task | None = PrivateAttr(default=None)
 
     def __init__(self, **data: object) -> None:
@@ -222,10 +215,6 @@ class AsyncConditionDensityManager(BaseModel):
         self._session_timestamps = defaultdict(
             lambda: TimeWheel(self._WINDOW_SIZE, self.time_window or 0)
         )
-        self._session_weights = defaultdict(lambda: 1.0)
-        self._last_timestamp = {}
-        self._intervals = defaultdict(lambda: deque(maxlen=5))
-        self._message_count = defaultdict(int)
         self._density_calculator = DensityCalculator(
             strategy=self.density_strategy,
             ema_alpha=self._EMA_ALPHA,
@@ -234,16 +223,15 @@ class AsyncConditionDensityManager(BaseModel):
             auto_threshold_high=self._AUTO_HIGH,
         )
         self._weighted_avg_calc = WeightedAverageCalculator(self._ADAPTIVE_STRENGTH)
-        self._lock = asyncio.Lock()
         if self.time_window:
             self._prune_task = asyncio.create_task(self.auto_prune(interval=60.0))
 
     async def auto_prune(self, interval: float = 60.0) -> None:
         """periodically prune stale user state."""
-        assert self._lock
+        assert self._alock
         while True:
             await asyncio.sleep(interval)
-            async with self._lock:
+            async with self._alock:
                 now = time.time()
                 for key in list(self._session_timestamps.keys()):
                     self._session_timestamps[key].prune(now)
@@ -254,9 +242,7 @@ class AsyncConditionDensityManager(BaseModel):
                         self._intervals.pop(key, None)
                         self._message_count.pop(key, None)
 
-    async def update_condition_density(
-        self, session_id: str, current_time: float | None = None
-    ) -> str:
+    def update_condition_density(self, session_id: str, current_time: float | None = None) -> str:  # noqa: PLR0915
         """Update density for a session.
 
         Args:
@@ -266,96 +252,94 @@ class AsyncConditionDensityManager(BaseModel):
         Returns:
             Current segment identifier.
         """
-        assert self._lock
         assert self._weighted_avg_calc
         assert self._density_calculator
 
-        async with self._lock:
-            now = float(current_time) if current_time is not None else time.time()
-            last_ts = self._last_timestamp.get(session_id)
+        now = float(current_time) if current_time is not None else time.time()
+        last_ts = self._last_timestamp.get(session_id)
 
-            segment_id = self._segment_id_per_key.get(session_id)
-            if segment_id is None:
+        segment_id = self._segment_id_per_key.get(session_id)
+        if segment_id is None:
+            segment_id = uuid.uuid4().hex
+            self._segment_id_per_key[session_id] = segment_id
+
+        if last_ts is not None:
+            delta = now - last_ts
+            intervals = self._intervals[session_id]
+            intervals.append(delta)
+
+            avg_interval = self._weighted_avg_calc.compute(intervals, self._AVG_SMOOTHING)
+            std_dev = float(statistics.pstdev(list(intervals))) if len(intervals) > 1 else 0.0
+
+            # compute dynamic threshold with std multiplier
+            raw_threshold = self.segment_factor * avg_interval + self.std_multiplier * std_dev
+            dynamic_threshold = min(max(raw_threshold, self.segment_min), self.segment_max)
+
+            msg_count = self._message_count.get(session_id, 0)
+            if delta > dynamic_threshold and msg_count >= self._MIN_MSGS:
+                # new session: reset state and return new segment id
+                self._session_timestamps[session_id] = TimeWheel(
+                    self._WINDOW_SIZE, self.time_window or 0
+                )
+                self._session_weights[session_id] = 1.0
+                self._intervals[session_id].clear()
+                self._message_count[session_id] = 0
                 segment_id = uuid.uuid4().hex
                 self._segment_id_per_key[session_id] = segment_id
+                self._last_timestamp[session_id] = now
+                self._message_count[session_id] += 1
+                tw = self._session_timestamps[session_id]
+                tw.add(now)
+                if self.time_window:
+                    tw.prune(now)
+                return segment_id
 
-            if last_ts is not None:
-                delta = now - last_ts
-                intervals = self._intervals[session_id]
-                intervals.append(delta)
+        else:
+            # first message for this user
+            avg_interval = 100.0  # fallback for first message
 
-                avg_interval = self._weighted_avg_calc.compute(
-                    intervals, self._AVG_SMOOTHING
-                )
-                std_dev = (
-                    float(statistics.pstdev(list(intervals))) if len(intervals) > 1 else 0.0
-                )
+        # update last timestamp and increment message count
+        self._last_timestamp[session_id] = now
+        self._message_count[session_id] += 1
 
-                # compute dynamic threshold with std multiplier
-                raw_threshold = self.segment_factor * avg_interval + self.std_multiplier * std_dev
-                dynamic_threshold = min(max(raw_threshold, self.segment_min), self.segment_max)
+        # add current timestamp to time wheel
+        tw = self._session_timestamps[session_id]
+        tw.add(now)
+        if self.time_window:
+            tw.prune(now)
 
-                msg_count = self._message_count.get(session_id, 0)
-                if delta > dynamic_threshold and msg_count >= self._MIN_MSGS:
-                    # new session: reset state and return new segment id
-                    self._session_timestamps[session_id] = TimeWheel(
-                        self._WINDOW_SIZE, self.time_window or 0
-                    )
-                    self._session_weights[session_id] = 1.0
-                    self._intervals[session_id].clear()
-                    self._message_count[session_id] = 0
-                    segment_id = uuid.uuid4().hex
-                    self._segment_id_per_key[session_id] = segment_id
-                    self._last_timestamp[session_id] = now
-                    self._message_count[session_id] += 1
-                    tw = self._session_timestamps[session_id]
-                    tw.add(now)
-                    if self.time_window:
-                        tw.prune(now)
-                    return segment_id
+        timestamps = tw.get_all()
+        if len(timestamps) < 2:  # noqa: PLR2004
+            avg_interval_calc = 100.0
+        else:
+            seq = list(timestamps)
+            diffs = [b - a for a, b in itertools.pairwise(seq)]
+            avg_interval_calc = float(statistics.fmean(diffs)) if diffs else 100.0
 
-            else:
-                # first message for this user
-                avg_interval = 100.0  # fallback for first message
+        growth = Sigmoid(avg_interval_calc, 0.275, 0.61, 8.6, 0.3)
+        decay = Sigmoid(avg_interval_calc, 0.045, 0.155, 10, 0.3)
 
-            # update last timestamp and increment message count
-            self._last_timestamp[session_id] = now
-            self._message_count[session_id] += 1
+        growth = 0.9 * growth + 0.1 * self._session_weights[session_id]
+        decay = max(0.05, 0.9 * decay + 0.1 * (1 / (avg_interval_calc + 1)))
 
-            # add current timestamp to time wheel
-            tw = self._session_timestamps[session_id]
-            tw.add(now)
-            if self.time_window:
-                tw.prune(now)
+        density_increment = growth / (avg_interval_calc + 1)
+        decay_factor = math.exp(-decay * avg_interval_calc)
 
-            timestamps = tw.get_all()
-            if len(timestamps) < 2:
-                avg_interval_calc = 100.0
-            else:
-                seq = list(timestamps)
-                diffs = [b - a for a, b in zip(seq, seq[1:])]
-                avg_interval_calc = (
-                    float(statistics.fmean(diffs)) if len(diffs) else 100.0
-                )
+        new_weight = self._density_calculator.calculate(
+            prev_weight=self._session_weights[session_id],
+            density_increment=density_increment,
+            decay_factor=decay_factor,
+            avg_interval=avg_interval_calc,
+        )
+        self._session_weights[session_id] = new_weight
 
-            growth = Sigmoid.f(avg_interval_calc, 0.275, 0.61, 8.6, 0.3)
-            decay = Sigmoid.f(avg_interval_calc, 0.045, 0.155, 10, 0.3)
+        return segment_id
 
-            growth = 0.9 * growth + 0.1 * self._session_weights[session_id]
-            decay = max(0.05, 0.9 * decay + 0.1 * (1 / (avg_interval_calc + 1)))
-
-            density_increment = growth / (avg_interval_calc + 1)
-            decay_factor = math.exp(-decay * avg_interval_calc)
-
-            new_weight = self._density_calculator.calculate(
-                prev_weight=self._session_weights[session_id],
-                density_increment=density_increment,
-                decay_factor=decay_factor,
-                avg_interval=avg_interval_calc,
-            )
-            self._session_weights[session_id] = new_weight
-
-            return segment_id
+    async def aupdate_condition_density(
+        self, session_id: str, current_time: float | None = None
+    ) -> str:
+        async with self._alock:
+            return self.update_condition_density(session_id, current_time)
 
     def get_density_weight(self, session_id: str) -> float:
         """Return current density weight for a session."""
