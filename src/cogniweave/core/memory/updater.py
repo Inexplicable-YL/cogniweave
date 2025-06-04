@@ -232,7 +232,7 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], str]):
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
     ) -> str:
         assert self.chat_chain is not None
-        # Retreive new long-term memory items from ChatHistory only
+        # Retrieve new long-term memory items from ChatHistory only
         new_items_str = self.extract(input, config=config, **kwargs)
         # Read old long-term memory
         old_ltm = self._load_long_memory()

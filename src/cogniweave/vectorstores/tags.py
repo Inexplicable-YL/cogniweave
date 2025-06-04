@@ -24,7 +24,9 @@ if TYPE_CHECKING:
     from langchain_core.embeddings import Embeddings
 
 
-class TagDucumentId(TypedDict):
+class TagDocumentId(TypedDict):
+    """Metadata stored for each tag document."""
+
     file_ids: list[str]
 
 
@@ -113,7 +115,9 @@ class TagsVector(Generic[MetaType]):
         unload_tags = {}
         for _hash, _tag in zip(hashs, tags, strict=True):
             if isinstance(tag_doc := self.vector.docstore.search(_hash), Document):
-                if doc_id not in (_id_list := cast("TagDucumentId", tag_doc.metadata)["file_ids"]):
+                if doc_id not in (
+                    _id_list := cast("TagDocumentId", tag_doc.metadata)["file_ids"]
+                ):
                     _id_list.append(doc_id)
             else:
                 unload_tags[_hash] = _tag
@@ -122,7 +126,7 @@ class TagsVector(Generic[MetaType]):
         if unload_tags:
             self.vector.add_texts(
                 unload_tags.values(),
-                metadatas=[dict(TagDucumentId(file_ids=[doc_id])) for _ in unload_tags.values()],
+                metadatas=[dict(TagDocumentId(file_ids=[doc_id])) for _ in unload_tags.values()],
                 ids=list(unload_tags.keys()),
                 **kwargs,
             )
@@ -149,7 +153,9 @@ class TagsVector(Generic[MetaType]):
         unload_tags = {}
         for _hash, _tag in zip(hashs, tags, strict=True):
             if isinstance(tag_doc := self.vector.docstore.search(_hash), Document):
-                if doc_id not in (_id_list := cast("TagDucumentId", tag_doc.metadata)["file_ids"]):
+                if doc_id not in (
+                    _id_list := cast("TagDocumentId", tag_doc.metadata)["file_ids"]
+                ):
                     _id_list.append(doc_id)
             else:
                 unload_tags[_hash] = _tag
@@ -158,7 +164,7 @@ class TagsVector(Generic[MetaType]):
         if unload_tags:
             await self.vector.aadd_texts(
                 unload_tags.values(),
-                metadatas=[dict(TagDucumentId(file_ids=[doc_id])) for _ in unload_tags.values()],
+                metadatas=[dict(TagDocumentId(file_ids=[doc_id])) for _ in unload_tags.values()],
                 ids=list(unload_tags.keys()),
                 **kwargs,
             )
@@ -202,7 +208,7 @@ class TagsVector(Generic[MetaType]):
             for _hash, _tag in zip(hashs, tags, strict=True):
                 tag_doc = self.vector.docstore.search(_hash)
                 if isinstance(tag_doc, Document):
-                    tag_meta = cast("TagDucumentId", tag_doc.metadata)
+                    tag_meta = cast("TagDocumentId", tag_doc.metadata)
                     if doc_id not in tag_meta["file_ids"]:
                         tag_meta["file_ids"].append(doc_id)
                 else:
@@ -219,7 +225,7 @@ class TagsVector(Generic[MetaType]):
             self.vector.add_texts(
                 all_unload_tags.values(),
                 metadatas=[
-                    dict(TagDucumentId(file_ids=all_tag_metadata[_hash]))
+                    dict(TagDocumentId(file_ids=all_tag_metadata[_hash]))
                     for _hash in all_unload_tags
                 ],
                 ids=list(all_unload_tags.keys()),
@@ -265,7 +271,7 @@ class TagsVector(Generic[MetaType]):
             for _hash, _tag in zip(hashs, tags, strict=True):
                 tag_doc = self.vector.docstore.search(_hash)
                 if isinstance(tag_doc, Document):
-                    tag_meta = cast("TagDucumentId", tag_doc.metadata)
+                    tag_meta = cast("TagDocumentId", tag_doc.metadata)
                     if doc_id not in tag_meta["file_ids"]:
                         tag_meta["file_ids"].append(doc_id)
                 else:
@@ -282,7 +288,7 @@ class TagsVector(Generic[MetaType]):
             await self.vector.aadd_texts(
                 all_unload_tags.values(),
                 metadatas=[
-                    dict(TagDucumentId(file_ids=all_tag_metadata[_hash]))
+                    dict(TagDocumentId(file_ids=all_tag_metadata[_hash]))
                     for _hash in all_unload_tags
                 ],
                 ids=list(all_unload_tags.keys()),
@@ -340,7 +346,7 @@ class TagsVector(Generic[MetaType]):
         file_map = defaultdict(float)
         for i, _doc_score in enumerate(tag_docs):
             _d, _s = _doc_score
-            metadata = cast("TagDucumentId", _d.metadata)
+            metadata = cast("TagDocumentId", _d.metadata)
             _decay = self._inverse_decay(i, decay_rate=kwargs.get("decay_rate", fetch_k / 2.5))
             for file_id in metadata["file_ids"]:
                 file_map[file_id] += _decay * _s
@@ -636,7 +642,7 @@ class TagsVector(Generic[MetaType]):
         file_map = defaultdict(float)
         for i, _doc_score in enumerate(tag_docs):
             _d, _s = _doc_score
-            metadata = cast("TagDucumentId", _d.metadata)
+            metadata = cast("TagDocumentId", _d.metadata)
             _decay = self._inverse_decay(i, decay_rate=kwargs.get("decay_rate", fetch_k / 2.5))
             for file_id in metadata["file_ids"]:
                 file_map[file_id] += _decay * _s
@@ -879,7 +885,7 @@ class TagsVector(Generic[MetaType]):
                     tag_doc_cache[tag] = self.vector.docstore.search(tag)
                 tag_doc = tag_doc_cache[tag]
                 if isinstance(tag_doc, Document):
-                    cast("TagDucumentId", tag_doc.metadata)["file_ids"].remove(doc_id)
+                    cast("TagDocumentId", tag_doc.metadata)["file_ids"].remove(doc_id)
                 else:
                     return None
 
@@ -903,7 +909,7 @@ class TagsVector(Generic[MetaType]):
         doc_ids: set[str] = set()
         for id_ in ids:
             if isinstance(tag_doc := self.vector.docstore.search(id_), Document):
-                doc_ids.update(cast("TagDucumentId", tag_doc.metadata)["file_ids"])
+                doc_ids.update(cast("TagDocumentId", tag_doc.metadata)["file_ids"])
         for doc_id in doc_ids:
             if not isinstance(doc := self.metastore.search(doc_id), str):
                 doc[0][:] = list(set(doc[0]) - set(ids))
