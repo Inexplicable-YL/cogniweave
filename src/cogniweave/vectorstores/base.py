@@ -303,7 +303,7 @@ class LazyFAISS(FAISS):
         else:
             raise ValueError(
                 "Missing save path: either `folder_path` must be provided explicitly "
-                "or `self.save_path` must be set beforehand."
+                "or `self._save_path` must be set beforehand."
             )
         path.mkdir(exist_ok=True, parents=True)
 
@@ -330,7 +330,7 @@ class LazyFAISS(FAISS):
         else:
             raise ValueError(
                 "Missing save path: either `folder_path` must be provided explicitly "
-                "or `self.save_path` must be set beforehand."
+                "or `self._save_path` must be set beforehand."
             )
         path.mkdir(exist_ok=True, parents=True)
 

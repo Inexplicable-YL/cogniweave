@@ -197,9 +197,10 @@ def handle_exception(
     return _handle
 
 
-def remove_not_given_params(**kwages: Any) -> dict[str, Any]:
-    """Remove not given parameters."""
-    return {key: value for key, value in kwages.items() if not isinstance(value, NotGiven)}
+def remove_not_given_params(**kwargs: Any) -> dict[str, Any]:
+    """Remove ``NotGiven`` parameters from ``kwargs``."""
+
+    return {key: value for key, value in kwargs.items() if not isinstance(value, NotGiven)}
 
 
 def sync_func_wrapper(
