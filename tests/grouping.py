@@ -6,8 +6,8 @@ from collections import defaultdict, deque
 from enum import Enum
 from typing import Self
 
-import numpy as np
-from pydantic import BaseModel, ConfigDict, model_validator
+import statistics
+from pydantic import BaseModel, PrivateAttr
 
 
 class Sigmoid:
@@ -76,14 +76,13 @@ class WeightedAverageCalculator:
             return 100.0
 
         if num not in self._cached_weights:
-            weights = np.exp(
-                -smoothing_factor * np.linspace(0, num - 1, num)[::-1]
-            )
+            weights = [math.exp(-smoothing_factor * i) for i in range(num - 1, -1, -1)]
             self._cached_weights[num] = weights
 
         weights = self._cached_weights[num]
-        arr = np.array(intervals)
-        weighted_avg = np.dot(weights, arr) / np.sum(weights)
+        weighted_sum = sum(w * val for w, val in zip(weights, intervals))
+        weight_total = sum(weights)
+        weighted_avg = weighted_sum / weight_total
         return max(float(weighted_avg), 1e-9)
 
 
@@ -129,8 +128,11 @@ class DensityCalculator:
         if len(self.recent_avg_intervals) < 2:
             trend = avg_interval
         else:
-            trend = np.mean(self.recent_avg_intervals)
-            std_dev = np.std(self.recent_avg_intervals)
+            trend = statistics.fmean(self.recent_avg_intervals)
+            if len(self.recent_avg_intervals) > 1:
+                std_dev = statistics.pstdev(self.recent_avg_intervals)
+            else:
+                std_dev = 0.0
             if std_dev > 2:
                 return DensityStrategy.EXPONENTIALLY_WEIGHTED_MOVING_AVERAGE
 
@@ -167,7 +169,7 @@ class DensityCalculator:
                 + (1 - self.ema_alpha) * density_increment * decay_factor
             )
         elif strategy == DensityStrategy.SIMPLE_MOVING_AVERAGE:
-            result = np.mean([prev_weight, density_increment * decay_factor])
+            result = statistics.fmean([prev_weight, density_increment * decay_factor])
         elif strategy == DensityStrategy.WEIGHTED_MOVING_AVERAGE:
             result = 0.6 * prev_weight + 0.4 * density_increment * decay_factor
         elif strategy == DensityStrategy.EXPONENTIALLY_WEIGHTED_MOVING_AVERAGE:
@@ -181,11 +183,16 @@ class DensityCalculator:
 class AsyncConditionDensityManager(BaseModel):
     """Manage density weights with adaptive segmentation."""
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    class Config:
+        arbitrary_types_allowed = True
 
     # exposed configuration
     time_window: float | None = None
     density_strategy: DensityStrategy = DensityStrategy.AUTO
+    segment_factor: float = 0.5
+    segment_min: float = 60.0
+    segment_max: float = 3600.0
+    std_multiplier: float = 0.5
 
     # internal constants
     _WINDOW_SIZE: int = 20
@@ -196,58 +203,53 @@ class AsyncConditionDensityManager(BaseModel):
     _ADAPTIVE_STRENGTH: float = 0.9
     _AUTO_LOW: float = 4.0
     _AUTO_HIGH: float = 10.0
-    _SEGMENT_FACTOR: float = 2.0
-    _SEGMENT_MIN: float = 60.0
-    _SEGMENT_MAX: float = 3600.0
-    _STD_MULTIPLIER: float = 1.0
     _MIN_MSGS: int = 2
 
     # non-init internal state
-    session_timestamps: dict[str, TimeWheel] = {}
-    session_weights: dict[str, float] = {}
-    _last_timestamp: dict[str, float] = {}
-    _intervals: dict[str, deque[float]] = {}
-    _message_count: dict[str, int] = {}
-    _segment_id_per_key: dict[str, str] = {}
-    density_calculator: DensityCalculator | None = None
-    weighted_avg_calc: WeightedAverageCalculator | None = None
-    lock: asyncio.Lock | None = None
-    prune_task: asyncio.Task | None = None
+    _session_timestamps: dict[str, TimeWheel] = PrivateAttr(default_factory=dict)
+    _session_weights: dict[str, float] = PrivateAttr(default_factory=dict)
+    _last_timestamp: dict[str, float] = PrivateAttr(default_factory=dict)
+    _intervals: dict[str, deque[float]] = PrivateAttr(default_factory=dict)
+    _message_count: dict[str, int] = PrivateAttr(default_factory=dict)
+    _segment_id_per_key: dict[str, str] = PrivateAttr(default_factory=dict)
+    _density_calculator: DensityCalculator | None = PrivateAttr(default=None)
+    _weighted_avg_calc: WeightedAverageCalculator | None = PrivateAttr(default=None)
+    _lock: asyncio.Lock | None = PrivateAttr(default=None)
+    _prune_task: asyncio.Task | None = PrivateAttr(default=None)
 
-    @model_validator(mode="after")
-    def build_state(self) -> Self:
-        self.session_timestamps = defaultdict(
+    def __init__(self, **data: object) -> None:
+        super().__init__(**data)
+        self._session_timestamps = defaultdict(
             lambda: TimeWheel(self._WINDOW_SIZE, self.time_window or 0)
         )
-        self.session_weights = defaultdict(float)
+        self._session_weights = defaultdict(lambda: 1.0)
         self._last_timestamp = {}
         self._intervals = defaultdict(lambda: deque(maxlen=5))
         self._message_count = defaultdict(int)
-        self.density_calculator = DensityCalculator(
+        self._density_calculator = DensityCalculator(
             strategy=self.density_strategy,
             ema_alpha=self._EMA_ALPHA,
             decay_factor=self._DECAY_FACTOR,
             auto_threshold_low=self._AUTO_LOW,
             auto_threshold_high=self._AUTO_HIGH,
         )
-        self.weighted_avg_calc = WeightedAverageCalculator(self._ADAPTIVE_STRENGTH)
-        self.lock = asyncio.Lock()
+        self._weighted_avg_calc = WeightedAverageCalculator(self._ADAPTIVE_STRENGTH)
+        self._lock = asyncio.Lock()
         if self.time_window:
-            self.prune_task = asyncio.create_task(self.auto_prune(interval=60.0))
-        return self
+            self._prune_task = asyncio.create_task(self.auto_prune(interval=60.0))
 
     async def auto_prune(self, interval: float = 60.0) -> None:
         """periodically prune stale user state."""
-        assert self.lock
+        assert self._lock
         while True:
             await asyncio.sleep(interval)
-            async with self.lock:
+            async with self._lock:
                 now = time.time()
-                for key in list(self.session_timestamps.keys()):
-                    self.session_timestamps[key].prune(now)
-                    if not self.session_timestamps[key].get_all():
-                        del self.session_timestamps[key]
-                        del self.session_weights[key]
+                for key in list(self._session_timestamps.keys()):
+                    self._session_timestamps[key].prune(now)
+                    if not self._session_timestamps[key].get_all():
+                        del self._session_timestamps[key]
+                        del self._session_weights[key]
                         self._last_timestamp.pop(key, None)
                         self._intervals.pop(key, None)
                         self._message_count.pop(key, None)
@@ -264,11 +266,11 @@ class AsyncConditionDensityManager(BaseModel):
         Returns:
             Current segment identifier.
         """
-        assert self.lock
-        assert self.weighted_avg_calc
-        assert self.density_calculator
+        assert self._lock
+        assert self._weighted_avg_calc
+        assert self._density_calculator
 
-        async with self.lock:
+        async with self._lock:
             now = float(current_time) if current_time is not None else time.time()
             last_ts = self._last_timestamp.get(session_id)
 
@@ -282,26 +284,35 @@ class AsyncConditionDensityManager(BaseModel):
                 intervals = self._intervals[session_id]
                 intervals.append(delta)
 
-                avg_interval = self.weighted_avg_calc.compute(
+                avg_interval = self._weighted_avg_calc.compute(
                     intervals, self._AVG_SMOOTHING
                 )
-                std_dev = float(np.std(list(intervals))) if len(intervals) > 1 else 0.0
+                std_dev = (
+                    float(statistics.pstdev(list(intervals))) if len(intervals) > 1 else 0.0
+                )
 
                 # compute dynamic threshold with std multiplier
-                raw_threshold = self._SEGMENT_FACTOR * avg_interval + self._STD_MULTIPLIER * std_dev
-                dynamic_threshold = min(max(raw_threshold, self._SEGMENT_MIN), self._SEGMENT_MAX)
+                raw_threshold = self.segment_factor * avg_interval + self.std_multiplier * std_dev
+                dynamic_threshold = min(max(raw_threshold, self.segment_min), self.segment_max)
 
                 msg_count = self._message_count.get(session_id, 0)
                 if delta > dynamic_threshold and msg_count >= self._MIN_MSGS:
-                    # new session: reset state
-                    self.session_timestamps[session_id] = TimeWheel(
+                    # new session: reset state and return new segment id
+                    self._session_timestamps[session_id] = TimeWheel(
                         self._WINDOW_SIZE, self.time_window or 0
                     )
-                    self.session_weights[session_id] = 0.0
+                    self._session_weights[session_id] = 1.0
                     self._intervals[session_id].clear()
                     self._message_count[session_id] = 0
                     segment_id = uuid.uuid4().hex
                     self._segment_id_per_key[session_id] = segment_id
+                    self._last_timestamp[session_id] = now
+                    self._message_count[session_id] += 1
+                    tw = self._session_timestamps[session_id]
+                    tw.add(now)
+                    if self.time_window:
+                        tw.prune(now)
+                    return segment_id
 
             else:
                 # first message for this user
@@ -312,7 +323,7 @@ class AsyncConditionDensityManager(BaseModel):
             self._message_count[session_id] += 1
 
             # add current timestamp to time wheel
-            tw = self.session_timestamps[session_id]
+            tw = self._session_timestamps[session_id]
             tw.add(now)
             if self.time_window:
                 tw.prune(now)
@@ -321,29 +332,32 @@ class AsyncConditionDensityManager(BaseModel):
             if len(timestamps) < 2:
                 avg_interval_calc = 100.0
             else:
-                diffs = np.diff(list(timestamps))
-                avg_interval_calc = float(np.mean(diffs)) if len(diffs) else 100.0
+                seq = list(timestamps)
+                diffs = [b - a for a, b in zip(seq, seq[1:])]
+                avg_interval_calc = (
+                    float(statistics.fmean(diffs)) if len(diffs) else 100.0
+                )
 
             growth = Sigmoid.f(avg_interval_calc, 0.275, 0.61, 8.6, 0.3)
             decay = Sigmoid.f(avg_interval_calc, 0.045, 0.155, 10, 0.3)
 
-            growth = 0.9 * growth + 0.1 * self.session_weights[session_id]
+            growth = 0.9 * growth + 0.1 * self._session_weights[session_id]
             decay = max(0.05, 0.9 * decay + 0.1 * (1 / (avg_interval_calc + 1)))
 
             density_increment = growth / (avg_interval_calc + 1)
             decay_factor = math.exp(-decay * avg_interval_calc)
 
-            new_weight = self.density_calculator.calculate(
-                prev_weight=self.session_weights[session_id],
+            new_weight = self._density_calculator.calculate(
+                prev_weight=self._session_weights[session_id],
                 density_increment=density_increment,
                 decay_factor=decay_factor,
                 avg_interval=avg_interval_calc,
             )
-            self.session_weights[session_id] = new_weight
+            self._session_weights[session_id] = new_weight
 
             return segment_id
 
     def get_density_weight(self, session_id: str) -> float:
         """Return current density weight for a session."""
-        w = max(1e-9, self.session_weights.get(session_id, 1e-9) * 10)
+        w = max(1e-9, self._session_weights.get(session_id, 1e-9) * 10)
         return 0.05 * max(-4, math.log(self._SCALING_FACTOR * w))
