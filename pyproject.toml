@@ -27,6 +27,7 @@ dependencies = [
     "langchain-community==0.3.24",
     "python-dotenv",
     "httpx[socks]",
+    "langgraph",
 ]
 
 [project.urls]
@@ -146,7 +147,7 @@ reportPrivateUsage = false
 
 
 [tool.hatch.build]
-packages = ["src"]
+packages = ["src/cogniweave"]
 
 [tool.hatch.build.targets.sdist]
 include = ["/README.md", "/src"]
