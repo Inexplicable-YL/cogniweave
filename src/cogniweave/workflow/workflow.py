@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel
@@ -11,9 +11,11 @@ from cogniweave.core.memory.updater import (
     ShortTermMemoryMaker,
 )
 
+if TYPE_CHECKING:
+    from langgraph.graph.state import CompiledStateGraph
+
 
 class ChatState(BaseModel):
-
     name: str
     messages: list[Any]
     timestamp: float
@@ -27,8 +29,7 @@ class ChatState(BaseModel):
     updated_long_memory: str | None = None
 
 
-def build_memory_graph(lang: Literal["zh", "en"] = "zh") -> StateGraph:
-
+def build_memory_graph(lang: Literal["zh", "en"] = "zh") -> CompiledStateGraph:
     end_detector = ConversationEndDetector(lang=lang)
     short_term_maker = ShortTermMemoryMaker(lang=lang)
     long_term_maker = LongTermMemoryMaker(lang=lang)
