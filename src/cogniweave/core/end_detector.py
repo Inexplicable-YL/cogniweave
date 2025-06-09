@@ -27,7 +27,7 @@ class ConversationEndClassifier(PydanticSingleTurnChat[Literal["zh", "en"], Conv
         default_factory=get_provider_from_env("END_DETECTOR_MODEL", default="openai")
     )
     model_name: str = Field(
-        default_factory=get_model_from_env("END_DETECTOR_MODEL", default="gpt-4.1-nano")
+        default_factory=get_model_from_env("END_DETECTOR_MODEL", default="gpt-4.1-mini")
     )
     temperature: float = 1.0  # add some randomness, does not affect that much tbh.
 
