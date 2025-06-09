@@ -1,3 +1,8 @@
+"""注意本文件的代码中过期清除部分的逻辑需要重构。可以使用非异步的TTL来实现。
+
+具体可以参考 https://github.com/Inexplicable-YL/LRU-TTLCache 的实现。
+"""
+
 import asyncio
 import itertools
 import math
@@ -7,6 +12,7 @@ import uuid
 from collections import defaultdict, deque
 from enum import Enum
 
+import anyio
 from pydantic import BaseModel, PrivateAttr
 
 
@@ -207,7 +213,7 @@ class ConditionDensityManager(BaseModel):
     _segment_id_per_key: dict[str, str] = PrivateAttr(default_factory=dict)
     _density_calculator: DensityCalculator | None = PrivateAttr(default=None)
     _weighted_avg_calc: WeightedAverageCalculator | None = PrivateAttr(default=None)
-    _alock: asyncio.Lock = PrivateAttr(default=asyncio.Lock())
+    _alocks: dict[str, anyio.Lock] = PrivateAttr(default=defaultdict(anyio.Lock))
     _prune_task: asyncio.Task | None = PrivateAttr(default=None)
 
     def __init__(self, **data: object) -> None:
@@ -228,19 +234,18 @@ class ConditionDensityManager(BaseModel):
 
     async def auto_prune(self, interval: float = 60.0) -> None:
         """periodically prune stale user state."""
-        assert self._alock
         while True:
             await asyncio.sleep(interval)
-            async with self._alock:
-                now = time.time()
-                for key in list(self._session_timestamps.keys()):
-                    self._session_timestamps[key].prune(now)
-                    if not self._session_timestamps[key].get_all():
-                        del self._session_timestamps[key]
-                        del self._session_weights[key]
-                        self._last_timestamp.pop(key, None)
-                        self._intervals.pop(key, None)
-                        self._message_count.pop(key, None)
+            now = time.time()
+            for session_id in list(self._session_timestamps.keys()):
+                async with self._alocks[session_id]:
+                    self._session_timestamps[session_id].prune(now)
+                    if not self._session_timestamps[session_id].get_all():
+                        del self._session_timestamps[session_id]
+                        del self._session_weights[session_id]
+                        self._last_timestamp.pop(session_id, None)
+                        self._intervals.pop(session_id, None)
+                        self._message_count.pop(session_id, None)
 
     def update_condition_density(self, session_id: str, current_time: float | None = None) -> str:  # noqa: PLR0915
         """Update density for a session.
@@ -338,7 +343,7 @@ class ConditionDensityManager(BaseModel):
     async def aupdate_condition_density(
         self, session_id: str, current_time: float | None = None
     ) -> str:
-        async with self._alock:
+        async with self._alocks[session_id]:
             return self.update_condition_density(session_id, current_time)
 
     def get_density_weight(self, session_id: str) -> float:
