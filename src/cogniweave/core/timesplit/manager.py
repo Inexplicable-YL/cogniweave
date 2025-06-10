@@ -1,9 +1,3 @@
-"""注意本文件的代码中过期清除部分的逻辑需要重构。可以使用非异步的TTL来实现。
-
-具体可以参考 https://github.com/Inexplicable-YL/LRU-TTLCache 的实现。
-"""
-
-import asyncio
 import itertools
 import math
 import statistics
@@ -11,6 +5,7 @@ import time
 import uuid
 from collections import defaultdict, deque
 from enum import Enum
+from typing import Any
 
 import anyio
 from pydantic import BaseModel, PrivateAttr
@@ -224,8 +219,26 @@ class ConditionDensityManager(BaseModel):
     _weighted_avg_calc: WeightedAverageCalculator | None = PrivateAttr(default=None)
     _alocks: dict[str, anyio.Lock] = PrivateAttr(default=defaultdict(anyio.Lock))
 
-    def __init__(self, **data: object) -> None:
-        super().__init__(**data)
+    def __init__(
+        self,
+        *,
+        time_window: float | None = None,
+        density_strategy: DensityStrategy = DensityStrategy.AUTO,
+        segment_factor: float = 0.5,
+        segment_min: float = 60.0,
+        segment_max: float = 3600.0,
+        std_multiplier: float = 0.5,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            time_window=time_window,
+            density_strategy=density_strategy,
+            segment_factor=segment_factor,
+            segment_min=segment_min,
+            segment_max=segment_max,
+            std_multiplier=std_multiplier,
+            **kwargs,
+        )
         self._session_timestamps = defaultdict(
             lambda: TimeWheel(self._WINDOW_SIZE, self.time_window or 0)
         )
@@ -238,7 +251,7 @@ class ConditionDensityManager(BaseModel):
         )
         self._weighted_avg_calc = WeightedAverageCalculator(self._ADAPTIVE_STRENGTH)
 
-    def update_condition_density(self, session_id: str, current_time: float | None = None) -> str:  # noqa: PLR0915
+    def update_condition_density(self, session_id: str, current_time: float | None = None) -> str:
         """Update density for a session.
 
         Args:
