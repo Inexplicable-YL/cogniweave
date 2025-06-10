@@ -39,27 +39,36 @@ class TimeWheel:
         self.window_size = window_size
         self.time_window = time_window
 
-    def add(self, timestamp: float) -> None:
-        """add a timestamp to the appropriate slot."""
-        slot_key = math.floor(timestamp / self.time_window) if self.time_window else 0
-        self.slots[slot_key].append(timestamp)
-        if len(self.slots[slot_key]) > self.window_size:
-            self.slots[slot_key].popleft()
-
-    def prune(self, current_time: float) -> None:
-        """remove slots that are older than the time window."""
+    def _prune(self, current_time: float) -> None:
+        if not self.time_window:
+            return
         expired = [
             key for key in self.slots if (current_time - key * self.time_window) > self.time_window
         ]
         for key in expired:
             del self.slots[key]
 
-    def get_all(self) -> deque[float]:
+    def add(self, timestamp: float) -> None:
+        """add a timestamp and prune expired slots."""
+        self._prune(timestamp)
+        slot_key = math.floor(timestamp / self.time_window) if self.time_window else 0
+        self.slots[slot_key].append(timestamp)
+        if len(self.slots[slot_key]) > self.window_size:
+            self.slots[slot_key].popleft()
+
+    def get_all(self, current_time: float | None = None) -> deque[float]:
         """retrieve all timestamps in ascending order."""
+        if current_time is not None:
+            self._prune(current_time)
         all_ts = deque()
         for slot in sorted(self.slots.keys()):
             all_ts.extend(self.slots[slot])
         return all_ts
+
+    def is_empty(self, current_time: float) -> bool:
+        """Return ``True`` if the wheel contains no valid timestamps."""
+        self._prune(current_time)
+        return not self.slots
 
 
 class WeightedAverageCalculator:
@@ -214,7 +223,6 @@ class ConditionDensityManager(BaseModel):
     _density_calculator: DensityCalculator | None = PrivateAttr(default=None)
     _weighted_avg_calc: WeightedAverageCalculator | None = PrivateAttr(default=None)
     _alocks: dict[str, anyio.Lock] = PrivateAttr(default=defaultdict(anyio.Lock))
-    _prune_task: asyncio.Task | None = PrivateAttr(default=None)
 
     def __init__(self, **data: object) -> None:
         super().__init__(**data)
@@ -229,23 +237,6 @@ class ConditionDensityManager(BaseModel):
             auto_threshold_high=self._AUTO_HIGH,
         )
         self._weighted_avg_calc = WeightedAverageCalculator(self._ADAPTIVE_STRENGTH)
-        if self.time_window:
-            self._prune_task = asyncio.create_task(self.auto_prune(interval=60.0))
-
-    async def auto_prune(self, interval: float = 60.0) -> None:
-        """periodically prune stale user state."""
-        while True:
-            await asyncio.sleep(interval)
-            now = time.time()
-            for session_id in list(self._session_timestamps.keys()):
-                async with self._alocks[session_id]:
-                    self._session_timestamps[session_id].prune(now)
-                    if not self._session_timestamps[session_id].get_all():
-                        del self._session_timestamps[session_id]
-                        del self._session_weights[session_id]
-                        self._last_timestamp.pop(session_id, None)
-                        self._intervals.pop(session_id, None)
-                        self._message_count.pop(session_id, None)
 
     def update_condition_density(self, session_id: str, current_time: float | None = None) -> str:  # noqa: PLR0915
         """Update density for a session.
@@ -295,8 +286,6 @@ class ConditionDensityManager(BaseModel):
                 self._message_count[session_id] += 1
                 tw = self._session_timestamps[session_id]
                 tw.add(now)
-                if self.time_window:
-                    tw.prune(now)
                 return segment_id
 
         else:
@@ -310,10 +299,8 @@ class ConditionDensityManager(BaseModel):
         # add current timestamp to time wheel
         tw = self._session_timestamps[session_id]
         tw.add(now)
-        if self.time_window:
-            tw.prune(now)
 
-        timestamps = tw.get_all()
+        timestamps = tw.get_all(now if self.time_window else None)
         if len(timestamps) < 2:  # noqa: PLR2004
             avg_interval_calc = 100.0
         else:
