@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from typing_extensions import override
@@ -7,7 +8,10 @@ from typing_extensions import override
 import anyio
 from langchain_core.messages import BaseMessage, message_to_dict
 from langchain_core.runnables import RunnableSerializable
-from cogniweave.core.database import ChatBlock, ChatMessage, SessionLocal, User, init_db
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from cogniweave.core.database import Base, ChatBlock, ChatMessage, User
 from cogniweave.core.timesplit import ContextTimeSplitter
 
 if TYPE_CHECKING:
@@ -23,10 +27,25 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
     message_key: str = "message"
     timestamp_key: str = "timestamp"
 
-    def __init__(self, **kwargs: Any) -> None:
-        self.splitter = ContextTimeSplitter(**kwargs)
+    def __init__(
+        self, *, db_url: str | None = None, echo: bool = False, **splitter_kwargs: Any
+    ) -> None:
+        """Create a new ``HistoryStore``.
+
+        Args:
+            db_url: Database connection string. Defaults to ``os.getenv("CHAT_DB_URL")`` or a
+                local SQLite file if unset.
+            echo: If ``True``, SQLAlchemy will log all statements.
+            **splitter_kwargs: Additional options forwarded to ``ContextTimeSplitter``.
+        """
+        self.splitter = ContextTimeSplitter(**splitter_kwargs)
+        url = db_url or os.getenv("CHAT_DB_URL", "sqlite:///optimized_chat_db.sqlite")
+        self.engine = create_engine(url, echo=echo, future=True)
+        self.SessionLocal = sessionmaker(
+            bind=self.engine, autoflush=False, autocommit=False, future=True
+        )
+        Base.metadata.create_all(bind=self.engine)
         super().__init__()
-        init_db()
 
     def _get_or_create_user(self, session: Session, name: str) -> User:
         user = session.query(User).filter_by(name=name).first()
@@ -96,7 +115,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         context_id = split["context_id"]
         start_ts = split["timestamp"]
 
-        with SessionLocal() as session:
+        with self.SessionLocal() as session:
             self._store(session, user_name, message, float(timestamp), context_id, start_ts)
 
     @override
@@ -126,7 +145,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
 
         await anyio.to_thread.run_sync(
             self._store,
-            SessionLocal(),
+            self.SessionLocal(),
             user_name,
             message,
             float(timestamp),

@@ -4,9 +4,9 @@ from typing import TYPE_CHECKING, Any
 from typing_extensions import override
 
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import declarative_base, relationship
 
-from .base import Base
+Base = declarative_base()
 
 if TYPE_CHECKING:
     from datetime import datetime
