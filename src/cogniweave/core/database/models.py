@@ -1,60 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from typing_extensions import override
 
-from sqlalchemy import (
-    JSON,
-    Column,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    create_engine,
-)
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy.orm import declarative_base, relationship
 
-# ------------------------------------------------------------------------------
-# Base and Engine Configuration
-# ------------------------------------------------------------------------------
-
-# Base class for declarative models
 Base = declarative_base()
 
-# Create engine (SQLite for example; swap with PostgreSQL/MySQL URI in production)
-ENGINE = create_engine(
-    "sqlite:///optimized_chat_db.sqlite",
-    echo=False,
-    future=True,
-)
-
-# Session factory for creating new Session objects
-SessionLocal = sessionmaker(bind=ENGINE, autoflush=False, autocommit=False, future=True)
-
-
-def init_db() -> None:
-    """Initialize all tables in the database.
-
-    Must be called once at application startup.
-    """
-    Base.metadata.create_all(bind=ENGINE)
-
-
-# ------------------------------------------------------------------------------
-# ORM Models
-# ------------------------------------------------------------------------------
+if TYPE_CHECKING:
+    from datetime import datetime
 
 
 class User(Base):
-    """Represents a chat user.
-
-    Attributes:
-        id: Primary key.
-        name: Display name of the user.
-        chat_blocks: All chat blocks belonging to this user, ordered by start_time.
-    """
+    """Represents a chat user."""
 
     __tablename__ = "users"
 
@@ -75,20 +34,12 @@ class User(Base):
 
 
 class ChatBlock(Base):
-    """Represents a contiguous block of chat messages for a user.
-
-    Attributes:
-        id: Primary key.
-        user_id: Foreign key to users.id.
-        start_time: Timestamp of the earliest message in this block.
-        user: Back-reference to User.
-        messages: All messages in this block, ordered by timestamp.
-        attributes: Any auxiliary data (short-term memory, topics, embeddings).
-    """
+    """Represents a contiguous block of chat messages for a user."""
 
     __tablename__ = "chat_blocks"
 
     id: Column[int] = Column(Integer, primary_key=True)
+    context_id: Column[str] = Column(String, nullable=False, unique=True, index=True)
     user_id: Column[int] = Column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -116,19 +67,14 @@ class ChatBlock(Base):
 
     @override
     def __repr__(self) -> str:
-        return f"<ChatBlock(id={self.id}, user_id={self.user_id}, start_time={self.start_time})>"
+        return (
+            f"<ChatBlock(id={self.id}, context_id={self.context_id!r}, "
+            f"user_id={self.user_id}, start_time={self.start_time})>"
+        )
 
 
 class ChatMessage(Base):
-    """Represents a single chat message within a ChatBlock.
-
-    Attributes:
-        id: Primary key.
-        block_id: Foreign key to chat_blocks.id.
-        timestamp: Timestamp of the message (used for ordering within block).
-        content: JSON blob containing the message content.
-        block: Back-reference to ChatBlock.
-    """
+    """Represents a single chat message within a ChatBlock."""
 
     __tablename__ = "chat_messages"
 
@@ -155,15 +101,7 @@ class ChatMessage(Base):
 
 
 class ChatBlockAttribute(Base):
-    """Auxiliary data for a ChatBlock, such as short-term memory or embedding.
-
-    Attributes:
-        id: Primary key.
-        block_id: Foreign key to chat_blocks.id.
-        type: Type of attribute (e.g., 'short_term_memory', 'topic', 'embedding').
-        value: Arbitrary JSON value storing the attribute data.
-        block: Back-reference to ChatBlock.
-    """
+    """Auxiliary data for a ChatBlock, such as short-term memory or embedding."""
 
     __tablename__ = "chat_block_attributes"
 
