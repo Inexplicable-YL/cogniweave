@@ -14,7 +14,7 @@ def test_history_store_persistence_and_retrieval(tmp_path: Path) -> None:
     for i, text in enumerate(msgs):
         store.invoke({"message": HumanMessage(text), "timestamp": 1000.0 + i}, config=cfg)
 
-    with store.session_local() as session:
+    with store._session_local() as session:
         blocks = session.query(ChatBlock).all()
         messages = session.query(ChatMessage).all()
 

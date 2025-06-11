@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 class HistoryStore(RunnableSerializable[dict[str, Any], None]):
     """Persist chat messages grouped by session."""
 
-    session_local: sessionmaker[Session] = PrivateAttr()
+    _session_local: sessionmaker[Session] = PrivateAttr()
 
     user_key: str = "user"
     message_key: str = "message"
@@ -41,12 +41,10 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         """
         url = db_url or os.getenv("CHAT_DB_URL", "sqlite:///optimized_chat_db.sqlite")
         engine = create_engine(url, echo=echo, future=True)
-        session_local = sessionmaker(
-            bind=engine, autoflush=False, autocommit=False, future=True
-        )
+        session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
         Base.metadata.create_all(bind=engine)
         super().__init__()
-        self.session_local = session_local
+        self._session_local = session_local
 
     def _get_or_create_user(self, session: Session, name: str) -> User:
         user = session.query(User).filter_by(name=name).first()
@@ -116,7 +114,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         context_id = session_id
         start_ts = float(session_ts)
 
-        with self.session_local() as session:
+        with self._session_local() as session:
             self._store(session, user_name, message, float(timestamp), context_id, start_ts)
 
     @override
@@ -146,7 +144,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
 
         await to_thread.run_sync(
             self._store,
-            self.session_local(),
+            self._session_local(),
             user_name,
             message,
             float(timestamp),
@@ -154,13 +152,9 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
             start_ts,
         )
 
-    # ------------------------------------------------------------------
-    # Retrieval helpers
-    # ------------------------------------------------------------------
-
     def get_history(self, session_id: str) -> list[BaseMessage]:
         """Return ordered messages for a single session."""
-        with self.session_local() as session:
+        with self._session_local() as session:
             block = session.query(ChatBlock).filter_by(context_id=session_id).first()
             if not block:
                 return []
