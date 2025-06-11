@@ -5,25 +5,26 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from typing_extensions import override
 
-import anyio
+from anyio import to_thread
 from langchain_core.messages import (
     BaseMessage,
-    message_from_dict,
     message_to_dict,
+    messages_from_dict,
 )
 from langchain_core.runnables import RunnableSerializable
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from cogniweave.core.database import Base, ChatBlock, ChatMessage, User
 
 if TYPE_CHECKING:
     from langchain_core.runnables.config import RunnableConfig
-    from sqlalchemy.orm import Session
 
 
 class HistoryStore(RunnableSerializable[dict[str, Any], None]):
     """Persist chat messages grouped by session."""
+
+    session_local: sessionmaker[Session]
 
     user_key: str = "user"
     message_key: str = "message"
@@ -38,12 +39,10 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
             echo: If ``True``, SQLAlchemy will log all statements.
         """
         url = db_url or os.getenv("CHAT_DB_URL", "sqlite:///optimized_chat_db.sqlite")
-        self.engine = create_engine(url, echo=echo, future=True)
-        self.SessionLocal = sessionmaker(
-            bind=self.engine, autoflush=False, autocommit=False, future=True
-        )
-        Base.metadata.create_all(bind=self.engine)
-        super().__init__()
+        engine = create_engine(url, echo=echo, future=True)
+        session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+        Base.metadata.create_all(bind=engine)
+        super().__init__(session_local=session_local)  # type: ignore
 
     def _get_or_create_user(self, session: Session, name: str) -> User:
         user = session.query(User).filter_by(name=name).first()
@@ -113,7 +112,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         context_id = session_id
         start_ts = float(session_ts)
 
-        with self.SessionLocal() as session:
+        with self.session_local() as session:
             self._store(session, user_name, message, float(timestamp), context_id, start_ts)
 
     @override
@@ -141,9 +140,9 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         context_id = session_id
         start_ts = float(session_ts)
 
-        await anyio.to_thread.run_sync(
+        await to_thread.run_sync(
             self._store,
-            self.SessionLocal(),
+            self.session_local(),
             user_name,
             message,
             float(timestamp),
@@ -157,15 +156,15 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
 
     def get_history(self, session_id: str) -> list[BaseMessage]:
         """Return ordered messages for a single session."""
-        with self.SessionLocal() as session:
+        with self.session_local() as session:
             block = session.query(ChatBlock).filter_by(context_id=session_id).first()
             if not block:
                 return []
-            return [message_from_dict(m.content) for m in block.messages]
+            return messages_from_dict([m.content for m in block.messages])
 
     async def aget_history(self, session_id: str) -> list[BaseMessage]:
         """Asynchronously return ordered messages for a single session."""
-        return await anyio.to_thread.run_sync(self.get_history, session_id)
+        return await to_thread.run_sync(self.get_history, session_id)
 
     def get_histories(self, session_ids: list[str]) -> list[BaseMessage]:
         """Concatenate histories for multiple sessions in order."""
@@ -176,4 +175,4 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
 
     async def aget_histories(self, session_ids: list[str]) -> list[BaseMessage]:
         """Asynchronously concatenate histories for multiple sessions."""
-        return await anyio.to_thread.run_sync(self.get_histories, session_ids)
+        return await to_thread.run_sync(self.get_histories, session_ids)
