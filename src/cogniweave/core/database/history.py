@@ -12,6 +12,7 @@ from langchain_core.messages import (
     messages_from_dict,
 )
 from langchain_core.runnables import RunnableSerializable
+from pydantic import PrivateAttr
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
 class HistoryStore(RunnableSerializable[dict[str, Any], None]):
     """Persist chat messages grouped by session."""
 
-    session_local: sessionmaker[Session]
+    session_local: sessionmaker[Session] = PrivateAttr()
 
     user_key: str = "user"
     message_key: str = "message"
@@ -40,9 +41,12 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         """
         url = db_url or os.getenv("CHAT_DB_URL", "sqlite:///optimized_chat_db.sqlite")
         engine = create_engine(url, echo=echo, future=True)
-        session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+        session_local = sessionmaker(
+            bind=engine, autoflush=False, autocommit=False, future=True
+        )
         Base.metadata.create_all(bind=engine)
-        super().__init__(session_local=session_local)  # type: ignore
+        super().__init__()
+        self.session_local = session_local
 
     def _get_or_create_user(self, session: Session, name: str) -> User:
         user = session.query(User).filter_by(name=name).first()
