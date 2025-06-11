@@ -6,13 +6,16 @@ from typing import TYPE_CHECKING, Any
 from typing_extensions import override
 
 import anyio
-from langchain_core.messages import BaseMessage, message_to_dict
+from langchain_core.messages import (
+    BaseMessage,
+    message_from_dict,
+    message_to_dict,
+)
 from langchain_core.runnables import RunnableSerializable
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from cogniweave.core.database import Base, ChatBlock, ChatMessage, User
-from cogniweave.core.timesplit import ContextTimeSplitter
 
 if TYPE_CHECKING:
     from langchain_core.runnables.config import RunnableConfig
@@ -20,25 +23,20 @@ if TYPE_CHECKING:
 
 
 class HistoryStore(RunnableSerializable[dict[str, Any], None]):
-    """Store chat history with time-based segmentation."""
+    """Persist chat messages grouped by session."""
 
-    splitter: ContextTimeSplitter | None = None
     user_key: str = "user"
     message_key: str = "message"
     timestamp_key: str = "timestamp"
 
-    def __init__(
-        self, *, db_url: str | None = None, echo: bool = False, **splitter_kwargs: Any
-    ) -> None:
+    def __init__(self, *, db_url: str | None = None, echo: bool = False) -> None:
         """Create a new ``HistoryStore``.
 
         Args:
             db_url: Database connection string. Defaults to ``os.getenv("CHAT_DB_URL")`` or a
                 local SQLite file if unset.
             echo: If ``True``, SQLAlchemy will log all statements.
-            **splitter_kwargs: Additional options forwarded to ``ContextTimeSplitter``.
         """
-        self.splitter = ContextTimeSplitter(**splitter_kwargs)
         url = db_url or os.getenv("CHAT_DB_URL", "sqlite:///optimized_chat_db.sqlite")
         self.engine = create_engine(url, echo=echo, future=True)
         self.SessionLocal = sessionmaker(
@@ -97,9 +95,13 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         if not config:
             raise ValueError("config must be provided")
         session_id = config.get("configurable", {}).get("session_id", "")
+        session_ts = config.get("configurable", {}).get("session_timestamp")
         user_name = config.get("configurable", {}).get("user_name", session_id)
+
         if not session_id:
             raise ValueError("session_id is required")
+        if not isinstance(session_ts, (int, float)):
+            raise TypeError("session_timestamp is required")
 
         message = input.get(self.message_key)
         timestamp = input.get(self.timestamp_key)
@@ -108,12 +110,8 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         if not isinstance(timestamp, (int, float)):
             raise TypeError("timestamp must be a number")
 
-        assert self.splitter is not None
-        split = self.splitter.invoke(
-            {"timestamp": float(timestamp)}, config={"configurable": {"session_id": session_id}}
-        )
-        context_id = split["context_id"]
-        start_ts = split["timestamp"]
+        context_id = session_id
+        start_ts = float(session_ts)
 
         with self.SessionLocal() as session:
             self._store(session, user_name, message, float(timestamp), context_id, start_ts)
@@ -125,9 +123,13 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         if not config:
             raise ValueError("config must be provided")
         session_id = config.get("configurable", {}).get("session_id", "")
+        session_ts = config.get("configurable", {}).get("session_timestamp")
         user_name = config.get("configurable", {}).get("user_name", session_id)
+
         if not session_id:
             raise ValueError("session_id is required")
+        if not isinstance(session_ts, (int, float)):
+            raise TypeError("session_timestamp is required")
 
         message = input.get(self.message_key)
         timestamp = input.get(self.timestamp_key)
@@ -136,12 +138,8 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         if not isinstance(timestamp, (int, float)):
             raise TypeError("timestamp must be a number")
 
-        assert self.splitter is not None
-        split = await self.splitter.ainvoke(
-            {"timestamp": float(timestamp)}, config={"configurable": {"session_id": session_id}}
-        )
-        context_id = split["context_id"]
-        start_ts = split["timestamp"]
+        context_id = session_id
+        start_ts = float(session_ts)
 
         await anyio.to_thread.run_sync(
             self._store,
@@ -152,3 +150,30 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
             context_id,
             start_ts,
         )
+
+    # ------------------------------------------------------------------
+    # Retrieval helpers
+    # ------------------------------------------------------------------
+
+    def get_history(self, session_id: str) -> list[BaseMessage]:
+        """Return ordered messages for a single session."""
+        with self.SessionLocal() as session:
+            block = session.query(ChatBlock).filter_by(context_id=session_id).first()
+            if not block:
+                return []
+            return [message_from_dict(m.content) for m in block.messages]
+
+    async def aget_history(self, session_id: str) -> list[BaseMessage]:
+        """Asynchronously return ordered messages for a single session."""
+        return await anyio.to_thread.run_sync(self.get_history, session_id)
+
+    def get_histories(self, session_ids: list[str]) -> list[BaseMessage]:
+        """Concatenate histories for multiple sessions in order."""
+        messages: list[BaseMessage] = []
+        for sid in sorted(session_ids):
+            messages.extend(self.get_history(sid))
+        return messages
+
+    async def aget_histories(self, session_ids: list[str]) -> list[BaseMessage]:
+        """Asynchronously concatenate histories for multiple sessions."""
+        return await anyio.to_thread.run_sync(self.get_histories, session_ids)
