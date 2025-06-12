@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 from typing_extensions import override
 
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
@@ -24,7 +24,38 @@ if TYPE_CHECKING:
     from langchain_core.runnables.config import RunnableConfig
 
 
-class HistoryStore(RunnableSerializable[dict[str, Any], None]):
+class MessageInput(TypedDict):
+    """Input for storing a single message."""
+
+    message: BaseMessage
+    timestamp: float
+
+
+class BlockAttributeData(TypedDict, total=False):
+    """Structure of a block attribute."""
+
+    type: str
+    value: Any
+
+
+class AttributeInput(TypedDict):
+    """Input for storing a block attribute."""
+
+    block_attribute: BlockAttributeData
+
+
+class BlockAttributeOutput(TypedDict):
+    """TypedDict representation of a stored block attribute."""
+
+    id: int
+    block_id: int
+    type: str
+    value: Any | None
+
+
+class HistoryStore(
+    RunnableSerializable[dict[str, Any] | MessageInput | AttributeInput, None]
+):
     """Persist chat messages grouped by session."""
 
     _session_local: sessionmaker[Session] = PrivateAttr()
@@ -113,7 +144,10 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
 
     @override
     def invoke(
-        self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
+        self,
+        input: dict[str, Any] | MessageInput | AttributeInput,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
     ) -> None:
         if not config:
             raise ValueError("config must be provided")
@@ -169,7 +203,10 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
 
     @override
     async def ainvoke(
-        self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
+        self,
+        input: dict[str, Any] | MessageInput | AttributeInput,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
     ) -> None:
         if not config:
             raise ValueError("config must be provided")
@@ -255,16 +292,46 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         return messages
 
     def get_block_attributes(
-        self, session_id: int, *, types: list[str] | None = None
-    ) -> list[ChatBlockAttribute]:
+        self, session_id: str, *, types: list[str] | None = None
+    ) -> list[BlockAttributeOutput]:
         """Return ordered attributes for a chat block."""
         with self._session_local() as session:
             block = session.query(ChatBlock).filter_by(context_id=session_id).first()
+            if not block:
+                return []
+
+            attrs = sorted(block.attributes, key=lambda a: a.id)
+            if types is not None:
+                attrs = [attr for attr in attrs if attr.type in types]
+            return [
+                BlockAttributeOutput(
+                    id=attr.id,
+                    block_id=attr.block_id,
+                    type=attr.type,
+                    value=attr.value,
+                )
+                for attr in attrs
+            ]
 
     async def aget_block_attributes(
-        self, session_id: int, *, types: list[str] | None = None
-    ) -> list[ChatBlockAttribute]:
+        self, session_id: str, *, types: list[str] | None = None
+    ) -> list[BlockAttributeOutput]:
         """Asynchronously return ordered attributes for a chat block."""
         async with self._async_session_local() as session:
             result = await session.execute(select(ChatBlock).filter_by(context_id=session_id))
             block = result.scalar_one_or_none()
+            if not block:
+                return []
+
+            attrs = sorted(block.attributes, key=lambda a: a.id)
+            if types is not None:
+                attrs = [attr for attr in attrs if attr.type in types]
+            return [
+                BlockAttributeOutput(
+                    id=attr.id,
+                    block_id=attr.block_id,
+                    type=attr.type,
+                    value=attr.value,
+                )
+                for attr in attrs
+            ]
