@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from typing_extensions import override
 
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
@@ -154,7 +154,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
             if message is not None:
                 record = ChatMessage(
                     block_id=block.id,
-                    timestamp=datetime.fromtimestamp(float(timestamp)),
+                    timestamp=datetime.fromtimestamp(float(cast("float | int", timestamp))),
                     content=message_to_dict(message),
                 )
                 session.add(record)
@@ -210,7 +210,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
             if message is not None:
                 record = ChatMessage(
                     block_id=block.id,
-                    timestamp=datetime.fromtimestamp(float(timestamp)),
+                    timestamp=datetime.fromtimestamp(float(cast("float | int", timestamp))),
                     content=message_to_dict(message),
                 )
                 session.add(record)
@@ -254,37 +254,17 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
             messages.extend(await self.aget_history(sid))
         return messages
 
-    def add_block_attribute(self, block_id: int, type: str, value: Any) -> None:
-        """Add an attribute to a chat block."""
-        with self._session_local() as session:
-            attr = ChatBlockAttribute(block_id=block_id, type=type, value=value)
-            session.add(attr)
-            session.commit()
-
-    async def aadd_block_attribute(self, block_id: int, type: str, value: Any) -> None:
-        """Asynchronously add an attribute to a chat block."""
-        async with self._async_session_local() as session:
-            attr = ChatBlockAttribute(block_id=block_id, type=type, value=value)
-            session.add(attr)
-            await session.commit()
-
     def get_block_attributes(
-        self, block_id: int, *, type: str | None = None
+        self, session_id: int, *, types: list[str] | None = None
     ) -> list[ChatBlockAttribute]:
         """Return ordered attributes for a chat block."""
         with self._session_local() as session:
-            query = session.query(ChatBlockAttribute).filter_by(block_id=block_id)
-            if type is not None:
-                query = query.filter_by(type=type)
-            return query.order_by(ChatBlockAttribute.id).all()
+            block = session.query(ChatBlock).filter_by(context_id=session_id).first()
 
     async def aget_block_attributes(
-        self, block_id: int, *, type: str | None = None
+        self, session_id: int, *, types: list[str] | None = None
     ) -> list[ChatBlockAttribute]:
         """Asynchronously return ordered attributes for a chat block."""
         async with self._async_session_local() as session:
-            stmt = select(ChatBlockAttribute).filter_by(block_id=block_id)
-            if type is not None:
-                stmt = stmt.filter_by(type=type)
-            result = await session.execute(stmt.order_by(ChatBlockAttribute.id))
-            return list(result.scalars())
+            result = await session.execute(select(ChatBlock).filter_by(context_id=session_id))
+            block = result.scalar_one_or_none()

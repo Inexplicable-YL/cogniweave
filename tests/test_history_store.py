@@ -1,15 +1,21 @@
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 from langchain_core.messages import HumanMessage
 
 from cogniweave.core.database import ChatBlock, ChatMessage
 from cogniweave.core.database.history import HistoryStore
 
+if TYPE_CHECKING:
+    from langchain_core.runnables.config import RunnableConfig
+
 
 def test_history_store_persistence_and_retrieval(tmp_path: Path) -> None:
     store = HistoryStore(db_url=f"sqlite:///{tmp_path}/test.sqlite")
 
-    cfg = {"configurable": {"session_id": "s1", "session_timestamp": 1000.0}}
+    cfg = cast(
+        "RunnableConfig", {"configurable": {"session_id": "s1", "session_timestamp": 1000.0}}
+    )
     msgs = ["hi", "how", "are", "you"]
     for i, text in enumerate(msgs):
         store.invoke({"message": HumanMessage(text), "timestamp": 1000.0 + i}, config=cfg)
@@ -27,7 +33,7 @@ def test_history_store_persistence_and_retrieval(tmp_path: Path) -> None:
 async def test_history_store_async(tmp_path: Path) -> None:
     store = HistoryStore(db_url=f"sqlite:///{tmp_path}/async.sqlite")
 
-    cfg = {"configurable": {"session_id": "s2", "session_timestamp": 50.0}}
+    cfg = cast("RunnableConfig", {"configurable": {"session_id": "s2", "session_timestamp": 50.0}})
     await store.ainvoke({"message": HumanMessage("hello"), "timestamp": 51.0}, config=cfg)
     await store.ainvoke({"message": HumanMessage("world"), "timestamp": 52.0}, config=cfg)
 
