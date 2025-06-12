@@ -38,7 +38,7 @@ class ChatBlock(Base):
     __tablename__ = "chat_blocks"
 
     context_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
-    user_id: Mapped[int] = mapped_column(
+    session_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -58,13 +58,15 @@ class ChatBlock(Base):
         lazy="selectin",
     )
 
-    __table_args__ = (Index("idx_chat_blocks_user_start", "user_id", "start_time"),)
+    __table_args__ = (
+        Index("idx_chat_blocks_session_start", "session_id", "start_time"),
+    )
 
     @override
     def __repr__(self) -> str:
         return (
             f"<ChatBlock(id={self.id}, context_id={self.context_id!r}, "
-            f"user_id={self.user_id}, start_time={self.start_time})>"
+            f"session_id={self.session_id}, start_time={self.start_time})>"
         )
 
 
