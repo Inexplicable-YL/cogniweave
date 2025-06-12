@@ -5,18 +5,20 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from typing_extensions import override
 
-from anyio import to_thread
-from langchain_core.messages import (
-    BaseMessage,
-    message_to_dict,
-    messages_from_dict,
-)
+from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
 from langchain_core.runnables import RunnableSerializable
 from pydantic import PrivateAttr
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from cogniweave.core.database import Base, ChatBlock, ChatMessage, User
+from cogniweave.core.database import (
+    Base,
+    ChatBlock,
+    ChatBlockAttribute,
+    ChatMessage,
+    User,
+)
 
 if TYPE_CHECKING:
     from langchain_core.runnables.config import RunnableConfig
@@ -26,10 +28,12 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
     """Persist chat messages grouped by session."""
 
     _session_local: sessionmaker[Session] = PrivateAttr()
+    _async_session_local: async_sessionmaker[AsyncSession] = PrivateAttr()
 
     user_key: str = "user"
     message_key: str = "message"
     timestamp_key: str = "timestamp"
+    attribute_key: str = "block_attribute"
 
     def __init__(self, *, db_url: str | None = None, echo: bool = False) -> None:
         """Create a new ``HistoryStore``.
@@ -42,9 +46,20 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         url = db_url or os.getenv("CHAT_DB_URL", "sqlite:///optimized_chat_db.sqlite")
         engine = create_engine(url, echo=echo, future=True)
         session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+        async_url = url.replace("sqlite://", "sqlite+aiosqlite://")
+        async_engine = create_async_engine(async_url, echo=echo, future=True)
+        async_session_local = async_sessionmaker(
+            bind=async_engine,
+            autoflush=False,
+            autocommit=False,
+            expire_on_commit=False,
+        )
+
         Base.metadata.create_all(bind=engine)
         super().__init__()
         self._session_local = session_local
+        self._async_session_local = async_session_local
 
     def _get_or_create_user(self, session: Session, name: str) -> User:
         user = session.query(User).filter_by(name=name).first()
@@ -53,6 +68,16 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
             session.add(user)
             session.commit()
             session.refresh(user)
+        return user
+
+    async def _a_get_or_create_user(self, session: AsyncSession, name: str) -> User:
+        result = await session.execute(select(User).filter_by(name=name))
+        user = result.scalar_one_or_none()
+        if user is None:
+            user = User(name=name)
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
         return user
 
     def _get_or_create_block(
@@ -70,24 +95,21 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
             session.refresh(block)
         return block
 
-    def _store(
-        self,
-        session: Session,
-        user: str,
-        msg: BaseMessage,
-        ts: float,
-        context_id: str,
-        start_ts: float,
-    ) -> None:
-        db_user = self._get_or_create_user(session, user)
-        block = self._get_or_create_block(session, db_user, context_id, start_ts)
-        record = ChatMessage(
-            block_id=block.id,
-            timestamp=datetime.fromtimestamp(ts),
-            content=message_to_dict(msg),
-        )
-        session.add(record)
-        session.commit()
+    async def _a_get_or_create_block(
+        self, session: AsyncSession, user: User, context_id: str, start_ts: float
+    ) -> ChatBlock:
+        result = await session.execute(select(ChatBlock).filter_by(context_id=context_id))
+        block = result.scalar_one_or_none()
+        if block is None:
+            block = ChatBlock(
+                context_id=context_id,
+                user_id=user.id,
+                start_time=datetime.fromtimestamp(start_ts),
+            )
+            session.add(block)
+            await session.commit()
+            await session.refresh(block)
+        return block
 
     @override
     def invoke(
@@ -106,16 +128,44 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
 
         message = input.get(self.message_key)
         timestamp = input.get(self.timestamp_key)
-        if not isinstance(message, BaseMessage):
-            raise TypeError("message must be a BaseMessage")
-        if not isinstance(timestamp, (int, float)):
-            raise TypeError("timestamp must be a number")
+        attribute = input.get(self.attribute_key)
+
+        if message is None and attribute is None:
+            raise ValueError("nothing to store")
+
+        if message is not None:
+            if not isinstance(message, BaseMessage):
+                raise TypeError("message must be a BaseMessage")
+            if not isinstance(timestamp, (int, float)):
+                raise TypeError("timestamp must be a number")
+
+        if attribute is not None:
+            if not isinstance(attribute, dict):
+                raise TypeError("block_attribute must be a dict")
+            if not isinstance(attribute.get("type"), str):
+                raise TypeError("block_attribute.type must be a str")
 
         context_id = session_id
         start_ts = float(session_ts)
 
         with self._session_local() as session:
-            self._store(session, user_name, message, float(timestamp), context_id, start_ts)
+            db_user = self._get_or_create_user(session, user_name)
+            block = self._get_or_create_block(session, db_user, context_id, start_ts)
+            if message is not None:
+                record = ChatMessage(
+                    block_id=block.id,
+                    timestamp=datetime.fromtimestamp(float(timestamp)),
+                    content=message_to_dict(message),
+                )
+                session.add(record)
+            if attribute is not None:
+                attr = ChatBlockAttribute(
+                    block_id=block.id,
+                    type=attribute["type"],
+                    value=attribute.get("value"),
+                )
+                session.add(attr)
+            session.commit()
 
     @override
     async def ainvoke(
@@ -134,23 +184,44 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
 
         message = input.get(self.message_key)
         timestamp = input.get(self.timestamp_key)
-        if not isinstance(message, BaseMessage):
-            raise TypeError("message must be a BaseMessage")
-        if not isinstance(timestamp, (int, float)):
-            raise TypeError("timestamp must be a number")
+        attribute = input.get(self.attribute_key)
+
+        if message is None and attribute is None:
+            raise ValueError("nothing to store")
+
+        if message is not None:
+            if not isinstance(message, BaseMessage):
+                raise TypeError("message must be a BaseMessage")
+            if not isinstance(timestamp, (int, float)):
+                raise TypeError("timestamp must be a number")
+
+        if attribute is not None:
+            if not isinstance(attribute, dict):
+                raise TypeError("block_attribute must be a dict")
+            if not isinstance(attribute.get("type"), str):
+                raise TypeError("block_attribute.type must be a str")
 
         context_id = session_id
         start_ts = float(session_ts)
 
-        await to_thread.run_sync(
-            self._store,
-            self._session_local(),
-            user_name,
-            message,
-            float(timestamp),
-            context_id,
-            start_ts,
-        )
+        async with self._async_session_local() as session:
+            db_user = await self._a_get_or_create_user(session, user_name)
+            block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
+            if message is not None:
+                record = ChatMessage(
+                    block_id=block.id,
+                    timestamp=datetime.fromtimestamp(float(timestamp)),
+                    content=message_to_dict(message),
+                )
+                session.add(record)
+            if attribute is not None:
+                attr = ChatBlockAttribute(
+                    block_id=block.id,
+                    type=attribute["type"],
+                    value=attribute.get("value"),
+                )
+                session.add(attr)
+            await session.commit()
 
     def get_history(self, session_id: str) -> list[BaseMessage]:
         """Return ordered messages for a single session."""
@@ -162,7 +233,12 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
 
     async def aget_history(self, session_id: str) -> list[BaseMessage]:
         """Asynchronously return ordered messages for a single session."""
-        return await to_thread.run_sync(self.get_history, session_id)
+        async with self._async_session_local() as session:
+            result = await session.execute(select(ChatBlock).filter_by(context_id=session_id))
+            block = result.scalar_one_or_none()
+            if not block:
+                return []
+            return messages_from_dict([m.content for m in block.messages])
 
     def get_histories(self, session_ids: list[str]) -> list[BaseMessage]:
         """Concatenate histories for multiple sessions in order."""
@@ -173,4 +249,42 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
 
     async def aget_histories(self, session_ids: list[str]) -> list[BaseMessage]:
         """Asynchronously concatenate histories for multiple sessions."""
-        return await to_thread.run_sync(self.get_histories, session_ids)
+        messages: list[BaseMessage] = []
+        for sid in sorted(session_ids):
+            messages.extend(await self.aget_history(sid))
+        return messages
+
+    def add_block_attribute(self, block_id: int, type: str, value: Any) -> None:
+        """Add an attribute to a chat block."""
+        with self._session_local() as session:
+            attr = ChatBlockAttribute(block_id=block_id, type=type, value=value)
+            session.add(attr)
+            session.commit()
+
+    async def aadd_block_attribute(self, block_id: int, type: str, value: Any) -> None:
+        """Asynchronously add an attribute to a chat block."""
+        async with self._async_session_local() as session:
+            attr = ChatBlockAttribute(block_id=block_id, type=type, value=value)
+            session.add(attr)
+            await session.commit()
+
+    def get_block_attributes(
+        self, block_id: int, *, type: str | None = None
+    ) -> list[ChatBlockAttribute]:
+        """Return ordered attributes for a chat block."""
+        with self._session_local() as session:
+            query = session.query(ChatBlockAttribute).filter_by(block_id=block_id)
+            if type is not None:
+                query = query.filter_by(type=type)
+            return query.order_by(ChatBlockAttribute.id).all()
+
+    async def aget_block_attributes(
+        self, block_id: int, *, type: str | None = None
+    ) -> list[ChatBlockAttribute]:
+        """Asynchronously return ordered attributes for a chat block."""
+        async with self._async_session_local() as session:
+            stmt = select(ChatBlockAttribute).filter_by(block_id=block_id)
+            if type is not None:
+                stmt = stmt.filter_by(type=type)
+            result = await session.execute(stmt.order_by(ChatBlockAttribute.id))
+            return list(result.scalars())

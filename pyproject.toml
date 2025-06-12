@@ -25,6 +25,8 @@ dependencies = [
     "langchain",
     "langchain_openai",
     "langchain-community==0.3.24",
+    "sqlalchemy>=2.0",
+    "aiosqlite",
     "python-dotenv",
     "httpx[socks]",
     "langgraph",
