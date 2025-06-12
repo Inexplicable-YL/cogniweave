@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from datetime import datetime
+from typing import Any
 from typing_extensions import override
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-Base = declarative_base()
 
-if TYPE_CHECKING:
-    from datetime import datetime
+class Base(DeclarativeBase):
+
+    id: Mapped[int] = mapped_column(primary_key=True)
 
 
 class User(Base):
@@ -17,11 +18,9 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id: Column[int] = Column(Integer, primary_key=True)
-    name: Column[str] = Column(String, nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
 
-    chat_blocks = relationship(
-        "ChatBlock",
+    chat_blocks: Mapped[list[ChatBlock]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         order_by="ChatBlock.start_time",
@@ -38,26 +37,22 @@ class ChatBlock(Base):
 
     __tablename__ = "chat_blocks"
 
-    id: Column[int] = Column(Integer, primary_key=True)
-    context_id: Column[str] = Column(String, nullable=False, unique=True, index=True)
-    user_id: Column[int] = Column(
-        Integer,
+    context_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    start_time: Column[datetime] = Column(DateTime, nullable=False, index=True)
+    start_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
 
-    user = relationship("User", back_populates="chat_blocks", lazy="joined")
-    messages = relationship(
-        "ChatMessage",
+    user: Mapped[User] = relationship("User", back_populates="chat_blocks", lazy="joined")
+    messages: Mapped[list[ChatMessage]] = relationship(
         back_populates="block",
         cascade="all, delete-orphan",
         order_by="ChatMessage.timestamp",
         lazy="selectin",
     )
-    attributes = relationship(
-        "ChatBlockAttribute",
+    attributes: Mapped[list[ChatBlockAttribute]] = relationship(
         back_populates="block",
         cascade="all, delete-orphan",
         lazy="selectin",
@@ -78,17 +73,15 @@ class ChatMessage(Base):
 
     __tablename__ = "chat_messages"
 
-    id: Column[int] = Column(Integer, primary_key=True)
-    block_id: Column[int] = Column(
-        Integer,
+    block_id: Mapped[int] = mapped_column(
         ForeignKey("chat_blocks.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    timestamp: Column[datetime] = Column(DateTime, nullable=False, index=True)
-    content: Column[dict[str, Any]] = Column(JSON, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
-    block = relationship("ChatBlock", back_populates="messages", lazy="joined")
+    block: Mapped[ChatBlock] = relationship("ChatBlock", back_populates="messages", lazy="joined")
 
     __table_args__ = (Index("idx_messages_block_timestamp", "block_id", "timestamp"),)
 
@@ -105,17 +98,16 @@ class ChatBlockAttribute(Base):
 
     __tablename__ = "chat_block_attributes"
 
-    id: Column[int] = Column(Integer, primary_key=True)
-    block_id: Column[int] = Column(
-        Integer,
+    id: Mapped[int] = mapped_column(primary_key=True)
+    block_id: Mapped[int] = mapped_column(
         ForeignKey("chat_blocks.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    type: Column[str] = Column(String, nullable=False, index=True)
-    value: Column[Any] = Column(JSON, nullable=False)
+    type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    value: Mapped[Any] = mapped_column(JSON, nullable=False)
 
-    block = relationship("ChatBlock", back_populates="attributes", lazy="joined")
+    block: Mapped[ChatBlock] = relationship("ChatBlock", back_populates="attributes", lazy="joined")
 
     __table_args__ = (Index("idx_block_attributes_block_type", "block_id", "type"),)
 

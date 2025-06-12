@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, cast
 
 from langchain_core.messages import HumanMessage
 
-from cogniweave.core.database import ChatBlock, ChatMessage
-from cogniweave.core.database.history import HistoryStore
+from cogniweave.historystore import ChatBlock, ChatMessage
+from cogniweave.historystore.history import HistoryStore
 
 if TYPE_CHECKING:
     from langchain_core.runnables.config import RunnableConfig
@@ -39,3 +39,29 @@ async def test_history_store_async(tmp_path: Path) -> None:
 
     history = await store.aget_history("s2")
     assert len(history) == 2
+
+
+def test_block_attributes(tmp_path: Path) -> None:
+    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/attrs.sqlite")
+    cfg = cast("RunnableConfig", {"configurable": {"session_id": "attr", "session_timestamp": 1.0}})
+    store.invoke({"message": HumanMessage("hello"), "timestamp": 1.1}, config=cfg)
+
+    store.invoke({"block_attribute": {"type": "summary", "value": {"text": "hello"}}}, config=cfg)
+    attrs = store.get_block_attributes("attr")
+    assert len(attrs) == 1
+    assert attrs[0]["type"] == "summary"
+    assert attrs[0]["value"] == {"text": "hello"}
+
+
+async def test_block_attributes_async(tmp_path: Path) -> None:
+    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/attrs.sqlite")
+    cfg = cast("RunnableConfig", {"configurable": {"session_id": "attr", "session_timestamp": 1.0}})
+    store.invoke({"message": HumanMessage("hello"), "timestamp": 1.1}, config=cfg)
+
+    await store.ainvoke(
+        {"block_attribute": {"type": "summary", "value": {"text": "hello"}}}, config=cfg
+    )
+    attrs = await store.aget_block_attributes("attr")
+    assert len(attrs) == 1
+    assert attrs[0]["type"] == "summary"
+    assert attrs[0]["value"] == {"text": "hello"}

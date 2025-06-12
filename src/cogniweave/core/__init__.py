@@ -1,3 +1,3 @@
-from .database.history import HistoryStore
+from .historystore.history import HistoryStore
 
 __all__ = ["HistoryStore"]
