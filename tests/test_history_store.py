@@ -14,7 +14,7 @@ def test_history_store_persistence_and_retrieval(tmp_path: Path) -> None:
     store = HistoryStore(db_url=f"sqlite:///{tmp_path}/test.sqlite")
 
     cfg = cast(
-        "RunnableConfig", {"configurable": {"session_id": "s1", "session_timestamp": 1000.0}}
+        "RunnableConfig", {"configurable": {"block_id": "s1", "block_timestamp": 1000.0}}
     )
     msgs = ["hi", "how", "are", "you"]
     for i, text in enumerate(msgs):
@@ -33,7 +33,7 @@ def test_history_store_persistence_and_retrieval(tmp_path: Path) -> None:
 async def test_history_store_async(tmp_path: Path) -> None:
     store = HistoryStore(db_url=f"sqlite:///{tmp_path}/async.sqlite")
 
-    cfg = cast("RunnableConfig", {"configurable": {"session_id": "s2", "session_timestamp": 50.0}})
+    cfg = cast("RunnableConfig", {"configurable": {"block_id": "s2", "block_timestamp": 50.0}})
     await store.ainvoke({"message": HumanMessage("hello"), "timestamp": 51.0}, config=cfg)
     await store.ainvoke({"message": HumanMessage("world"), "timestamp": 52.0}, config=cfg)
 
@@ -43,7 +43,7 @@ async def test_history_store_async(tmp_path: Path) -> None:
 
 def test_block_attributes(tmp_path: Path) -> None:
     store = HistoryStore(db_url=f"sqlite:///{tmp_path}/attrs.sqlite")
-    cfg = cast("RunnableConfig", {"configurable": {"session_id": "attr", "session_timestamp": 1.0}})
+    cfg = cast("RunnableConfig", {"configurable": {"block_id": "attr", "block_timestamp": 1.0}})
     store.invoke({"message": HumanMessage("hello"), "timestamp": 1.1}, config=cfg)
 
     store.invoke({"block_attribute": {"type": "summary", "value": {"text": "hello"}}}, config=cfg)
@@ -55,7 +55,7 @@ def test_block_attributes(tmp_path: Path) -> None:
 
 async def test_block_attributes_async(tmp_path: Path) -> None:
     store = HistoryStore(db_url=f"sqlite:///{tmp_path}/attrs.sqlite")
-    cfg = cast("RunnableConfig", {"configurable": {"session_id": "attr", "session_timestamp": 1.0}})
+    cfg = cast("RunnableConfig", {"configurable": {"block_id": "attr", "block_timestamp": 1.0}})
     store.invoke({"message": HumanMessage("hello"), "timestamp": 1.1}, config=cfg)
 
     await store.ainvoke(

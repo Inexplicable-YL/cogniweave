@@ -116,7 +116,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         if block is None:
             block = ChatBlock(
                 context_id=context_id,
-                user_id=user.id,
+                session_id=user.id,
                 start_time=datetime.fromtimestamp(start_ts),
             )
             session.add(block)
@@ -132,7 +132,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         if block is None:
             block = ChatBlock(
                 context_id=context_id,
-                user_id=user.id,
+                session_id=user.id,
                 start_time=datetime.fromtimestamp(start_ts),
             )
             session.add(block)
@@ -149,14 +149,14 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
     ) -> None:
         if not config:
             raise ValueError("config must be provided")
-        session_id = config.get("configurable", {}).get("session_id", "")
-        session_ts = config.get("configurable", {}).get("session_timestamp")
-        user_id = config.get("configurable", {}).get("user_id", session_id)
+        block_id = config.get("configurable", {}).get("block_id", "")
+        block_ts = config.get("configurable", {}).get("block_timestamp")
+        session_id = config.get("configurable", {}).get("session_id", block_id)
 
-        if not session_id:
-            raise ValueError("session_id is required")
-        if not isinstance(session_ts, (int, float)):
-            raise TypeError("session_timestamp is required")
+        if not block_id:
+            raise ValueError("block_id is required")
+        if not isinstance(block_ts, (int, float)):
+            raise TypeError("block_timestamp is required")
 
         message = input.get(self.message_key)
         timestamp = input.get(self.timestamp_key)
@@ -177,11 +177,11 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             if not isinstance(attribute.get("type"), str):
                 raise TypeError("block_attribute.type must be a str")
 
-        context_id = session_id
-        start_ts = float(session_ts)
+        context_id = block_id
+        start_ts = float(block_ts)
 
         with self._session_local() as session:
-            db_user = self._get_or_create_user(session, user_id)
+            db_user = self._get_or_create_user(session, session_id)
             block = self._get_or_create_block(session, db_user, context_id, start_ts)
             if message is not None:
                 record = ChatMessage(
@@ -208,14 +208,14 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
     ) -> None:
         if not config:
             raise ValueError("config must be provided")
-        session_id = config.get("configurable", {}).get("session_id", "")
-        session_ts = config.get("configurable", {}).get("session_timestamp")
-        user_id = config.get("configurable", {}).get("user_id", session_id)
+        block_id = config.get("configurable", {}).get("block_id", "")
+        block_ts = config.get("configurable", {}).get("block_timestamp")
+        session_id = config.get("configurable", {}).get("session_id", block_id)
 
-        if not session_id:
-            raise ValueError("session_id is required")
-        if not isinstance(session_ts, (int, float)):
-            raise TypeError("session_timestamp is required")
+        if not block_id:
+            raise ValueError("block_id is required")
+        if not isinstance(block_ts, (int, float)):
+            raise TypeError("block_timestamp is required")
 
         message = input.get(self.message_key)
         timestamp = input.get(self.timestamp_key)
@@ -236,11 +236,11 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             if not isinstance(attribute.get("type"), str):
                 raise TypeError("block_attribute.type must be a str")
 
-        context_id = session_id
-        start_ts = float(session_ts)
+        context_id = block_id
+        start_ts = float(block_ts)
 
         async with self._async_session_local() as session:
-            db_user = await self._a_get_or_create_user(session, user_id)
+            db_user = await self._a_get_or_create_user(session, session_id)
             block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
             if message is not None:
                 record = ChatMessage(
@@ -258,10 +258,10 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
                 session.add(attr)
             await session.commit()
 
-    def get_history_with_timestamps(self, session_id: str) -> list[tuple[BaseMessage, float]]:
-        """Return ordered messages with timestamps for a single session."""
+    def get_history_with_timestamps(self, block_id: str) -> list[tuple[BaseMessage, float]]:
+        """Return ordered messages with timestamps for a single block."""
         with self._session_local() as session:
-            block = session.query(ChatBlock).filter_by(context_id=session_id).first()
+            block = session.query(ChatBlock).filter_by(context_id=block_id).first()
             if not block:
                 return []
             messages = [
@@ -271,11 +271,11 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             return sorted(messages, key=lambda x: x[1])
 
     async def aget_history_with_timestamps(
-        self, session_id: str
+        self, block_id: str
     ) -> list[tuple[BaseMessage, float]]:
-        """Asynchronously return ordered messages with timestamps for a single session."""
+        """Asynchronously return ordered messages with timestamps for a single block."""
         async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(context_id=session_id))
+            result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
             block = result.scalar_one_or_none()
             if not block:
                 return []
@@ -285,61 +285,61 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             ]
             return sorted(messages, key=lambda x: x[1])
 
-    def get_history(self, session_id: str) -> list[BaseMessage]:
-        """Return ordered messages for a single session."""
+    def get_history(self, block_id: str) -> list[BaseMessage]:
+        """Return ordered messages for a single block."""
         with self._session_local() as session:
-            block = session.query(ChatBlock).filter_by(context_id=session_id).first()
+            block = session.query(ChatBlock).filter_by(context_id=block_id).first()
             if not block:
                 return []
             return messages_from_dict([m.content for m in block.messages])
 
-    async def aget_history(self, session_id: str) -> list[BaseMessage]:
-        """Asynchronously return ordered messages for a single session."""
+    async def aget_history(self, block_id: str) -> list[BaseMessage]:
+        """Asynchronously return ordered messages for a single block."""
         async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(context_id=session_id))
+            result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
             block = result.scalar_one_or_none()
             if not block:
                 return []
             return messages_from_dict([m.content for m in block.messages])
 
     def get_histories_with_timestamps(
-        self, session_ids: list[str]
+        self, block_ids: list[str]
     ) -> list[tuple[BaseMessage, float]]:
-        """Concatenate histories with timestamps for multiple sessions in order."""
+        """Concatenate histories with timestamps for multiple blocks in order."""
         messages: list[tuple[BaseMessage, float]] = []
-        for sid in sorted(session_ids):
+        for sid in sorted(block_ids):
             messages.extend(self.get_history_with_timestamps(sid))
         return messages
 
     async def aget_histories_with_timestamps(
-        self, session_ids: list[str]
+        self, block_ids: list[str]
     ) -> list[tuple[BaseMessage, float]]:
-        """Asynchronously concatenate histories with timestamps for multiple sessions."""
+        """Asynchronously concatenate histories with timestamps for multiple blocks."""
         messages: list[tuple[BaseMessage, float]] = []
-        for sid in sorted(session_ids):
+        for sid in sorted(block_ids):
             messages.extend(await self.aget_history_with_timestamps(sid))
         return messages
 
-    def get_histories(self, session_ids: list[str]) -> list[BaseMessage]:
-        """Concatenate histories for multiple sessions in order."""
+    def get_histories(self, block_ids: list[str]) -> list[BaseMessage]:
+        """Concatenate histories for multiple blocks in order."""
         messages: list[BaseMessage] = []
-        for sid in sorted(session_ids):
+        for sid in sorted(block_ids):
             messages.extend(self.get_history(sid))
         return messages
 
-    async def aget_histories(self, session_ids: list[str]) -> list[BaseMessage]:
-        """Asynchronously concatenate histories for multiple sessions."""
+    async def aget_histories(self, block_ids: list[str]) -> list[BaseMessage]:
+        """Asynchronously concatenate histories for multiple blocks."""
         messages: list[BaseMessage] = []
-        for sid in sorted(session_ids):
+        for sid in sorted(block_ids):
             messages.extend(await self.aget_history(sid))
         return messages
 
     def get_block_attributes(
-        self, session_id: str, *, types: list[str] | None = None
+        self, block_id: str, *, types: list[str] | None = None
     ) -> list[BlockAttributeOutput]:
         """Return ordered attributes for a chat block."""
         with self._session_local() as session:
-            block = session.query(ChatBlock).filter_by(context_id=session_id).first()
+            block = session.query(ChatBlock).filter_by(context_id=block_id).first()
             if not block:
                 return []
 
@@ -357,11 +357,11 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             ]
 
     async def aget_block_attributes(
-        self, session_id: str, *, types: list[str] | None = None
+        self, block_id: str, *, types: list[str] | None = None
     ) -> list[BlockAttributeOutput]:
         """Asynchronously return ordered attributes for a chat block."""
         async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(context_id=session_id))
+            result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
             block = result.scalar_one_or_none()
             if not block:
                 return []
@@ -379,18 +379,18 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
                 for attr in attrs
             ]
 
-    def get_block_timestamp(self, session_id: str) -> float | None:
+    def get_block_timestamp(self, block_id: str) -> float | None:
         """Return the start timestamp of a chat block."""
         with self._session_local() as session:
-            block = session.query(ChatBlock).filter_by(context_id=session_id).first()
+            block = session.query(ChatBlock).filter_by(context_id=block_id).first()
             if not block:
                 return None
             return block.start_time.timestamp()
 
-    async def aget_block_timestamp(self, session_id: str) -> float | None:
+    async def aget_block_timestamp(self, block_id: str) -> float | None:
         """Asynchronously return the start timestamp of a chat block."""
         async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(context_id=session_id))
+            result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
             block = result.scalar_one_or_none()
             if not block:
                 return None
