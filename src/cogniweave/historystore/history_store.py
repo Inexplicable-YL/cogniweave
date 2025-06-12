@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 from typing_extensions import override
 
@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from cogniweave.historystore import (
+from cogniweave.historystore.models import (
     Base,
     ChatBlock,
     ChatBlockAttribute,
@@ -117,7 +117,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             block = ChatBlock(
                 context_id=context_id,
                 session_id=user.id,
-                start_time=datetime.fromtimestamp(start_ts),
+                start_time=datetime.fromtimestamp(start_ts, tz=UTC),
             )
             session.add(block)
             session.commit()
@@ -133,7 +133,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             block = ChatBlock(
                 context_id=context_id,
                 session_id=user.id,
-                start_time=datetime.fromtimestamp(start_ts),
+                start_time=datetime.fromtimestamp(start_ts, tz=UTC),
             )
             session.add(block)
             await session.commit()
@@ -186,7 +186,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             if message is not None:
                 record = ChatMessage(
                     block_id=block.id,
-                    timestamp=datetime.fromtimestamp(float(cast("float | int", timestamp))),
+                    timestamp=datetime.fromtimestamp(float(cast("float | int", timestamp)), tz=UTC),
                     content=message_to_dict(message),
                 )
                 session.add(record)
@@ -245,7 +245,7 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             if message is not None:
                 record = ChatMessage(
                     block_id=block.id,
-                    timestamp=datetime.fromtimestamp(float(cast("float | int", timestamp))),
+                    timestamp=datetime.fromtimestamp(float(cast("float | int", timestamp)), tz=UTC),
                     content=message_to_dict(message),
                 )
                 session.add(record)
@@ -258,32 +258,45 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
                 session.add(attr)
             await session.commit()
 
+    def get_block_timestamp(self, block_id: str) -> float | None:
+        """Return the start timestamp of a chat block."""
+        with self._session_local() as session:
+            block = session.query(ChatBlock).filter_by(context_id=block_id).first()
+            if not block:
+                return None
+            return block.start_time.replace(tzinfo=UTC).timestamp()
+
+    async def aget_block_timestamp(self, block_id: str) -> float | None:
+        """Asynchronously return the start timestamp of a chat block."""
+        async with self._async_session_local() as session:
+            result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
+            block = result.scalar_one_or_none()
+            if not block:
+                return None
+            return block.start_time.replace(tzinfo=UTC).timestamp()
+
     def get_history_with_timestamps(self, block_id: str) -> list[tuple[BaseMessage, float]]:
         """Return ordered messages with timestamps for a single block."""
         with self._session_local() as session:
             block = session.query(ChatBlock).filter_by(context_id=block_id).first()
             if not block:
                 return []
-            messages = [
-                (messages_from_dict([m.content])[0], m.timestamp.timestamp())
+            return [
+                (messages_from_dict([m.content])[0], m.timestamp.replace(tzinfo=UTC).timestamp())
                 for m in block.messages
             ]
-            return sorted(messages, key=lambda x: x[1])
 
-    async def aget_history_with_timestamps(
-        self, block_id: str
-    ) -> list[tuple[BaseMessage, float]]:
+    async def aget_history_with_timestamps(self, block_id: str) -> list[tuple[BaseMessage, float]]:
         """Asynchronously return ordered messages with timestamps for a single block."""
         async with self._async_session_local() as session:
             result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
             block = result.scalar_one_or_none()
             if not block:
                 return []
-            messages = [
-                (messages_from_dict([m.content])[0], m.timestamp.timestamp())
+            return [
+                (messages_from_dict([m.content])[0], m.timestamp.replace(tzinfo=UTC).timestamp())
                 for m in block.messages
             ]
-            return sorted(messages, key=lambda x: x[1])
 
     def get_history(self, block_id: str) -> list[BaseMessage]:
         """Return ordered messages for a single block."""
@@ -378,20 +391,3 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
                 )
                 for attr in attrs
             ]
-
-    def get_block_timestamp(self, block_id: str) -> float | None:
-        """Return the start timestamp of a chat block."""
-        with self._session_local() as session:
-            block = session.query(ChatBlock).filter_by(context_id=block_id).first()
-            if not block:
-                return None
-            return block.start_time.timestamp()
-
-    async def aget_block_timestamp(self, block_id: str) -> float | None:
-        """Asynchronously return the start timestamp of a chat block."""
-        async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
-            block = result.scalar_one_or_none()
-            if not block:
-                return None
-            return block.start_time.timestamp()
