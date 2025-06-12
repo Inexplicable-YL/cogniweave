@@ -255,16 +255,30 @@ class HistoryStore(RunnableSerializable[dict[str, Any], None]):
         return messages
 
     def get_block_attributes(
-        self, session_id: int, *, types: list[str] | None = None
+        self, session_id: str, *, types: list[str] | None = None
     ) -> list[ChatBlockAttribute]:
         """Return ordered attributes for a chat block."""
         with self._session_local() as session:
             block = session.query(ChatBlock).filter_by(context_id=session_id).first()
+            if not block:
+                return []
+
+            attrs = sorted(block.attributes, key=lambda a: a.id)
+            if types is not None:
+                attrs = [attr for attr in attrs if attr.type in types]
+            return attrs
 
     async def aget_block_attributes(
-        self, session_id: int, *, types: list[str] | None = None
+        self, session_id: str, *, types: list[str] | None = None
     ) -> list[ChatBlockAttribute]:
         """Asynchronously return ordered attributes for a chat block."""
         async with self._async_session_local() as session:
             result = await session.execute(select(ChatBlock).filter_by(context_id=session_id))
             block = result.scalar_one_or_none()
+            if not block:
+                return []
+
+            attrs = sorted(block.attributes, key=lambda a: a.id)
+            if types is not None:
+                attrs = [attr for attr in attrs if attr.type in types]
+            return attrs
