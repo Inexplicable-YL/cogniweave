@@ -25,28 +25,45 @@ if TYPE_CHECKING:
 
 
 class MessageInput(TypedDict):
-    """Input for storing a single message."""
+    """Input for storing a single message.
 
+    Attributes:
+        message: The chat message to store.
+        timestamp: Unix timestamp when the message was created.
+    """
     message: BaseMessage
     timestamp: float
 
 
 class BlockAttributeData(TypedDict, total=False):
-    """Structure of a block attribute."""
+    """Structure of a block attribute.
 
+    Attributes:
+        type: The type/name of the attribute.
+        value: The attribute's value (optional).
+    """
     type: str
     value: Any
 
 
 class AttributeInput(TypedDict):
-    """Input for storing a block attribute."""
+    """Input for storing a block attribute.
 
+    Attributes:
+        block_attribute: The attribute data to store.
+    """
     block_attribute: BlockAttributeData
 
 
 class BlockAttributeOutput(TypedDict):
-    """TypedDict representation of a stored block attribute."""
+    """TypedDict representation of a stored block attribute.
 
+    Attributes:
+        id: The attribute's database ID.
+        block_id: ID of the block this attribute belongs to.
+        type: The attribute type/name.
+        value: The stored attribute value.
+    """
     id: int
     block_id: int
     type: str
@@ -54,23 +71,36 @@ class BlockAttributeOutput(TypedDict):
 
 
 class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | AttributeInput, None]):
+    """Persist chat messages grouped by session.
+
+    This class provides both synchronous and asynchronous interfaces for storing and retrieving
+    chat messages and their metadata. Messages are grouped into blocks which can have additional
+    attributes.
+
+    Attributes:
+        message_key: Key for message in input dict.
+        timestamp_key: Key for timestamp in input dict.
+        attribute_key: Key for block attribute in input dict.
+    """
     """Persist chat messages grouped by session."""
 
     _session_local: sessionmaker[Session] = PrivateAttr()
     _async_session_local: async_sessionmaker[AsyncSession] = PrivateAttr()
 
-    user_key: str = "user"
     message_key: str = "message"
     timestamp_key: str = "timestamp"
     attribute_key: str = "block_attribute"
 
     def __init__(self, *, db_url: str | None = None, echo: bool = False) -> None:
-        """Create a new ``HistoryStore``.
+        """Initialize a new HistoryStore instance.
 
         Args:
-            db_url: Database connection string. Defaults to ``os.getenv("CHAT_DB_URL")`` or a
-                local SQLite file if unset.
-            echo: If ``True``, SQLAlchemy will log all statements.
+            db_url: Database connection string. If None, uses CHAT_DB_URL environment variable
+                or defaults to local SQLite file.
+            echo: If True, enables SQLAlchemy statement logging.
+
+        Raises:
+            ValueError: If database connection fails.
         """
         url = db_url or os.getenv("CHAT_DB_URL", "sqlite:///optimized_chat_db.sqlite")
         engine = create_engine(url, echo=echo, future=True)
@@ -91,6 +121,15 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         self._async_session_local = async_session_local
 
     def _get_or_create_user(self, session: Session, name: str) -> User:
+        """Get existing user or create new one if not found.
+
+        Args:
+            session: SQLAlchemy session.
+            name: User/session name.
+
+        Returns:
+            User: The existing or newly created User instance.
+        """
         user = session.query(User).filter_by(name=name).first()
         if user is None:
             user = User(name=name)
@@ -100,6 +139,15 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         return user
 
     async def _a_get_or_create_user(self, session: AsyncSession, name: str) -> User:
+        """Async version of _get_or_create_user.
+
+        Args:
+            session: Async SQLAlchemy session.
+            name: User/session name.
+
+        Returns:
+            User: The existing or newly created User instance.
+        """
         result = await session.execute(select(User).filter_by(name=name))
         user = result.scalar_one_or_none()
         if user is None:
@@ -112,6 +160,17 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
     def _get_or_create_block(
         self, session: Session, user: User, context_id: str, start_ts: float
     ) -> ChatBlock:
+        """Get existing chat block or create new one if not found.
+
+        Args:
+            session: SQLAlchemy session.
+            user: Owner User instance.
+            context_id: Unique block/context ID.
+            start_ts: Unix timestamp for block start time.
+
+        Returns:
+            ChatBlock: The existing or newly created ChatBlock instance.
+        """
         block = session.query(ChatBlock).filter_by(context_id=context_id).first()
         if block is None:
             block = ChatBlock(
@@ -127,6 +186,17 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
     async def _a_get_or_create_block(
         self, session: AsyncSession, user: User, context_id: str, start_ts: float
     ) -> ChatBlock:
+        """Async version of _get_or_create_block.
+
+        Args:
+            session: Async SQLAlchemy session.
+            user: Owner User instance.
+            context_id: Unique block/context ID.
+            start_ts: Unix timestamp for block start time.
+
+        Returns:
+            ChatBlock: The existing or newly created ChatBlock instance.
+        """
         result = await session.execute(select(ChatBlock).filter_by(context_id=context_id))
         block = result.scalar_one_or_none()
         if block is None:
@@ -147,6 +217,18 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         config: RunnableConfig | None = None,
         **kwargs: Any,
     ) -> None:
+        """Store a message or block attribute.
+
+        Args:
+            input: Contains either message+timestamp or block attribute data.
+            config: Must contain 'configurable' dict with block_id and block_timestamp.
+            **kwargs: Additional keyword arguments.
+
+        Raises:
+            ValueError: If config is None or missing required fields.
+            TypeError: If input data has invalid types.
+            ValueError: If input contains neither message nor attribute.
+        """
         if not config:
             raise ValueError("config must be provided")
         block_id = config.get("configurable", {}).get("block_id", "")
@@ -206,6 +288,18 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         config: RunnableConfig | None = None,
         **kwargs: Any,
     ) -> None:
+        """Async version of invoke - store a message or block attribute.
+
+        Args:
+            input: Contains either message+timestamp or block attribute data.
+            config: Must contain 'configurable' dict with block_id and block_timestamp.
+            **kwargs: Additional keyword arguments.
+
+        Raises:
+            ValueError: If config is None or missing required fields.
+            TypeError: If input data has invalid types.
+            ValueError: If input contains neither message nor attribute.
+        """
         if not config:
             raise ValueError("config must be provided")
         block_id = config.get("configurable", {}).get("block_id", "")
@@ -259,7 +353,14 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             await session.commit()
 
     def get_block_timestamp(self, block_id: str) -> float | None:
-        """Return the start timestamp of a chat block."""
+        """Get the start timestamp of a chat block.
+
+        Args:
+            block_id: The ID of the chat block to query.
+
+        Returns:
+            float | None: Unix timestamp of block start time, or None if not found.
+        """
         with self._session_local() as session:
             block = session.query(ChatBlock).filter_by(context_id=block_id).first()
             if not block:
@@ -267,7 +368,14 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             return block.start_time.replace(tzinfo=UTC).timestamp()
 
     async def aget_block_timestamp(self, block_id: str) -> float | None:
-        """Asynchronously return the start timestamp of a chat block."""
+        """Async version of get_block_timestamp.
+
+        Args:
+            block_id: The ID of the chat block to query.
+
+        Returns:
+            float | None: Unix timestamp of block start time, or None if not found.
+        """
         async with self._async_session_local() as session:
             result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
             block = result.scalar_one_or_none()
@@ -276,7 +384,14 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             return block.start_time.replace(tzinfo=UTC).timestamp()
 
     def get_history_with_timestamps(self, block_id: str) -> list[tuple[BaseMessage, float]]:
-        """Return ordered messages with timestamps for a single block."""
+        """Get all messages in a block with their timestamps.
+
+        Args:
+            block_id: The ID of the chat block to query.
+
+        Returns:
+            list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
+        """
         with self._session_local() as session:
             block = session.query(ChatBlock).filter_by(context_id=block_id).first()
             if not block:
@@ -287,7 +402,14 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             ]
 
     async def aget_history_with_timestamps(self, block_id: str) -> list[tuple[BaseMessage, float]]:
-        """Asynchronously return ordered messages with timestamps for a single block."""
+        """Async version of get_history_with_timestamps.
+
+        Args:
+            block_id: The ID of the chat block to query.
+
+        Returns:
+            list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
+        """
         async with self._async_session_local() as session:
             result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
             block = result.scalar_one_or_none()
@@ -299,7 +421,14 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             ]
 
     def get_history(self, block_id: str) -> list[BaseMessage]:
-        """Return ordered messages for a single block."""
+        """Get all messages in a block without timestamps.
+
+        Args:
+            block_id: The ID of the chat block to query.
+
+        Returns:
+            list[BaseMessage]: List of messages in chronological order.
+        """
         with self._session_local() as session:
             block = session.query(ChatBlock).filter_by(context_id=block_id).first()
             if not block:
@@ -307,7 +436,14 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
             return messages_from_dict([m.content for m in block.messages])
 
     async def aget_history(self, block_id: str) -> list[BaseMessage]:
-        """Asynchronously return ordered messages for a single block."""
+        """Async version of get_history.
+
+        Args:
+            block_id: The ID of the chat block to query.
+
+        Returns:
+            list[BaseMessage]: List of messages in chronological order.
+        """
         async with self._async_session_local() as session:
             result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
             block = result.scalar_one_or_none()
@@ -318,7 +454,15 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
     def get_histories_with_timestamps(
         self, block_ids: list[str]
     ) -> list[tuple[BaseMessage, float]]:
-        """Concatenate histories with timestamps for multiple blocks in order."""
+        """Get messages with timestamps from multiple blocks, concatenated in order.
+
+        Args:
+            block_ids: List of block IDs to retrieve messages from.
+
+        Returns:
+            list[tuple[BaseMessage, float]]: Combined list of (message, timestamp) pairs
+                from all blocks, in chronological order.
+        """
         messages: list[tuple[BaseMessage, float]] = []
         for sid in sorted(block_ids):
             messages.extend(self.get_history_with_timestamps(sid))
@@ -327,21 +471,45 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
     async def aget_histories_with_timestamps(
         self, block_ids: list[str]
     ) -> list[tuple[BaseMessage, float]]:
-        """Asynchronously concatenate histories with timestamps for multiple blocks."""
+        """Async version of get_histories_with_timestamps.
+
+        Args:
+            block_ids: List of block IDs to retrieve messages from.
+
+        Returns:
+            list[tuple[BaseMessage, float]]: Combined list of (message, timestamp) pairs
+                from all blocks, in chronological order.
+        """
         messages: list[tuple[BaseMessage, float]] = []
         for sid in sorted(block_ids):
             messages.extend(await self.aget_history_with_timestamps(sid))
         return messages
 
     def get_histories(self, block_ids: list[str]) -> list[BaseMessage]:
-        """Concatenate histories for multiple blocks in order."""
+        """Get messages from multiple blocks, concatenated in order.
+
+        Args:
+            block_ids: List of block IDs to retrieve messages from.
+
+        Returns:
+            list[BaseMessage]: Combined list of messages from all blocks,
+                in chronological order.
+        """
         messages: list[BaseMessage] = []
         for sid in sorted(block_ids):
             messages.extend(self.get_history(sid))
         return messages
 
     async def aget_histories(self, block_ids: list[str]) -> list[BaseMessage]:
-        """Asynchronously concatenate histories for multiple blocks."""
+        """Async version of get_histories.
+
+        Args:
+            block_ids: List of block IDs to retrieve messages from.
+
+        Returns:
+            list[BaseMessage]: Combined list of messages from all blocks,
+                in chronological order.
+        """
         messages: list[BaseMessage] = []
         for sid in sorted(block_ids):
             messages.extend(await self.aget_history(sid))
@@ -350,7 +518,16 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
     def get_block_attributes(
         self, block_id: str, *, types: list[str] | None = None
     ) -> list[BlockAttributeOutput]:
-        """Return ordered attributes for a chat block."""
+        """Get all attributes for a chat block, optionally filtered by type.
+
+        Args:
+            block_id: The ID of the chat block to query.
+            types: Optional list of attribute types to filter by.
+
+        Returns:
+            list[BlockAttributeOutput]: List of block attributes in insertion order,
+                optionally filtered by type.
+        """
         with self._session_local() as session:
             block = session.query(ChatBlock).filter_by(context_id=block_id).first()
             if not block:
@@ -372,7 +549,16 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
     async def aget_block_attributes(
         self, block_id: str, *, types: list[str] | None = None
     ) -> list[BlockAttributeOutput]:
-        """Asynchronously return ordered attributes for a chat block."""
+        """Async version of get_block_attributes.
+
+        Args:
+            block_id: The ID of the chat block to query.
+            types: Optional list of attribute types to filter by.
+
+        Returns:
+            list[BlockAttributeOutput]: List of block attributes in insertion order,
+                optionally filtered by type.
+        """
         async with self._async_session_local() as session:
             result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
             block = result.scalar_one_or_none()
@@ -400,7 +586,18 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         start_time: float | None = None,
         end_time: float | None = None,
     ) -> list[tuple[str, float]]:
-        """Return block ids with timestamps for a session within a time range."""
+        """Get block IDs and their start timestamps for a session, optionally filtered by time range.
+
+        Args:
+            session_id: The session/user ID to query.
+            limit: Maximum number of blocks to return (returns most recent if specified).
+            start_time: Optional minimum timestamp (inclusive) to filter blocks.
+            end_time: Optional maximum timestamp (inclusive) to filter blocks.
+
+        Returns:
+            list[tuple[str, float]]: List of (block_id, start_timestamp) pairs in chronological order.
+                Returns empty list if session not found or no matching blocks.
+        """
         if limit is not None and limit <= 0:
             return []
 
@@ -436,7 +633,18 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         start_time: float | None = None,
         end_time: float | None = None,
     ) -> list[tuple[str, float]]:
-        """Asynchronously return block ids with timestamps for a session."""
+        """Async version of get_session_block_ids_with_timestamps.
+
+        Args:
+            session_id: The session/user ID to query.
+            limit: Maximum number of blocks to return (returns most recent if specified).
+            start_time: Optional minimum timestamp (inclusive) to filter blocks.
+            end_time: Optional maximum timestamp (inclusive) to filter blocks.
+
+        Returns:
+            list[tuple[str, float]]: List of (block_id, start_timestamp) pairs in chronological order.
+                Returns empty list if session not found or no matching blocks.
+        """
         if limit is not None and limit <= 0:
             return []
 
@@ -475,7 +683,18 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         start_time: float | None = None,
         end_time: float | None = None,
     ) -> list[str]:
-        """Return block ids for a session within a time range."""
+        """Get block IDs for a session, optionally filtered by time range.
+
+        Args:
+            session_id: The session/user ID to query.
+            limit: Maximum number of blocks to return (returns most recent if specified).
+            start_time: Optional minimum timestamp (inclusive) to filter blocks.
+            end_time: Optional maximum timestamp (inclusive) to filter blocks.
+
+        Returns:
+            list[str]: List of block IDs in chronological order.
+                Returns empty list if session not found or no matching blocks.
+        """
         return [
             bid
             for bid, _ in self.get_session_block_ids_with_timestamps(
@@ -491,7 +710,18 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         start_time: float | None = None,
         end_time: float | None = None,
     ) -> list[str]:
-        """Asynchronously return block ids for a session within a time range."""
+        """Async version of get_session_block_ids.
+
+        Args:
+            session_id: The session/user ID to query.
+            limit: Maximum number of blocks to return (returns most recent if specified).
+            start_time: Optional minimum timestamp (inclusive) to filter blocks.
+            end_time: Optional maximum timestamp (inclusive) to filter blocks.
+
+        Returns:
+            list[str]: List of block IDs in chronological order.
+                Returns empty list if session not found or no matching blocks.
+        """
         pairs = await self.aget_session_block_ids_with_timestamps(
             session_id, start_time=start_time, end_time=end_time, limit=limit
         )
@@ -505,7 +735,18 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         start_time: float | None = None,
         end_time: float | None = None,
     ) -> list[tuple[BaseMessage, float]]:
-        """Return concatenated messages with timestamps for a session."""
+        """Get all messages with timestamps for a session, optionally filtered by time range.
+
+        Args:
+            session_id: The session/user ID to query.
+            limit: Maximum number of messages to return (returns most recent if specified).
+            start_time: Optional minimum timestamp (inclusive) to filter messages.
+            end_time: Optional maximum timestamp (inclusive) to filter messages.
+
+        Returns:
+            list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
+                Returns empty list if session not found or no matching messages.
+        """
         if limit is not None and limit <= 0:
             return []
 
@@ -549,7 +790,18 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         start_time: float | None = None,
         end_time: float | None = None,
     ) -> list[tuple[BaseMessage, float]]:
-        """Asynchronously return concatenated messages with timestamps."""
+        """Async version of get_session_history_with_timestamps.
+
+        Args:
+            session_id: The session/user ID to query.
+            limit: Maximum number of messages to return (returns most recent if specified).
+            start_time: Optional minimum timestamp (inclusive) to filter messages.
+            end_time: Optional maximum timestamp (inclusive) to filter messages.
+
+        Returns:
+            list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
+                Returns empty list if session not found or no matching messages.
+        """
         if limit is not None and limit <= 0:
             return []
 
@@ -593,7 +845,18 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         start_time: float | None = None,
         end_time: float | None = None,
     ) -> list[BaseMessage]:
-        """Return concatenated messages for a session within a time range."""
+        """Get all messages for a session, optionally filtered by time range.
+
+        Args:
+            session_id: The session/user ID to query.
+            limit: Maximum number of messages to return (returns most recent if specified).
+            start_time: Optional minimum timestamp (inclusive) to filter messages.
+            end_time: Optional maximum timestamp (inclusive) to filter messages.
+
+        Returns:
+            list[BaseMessage]: List of messages in chronological order.
+                Returns empty list if session not found or no matching messages.
+        """
         return [
             msg
             for msg, _ in self.get_session_history_with_timestamps(
@@ -609,7 +872,18 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         start_time: float | None = None,
         end_time: float | None = None,
     ) -> list[BaseMessage]:
-        """Asynchronously return concatenated messages for a session."""
+        """Async version of get_session_history.
+
+        Args:
+            session_id: The session/user ID to query.
+            limit: Maximum number of messages to return (returns most recent if specified).
+            start_time: Optional minimum timestamp (inclusive) to filter messages.
+            end_time: Optional maximum timestamp (inclusive) to filter messages.
+
+        Returns:
+            list[BaseMessage]: List of messages in chronological order.
+                Returns empty list if session not found or no matching messages.
+        """
         pairs = await self.aget_session_history_with_timestamps(
             session_id, start_time=start_time, end_time=end_time, limit=limit
         )

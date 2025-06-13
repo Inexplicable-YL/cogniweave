@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime  # noqa: TC003
 from typing import Any
 from typing_extensions import override
 
@@ -9,7 +9,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
-
     id: Mapped[int] = mapped_column(primary_key=True)
 
 
@@ -17,6 +16,7 @@ class User(Base):
     """Represents a chat user."""
 
     __tablename__ = "users"
+    __table_args__ = (Index("idx_user_name", "name"),)
 
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
 
@@ -58,9 +58,7 @@ class ChatBlock(Base):
         lazy="selectin",
     )
 
-    __table_args__ = (
-        Index("idx_chat_blocks_session_start", "session_id", "start_time"),
-    )
+    __table_args__ = (Index("idx_chat_blocks_session_start", "session_id", "start_time"),)
 
     @override
     def __repr__(self) -> str:
@@ -85,7 +83,10 @@ class ChatMessage(Base):
 
     block: Mapped[ChatBlock] = relationship("ChatBlock", back_populates="messages", lazy="joined")
 
-    __table_args__ = (Index("idx_messages_block_timestamp", "block_id", "timestamp"),)
+    __table_args__ = (
+        Index("idx_messages_block_timestamp", "block_id", "timestamp"),
+        Index("idx_messages_timestamp", "timestamp"),
+    )
 
     @override
     def __repr__(self) -> str:
