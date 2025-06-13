@@ -396,41 +396,50 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         self,
         session_id: str,
         *,
-        start: float | None = None,
-        end: float | None = None,
+        limit: int | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
     ) -> list[tuple[str, float]]:
         """Return block ids with timestamps for a session within a time range."""
+        if limit is not None and limit <= 0:
+            return []
+
         with self._session_local() as session:
             user = session.query(User).filter_by(name=session_id).first()
             if not user:
                 return []
 
             stmt = session.query(ChatBlock).filter_by(session_id=user.id)
-            if start is not None:
+            if start_time is not None:
                 stmt = stmt.filter(
-                    ChatBlock.start_time >= datetime.fromtimestamp(start, tz=UTC)
+                    ChatBlock.start_time >= datetime.fromtimestamp(start_time, tz=UTC)
                 )
-            if end is not None:
-                stmt = stmt.filter(
-                    ChatBlock.start_time <= datetime.fromtimestamp(end, tz=UTC)
-                )
+            if end_time is not None:
+                stmt = stmt.filter(ChatBlock.start_time <= datetime.fromtimestamp(end_time, tz=UTC))
             blocks = stmt.order_by(ChatBlock.start_time).all()
-            return [
+            result = [
                 (
                     block.context_id,
                     block.start_time.replace(tzinfo=UTC).timestamp(),
                 )
                 for block in blocks
             ]
+            if limit is not None:
+                result = result[-limit:]
+            return result
 
     async def aget_session_block_ids_with_timestamps(
         self,
         session_id: str,
         *,
-        start: float | None = None,
-        end: float | None = None,
+        limit: int | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
     ) -> list[tuple[str, float]]:
         """Asynchronously return block ids with timestamps for a session."""
+        if limit is not None and limit <= 0:
+            return []
+
         async with self._async_session_local() as session:
             result = await session.execute(select(User).filter_by(name=session_id))
             user = result.scalar_one_or_none()
@@ -438,37 +447,39 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
                 return []
 
             stmt = select(ChatBlock).filter_by(session_id=user.id)
-            if start is not None:
+            if start_time is not None:
                 stmt = stmt.filter(
-                    ChatBlock.start_time >= datetime.fromtimestamp(start, tz=UTC)
+                    ChatBlock.start_time >= datetime.fromtimestamp(start_time, tz=UTC)
                 )
-            if end is not None:
-                stmt = stmt.filter(
-                    ChatBlock.start_time <= datetime.fromtimestamp(end, tz=UTC)
-                )
+            if end_time is not None:
+                stmt = stmt.filter(ChatBlock.start_time <= datetime.fromtimestamp(end_time, tz=UTC))
             stmt = stmt.order_by(ChatBlock.start_time)
             res = await session.execute(stmt)
             blocks = res.scalars().all()
-            return [
+            result = [
                 (
                     block.context_id,
                     block.start_time.replace(tzinfo=UTC).timestamp(),
                 )
                 for block in blocks
             ]
+            if limit is not None:
+                result = result[-limit:]
+            return result
 
     def get_session_block_ids(
         self,
         session_id: str,
         *,
-        start: float | None = None,
-        end: float | None = None,
+        limit: int | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
     ) -> list[str]:
         """Return block ids for a session within a time range."""
         return [
             bid
             for bid, _ in self.get_session_block_ids_with_timestamps(
-                session_id, start=start, end=end
+                session_id, start_time=start_time, end_time=end_time, limit=limit
             )
         ]
 
@@ -476,12 +487,13 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         self,
         session_id: str,
         *,
-        start: float | None = None,
-        end: float | None = None,
+        limit: int | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
     ) -> list[str]:
         """Asynchronously return block ids for a session within a time range."""
         pairs = await self.aget_session_block_ids_with_timestamps(
-            session_id, start=start, end=end
+            session_id, start_time=start_time, end_time=end_time, limit=limit
         )
         return [bid for bid, _ in pairs]
 
@@ -489,10 +501,14 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         self,
         session_id: str,
         *,
-        start: float | None = None,
-        end: float | None = None,
+        limit: int | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
     ) -> list[tuple[BaseMessage, float]]:
         """Return concatenated messages with timestamps for a session."""
+        if limit is not None and limit <= 0:
+            return []
+
         all_blocks = self.get_session_block_ids_with_timestamps(session_id)
         if not all_blocks:
             return []
@@ -500,36 +516,43 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         start_idx = 0
         end_idx = len(all_blocks)
 
-        if start is not None:
+        if start_time is not None:
             for i, (_, ts) in enumerate(all_blocks):
-                if ts >= start:
+                if ts >= start_time:
                     start_idx = max(i - 1, 0)
                     break
             else:
                 start_idx = len(all_blocks) - 1
 
-        if end is not None:
+        if end_time is not None:
             for i, (_, ts) in enumerate(all_blocks):
-                if ts > end:
+                if ts > end_time:
                     end_idx = min(i + 1, len(all_blocks))
                     break
 
         block_ids = [bid for bid, _ in all_blocks[start_idx:end_idx]]
         history = self.get_histories_with_timestamps(block_ids)
-        return [
+        result = [
             (msg, ts)
             for msg, ts in history
-            if (start is None or ts >= start) and (end is None or ts <= end)
+            if (start_time is None or ts >= start_time) and (end_time is None or ts <= end_time)
         ]
+        if limit is not None:
+            result = result[-limit:]
+        return result
 
     async def aget_session_history_with_timestamps(
         self,
         session_id: str,
         *,
-        start: float | None = None,
-        end: float | None = None,
+        limit: int | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
     ) -> list[tuple[BaseMessage, float]]:
         """Asynchronously return concatenated messages with timestamps."""
+        if limit is not None and limit <= 0:
+            return []
+
         all_blocks = await self.aget_session_block_ids_with_timestamps(session_id)
         if not all_blocks:
             return []
@@ -537,40 +560,44 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         start_idx = 0
         end_idx = len(all_blocks)
 
-        if start is not None:
+        if start_time is not None:
             for i, (_, ts) in enumerate(all_blocks):
-                if ts >= start:
+                if ts >= start_time:
                     start_idx = max(i - 1, 0)
                     break
             else:
                 start_idx = len(all_blocks) - 1
 
-        if end is not None:
+        if end_time is not None:
             for i, (_, ts) in enumerate(all_blocks):
-                if ts > end:
+                if ts > end_time:
                     end_idx = min(i + 1, len(all_blocks))
                     break
 
         block_ids = [bid for bid, _ in all_blocks[start_idx:end_idx]]
         history = await self.aget_histories_with_timestamps(block_ids)
-        return [
+        result = [
             (msg, ts)
             for msg, ts in history
-            if (start is None or ts >= start) and (end is None or ts <= end)
+            if (start_time is None or ts >= start_time) and (end_time is None or ts <= end_time)
         ]
+        if limit is not None:
+            result = result[-limit:]
+        return result
 
     def get_session_history(
         self,
         session_id: str,
         *,
-        start: float | None = None,
-        end: float | None = None,
+        limit: int | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
     ) -> list[BaseMessage]:
         """Return concatenated messages for a session within a time range."""
         return [
             msg
             for msg, _ in self.get_session_history_with_timestamps(
-                session_id, start=start, end=end
+                session_id, start_time=start_time, end_time=end_time, limit=limit
             )
         ]
 
@@ -578,11 +605,12 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         self,
         session_id: str,
         *,
-        start: float | None = None,
-        end: float | None = None,
+        limit: int | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
     ) -> list[BaseMessage]:
         """Asynchronously return concatenated messages for a session."""
         pairs = await self.aget_session_history_with_timestamps(
-            session_id, start=start, end=end
+            session_id, start_time=start_time, end_time=end_time, limit=limit
         )
         return [msg for msg, _ in pairs]

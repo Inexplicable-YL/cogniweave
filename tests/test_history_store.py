@@ -11,59 +11,92 @@ if TYPE_CHECKING:
     from langchain_core.runnables.config import RunnableConfig
 
 
-def test_history_store_persistence_and_retrieval(tmp_path: Path) -> None:
+def test_basic_operations(tmp_path: Path) -> None:
+    """Test basic store operations including message persistence and retrieval."""
     store = HistoryStore(db_url=f"sqlite:///{tmp_path}/test.sqlite")
 
+    # Test message storage
     cfg = cast("RunnableConfig", {"configurable": {"block_id": "s1", "block_timestamp": 1000.0}})
-    msgs = ["hi", "how", "are", "you"]
-    for i, text in enumerate(msgs):
+    test_messages = ["hi", "how", "are", "you"]
+    for i, text in enumerate(test_messages):
         store.invoke({"message": HumanMessage(text), "timestamp": 1000.0 + i}, config=cfg)
 
+    # Verify database records
     with store._session_local() as session:
         blocks = session.query(ChatBlock).all()
         messages = session.query(ChatMessage).all()
+        assert len(blocks) == 1
+        assert len(messages) == len(test_messages)
 
-    assert len(blocks) == 1
-    assert len(messages) == 4
-    history = store.get_history("s1")
-    assert len(history) == 4
+    # Test retrieval methods
+    assert len(store.get_history("s1")) == len(test_messages)
+    assert len(store.get_history_with_timestamps("s1")) == len(test_messages)
+    assert store.get_block_timestamp("s1") == 1000.0
+    assert store.get_block_timestamp("nonexistent") is None
 
 
-async def test_history_store_async(tmp_path: Path) -> None:
+async def test_async_basic_operations(tmp_path: Path) -> None:
+    """Test basic async store operations."""
     store = HistoryStore(db_url=f"sqlite:///{tmp_path}/async.sqlite")
 
+    # Test async message storage
     cfg = cast("RunnableConfig", {"configurable": {"block_id": "s2", "block_timestamp": 50.0}})
     await store.ainvoke({"message": HumanMessage("hello"), "timestamp": 51.0}, config=cfg)
     await store.ainvoke({"message": HumanMessage("world"), "timestamp": 52.0}, config=cfg)
 
+    # Test async retrieval
     history = await store.aget_history("s2")
     assert len(history) == 2
+    assert [msg.content for msg in history] == ["hello", "world"]
 
 
-def test_block_attributes(tmp_path: Path) -> None:
+def test_block_attributes_operations(tmp_path: Path) -> None:
+    """Test block attribute storage and retrieval."""
     store = HistoryStore(db_url=f"sqlite:///{tmp_path}/attrs.sqlite")
     cfg = cast("RunnableConfig", {"configurable": {"block_id": "attr", "block_timestamp": 1.0}})
+
+    # Store initial message
     store.invoke({"message": HumanMessage("hello"), "timestamp": 1.1}, config=cfg)
 
-    store.invoke({"block_attribute": {"type": "summary", "value": {"text": "hello"}}}, config=cfg)
+    # Test attribute storage
+    test_attrs = [
+        {"type": "summary", "value": {"text": "hello"}},
+        {"type": "tag", "value": ["important"]},
+    ]
+    for attr in test_attrs:
+        store.invoke({"block_attribute": attr}, config=cfg)
+
+    # Test attribute retrieval
     attrs = store.get_block_attributes("attr")
-    assert len(attrs) == 1
-    assert attrs[0]["type"] == "summary"
-    assert attrs[0]["value"] == {"text": "hello"}
+    assert len(attrs) == len(test_attrs)
+    assert {a["type"] for a in attrs} == {a["type"] for a in test_attrs}
+
+    # Test filtered retrieval
+    filtered = store.get_block_attributes("attr", types=["summary"])
+    assert len(filtered) == 1
+    assert filtered[0]["type"] == "summary"
 
 
-async def test_block_attributes_async(tmp_path: Path) -> None:
-    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/attrs.sqlite")
+async def test_async_block_attributes_operations(tmp_path: Path) -> None:
+    """Test async block attribute operations."""
+    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/attrs_async.sqlite")
     cfg = cast("RunnableConfig", {"configurable": {"block_id": "attr", "block_timestamp": 1.0}})
-    store.invoke({"message": HumanMessage("hello"), "timestamp": 1.1}, config=cfg)
 
-    await store.ainvoke(
-        {"block_attribute": {"type": "summary", "value": {"text": "hello"}}}, config=cfg
-    )
+    # Store initial message
+    await store.ainvoke({"message": HumanMessage("hello"), "timestamp": 1.1}, config=cfg)
+
+    # Test async attribute storage
+    test_attrs = [
+        {"type": "summary", "value": {"text": "hello"}},
+        {"type": "tag", "value": ["important"]},
+    ]
+    for attr in test_attrs:
+        await store.ainvoke({"block_attribute": attr}, config=cfg)
+
+    # Test async retrieval
     attrs = await store.aget_block_attributes("attr")
-    assert len(attrs) == 1
-    assert attrs[0]["type"] == "summary"
-    assert attrs[0]["value"] == {"text": "hello"}
+    assert len(attrs) == len(test_attrs)
+    assert {a["type"] for a in attrs} == {a["type"] for a in test_attrs}
 
 
 def test_invoke_validation(tmp_path: Path) -> None:
@@ -173,60 +206,141 @@ async def test_async_history_utilities(tmp_path: Path) -> None:
     assert ts == 1.0
 
 
-
 def test_session_range_utilities(tmp_path: Path) -> None:
     store = HistoryStore(db_url=f"sqlite:///{tmp_path}/range.sqlite")
 
-    cfg1 = cast("RunnableConfig", {
-        "configurable": {"block_id": "b1", "block_timestamp": 1.0, "session_id": "s"}
-    })
-    cfg2 = cast("RunnableConfig", {
-        "configurable": {"block_id": "b2", "block_timestamp": 2.0, "session_id": "s"}
-    })
-    cfg3 = cast("RunnableConfig", {
-        "configurable": {"block_id": "b3", "block_timestamp": 3.0, "session_id": "s"}
-    })
+    cfg1 = cast(
+        "RunnableConfig",
+        {"configurable": {"block_id": "b1", "block_timestamp": 1.0, "session_id": "s"}},
+    )
+    cfg2 = cast(
+        "RunnableConfig",
+        {"configurable": {"block_id": "b2", "block_timestamp": 2.0, "session_id": "s"}},
+    )
+    cfg3 = cast(
+        "RunnableConfig",
+        {"configurable": {"block_id": "b3", "block_timestamp": 3.0, "session_id": "s"}},
+    )
 
     store.invoke({"message": HumanMessage("m1"), "timestamp": 1.1}, config=cfg1)
     store.invoke({"message": HumanMessage("m2"), "timestamp": 2.1}, config=cfg2)
     store.invoke({"message": HumanMessage("m3"), "timestamp": 3.1}, config=cfg3)
 
-    ids_ts = store.get_session_block_ids_with_timestamps("s", start=1.5, end=2.5)
+    ids_ts = store.get_session_block_ids_with_timestamps("s", start_time=1.5, end_time=2.5)
     assert ids_ts == [("b2", 2.0)]
-    ids = store.get_session_block_ids("s", start=1.5, end=2.5)
+    ids = store.get_session_block_ids("s", start_time=1.5, end_time=2.5)
     assert ids == ["b2"]
 
-    hist_ts = store.get_session_history_with_timestamps("s", start=1.05, end=2.8)
-    assert [m.content for m, _ in hist_ts] == ["m1", "m2"]
-    hist = store.get_session_history("s", start=1.05, end=2.8)
-    assert [m.content for m in hist] == ["m1", "m2"]
+    hist_ts_1 = store.get_session_history_with_timestamps("s", start_time=1.05, end_time=2.8)
+    assert [m.content for m, _ in hist_ts_1] == ["m1", "m2"]
+    hist_1 = store.get_session_history("s", end_time=2.8)
+    assert [m.content for m in hist_1] == ["m1", "m2"]
+    hist_ts_2 = store.get_session_history_with_timestamps("s", start_time=1.5, end_time=3.5)
+    assert [m.content for m, _ in hist_ts_2] == ["m2", "m3"]
+    hist_2 = store.get_session_history("s", start_time=1.5)
+    assert [m.content for m in hist_2] == ["m2", "m3"]
+
+    # Test limit parameter
+    assert store.get_session_block_ids_with_timestamps("s", limit=0) == []
+    assert store.get_session_block_ids_with_timestamps("s", limit=1) == [("b3", 3.0)]
+    assert store.get_session_block_ids_with_timestamps("s", limit=2) == [("b2", 2.0), ("b3", 3.0)]
+    assert store.get_session_block_ids_with_timestamps("s", limit=10) == [
+        ("b1", 1.0),
+        ("b2", 2.0),
+        ("b3", 3.0),
+    ]
+
+    assert store.get_session_block_ids("s", limit=0) == []
+    assert store.get_session_block_ids("s", limit=1) == ["b3"]
+    assert store.get_session_block_ids("s", limit=2) == ["b2", "b3"]
+    assert store.get_session_block_ids("s", limit=10) == ["b1", "b2", "b3"]
+
+    assert store.get_session_history_with_timestamps("s", limit=0) == []
+    assert [m.content for m, _ in store.get_session_history_with_timestamps("s", limit=1)] == ["m3"]
+    assert [m.content for m, _ in store.get_session_history_with_timestamps("s", limit=2)] == [
+        "m2",
+        "m3",
+    ]
+    assert [m.content for m, _ in store.get_session_history_with_timestamps("s", limit=10)] == [
+        "m1",
+        "m2",
+        "m3",
+    ]
+
+    assert store.get_session_history("s", limit=0) == []
+    assert [m.content for m in store.get_session_history("s", limit=1)] == ["m3"]
+    assert [m.content for m in store.get_session_history("s", limit=2)] == ["m2", "m3"]
+    assert [m.content for m in store.get_session_history("s", limit=10)] == ["m1", "m2", "m3"]
 
 
 async def test_async_session_range_utilities(tmp_path: Path) -> None:
     store = HistoryStore(db_url=f"sqlite:///{tmp_path}/range_async.sqlite")
 
-    cfg1 = cast("RunnableConfig", {
-        "configurable": {"block_id": "b1", "block_timestamp": 1.0, "session_id": "s"}
-    })
-    cfg2 = cast("RunnableConfig", {
-        "configurable": {"block_id": "b2", "block_timestamp": 2.0, "session_id": "s"}
-    })
-    cfg3 = cast("RunnableConfig", {
-        "configurable": {"block_id": "b3", "block_timestamp": 3.0, "session_id": "s"}
-    })
+    cfg1 = cast(
+        "RunnableConfig",
+        {"configurable": {"block_id": "b1", "block_timestamp": 1.0, "session_id": "s"}},
+    )
+    cfg2 = cast(
+        "RunnableConfig",
+        {"configurable": {"block_id": "b2", "block_timestamp": 2.0, "session_id": "s"}},
+    )
+    cfg3 = cast(
+        "RunnableConfig",
+        {"configurable": {"block_id": "b3", "block_timestamp": 3.0, "session_id": "s"}},
+    )
 
     await store.ainvoke({"message": HumanMessage("m1"), "timestamp": 1.1}, config=cfg1)
     await store.ainvoke({"message": HumanMessage("m2"), "timestamp": 2.1}, config=cfg2)
     await store.ainvoke({"message": HumanMessage("m3"), "timestamp": 3.1}, config=cfg3)
 
-    ids_ts = await store.aget_session_block_ids_with_timestamps("s", start=1.5, end=2.5)
+    ids_ts = await store.aget_session_block_ids_with_timestamps("s", start_time=1.5, end_time=2.5)
     assert ids_ts == [("b2", 2.0)]
-    ids = await store.aget_session_block_ids("s", start=1.5, end=2.5)
+    ids = await store.aget_session_block_ids("s", start_time=1.5, end_time=2.5)
     assert ids == ["b2"]
 
-    hist_ts = await store.aget_session_history_with_timestamps("s", start=1.05, end=2.8)
-    assert [m.content for m, _ in hist_ts] == ["m1", "m2"]
-    hist = await store.aget_session_history("s", start=1.05, end=2.8)
-    assert [m.content for m in hist] == ["m1", "m2"]
+    hist_ts_1 = await store.aget_session_history_with_timestamps("s", start_time=1.05, end_time=2.8)
+    assert [m.content for m, _ in hist_ts_1] == ["m1", "m2"]
+    hist_1 = await store.aget_session_history("s", end_time=2.8)
+    assert [m.content for m in hist_1] == ["m1", "m2"]
+    hist_ts_2 = await store.aget_session_history_with_timestamps("s", start_time=1.5, end_time=3.5)
+    assert [m.content for m, _ in hist_ts_2] == ["m2", "m3"]
+    hist_2 = await store.aget_session_history("s", start_time=1.5)
+    assert [m.content for m in hist_2] == ["m2", "m3"]
 
+    # Test limit parameter
+    assert await store.aget_session_block_ids_with_timestamps("s", limit=0) == []
+    assert await store.aget_session_block_ids_with_timestamps("s", limit=1) == [("b3", 3.0)]
+    assert await store.aget_session_block_ids_with_timestamps("s", limit=2) == [
+        ("b2", 2.0),
+        ("b3", 3.0),
+    ]
+    assert await store.aget_session_block_ids_with_timestamps("s", limit=10) == [
+        ("b1", 1.0),
+        ("b2", 2.0),
+        ("b3", 3.0),
+    ]
 
+    assert await store.aget_session_block_ids("s", limit=0) == []
+    assert await store.aget_session_block_ids("s", limit=1) == ["b3"]
+    assert await store.aget_session_block_ids("s", limit=2) == ["b2", "b3"]
+    assert await store.aget_session_block_ids("s", limit=10) == ["b1", "b2", "b3"]
+
+    assert await store.aget_session_history_with_timestamps("s", limit=0) == []
+    assert [
+        m.content for m, _ in await store.aget_session_history_with_timestamps("s", limit=1)
+    ] == ["m3"]
+    assert [
+        m.content for m, _ in await store.aget_session_history_with_timestamps("s", limit=2)
+    ] == ["m2", "m3"]
+    assert [
+        m.content for m, _ in await store.aget_session_history_with_timestamps("s", limit=10)
+    ] == ["m1", "m2", "m3"]
+
+    assert await store.aget_session_history("s", limit=0) == []
+    assert [m.content for m in await store.aget_session_history("s", limit=1)] == ["m3"]
+    assert [m.content for m in await store.aget_session_history("s", limit=2)] == ["m2", "m3"]
+    assert [m.content for m in await store.aget_session_history("s", limit=10)] == [
+        "m1",
+        "m2",
+        "m3",
+    ]
