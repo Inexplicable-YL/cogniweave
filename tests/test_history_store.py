@@ -171,3 +171,62 @@ async def test_async_history_utilities(tmp_path: Path) -> None:
     assert len(attrs_all) == 1
     ts = await store.aget_block_timestamp("b1")
     assert ts == 1.0
+
+
+
+def test_session_range_utilities(tmp_path: Path) -> None:
+    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/range.sqlite")
+
+    cfg1 = cast("RunnableConfig", {
+        "configurable": {"block_id": "b1", "block_timestamp": 1.0, "session_id": "s"}
+    })
+    cfg2 = cast("RunnableConfig", {
+        "configurable": {"block_id": "b2", "block_timestamp": 2.0, "session_id": "s"}
+    })
+    cfg3 = cast("RunnableConfig", {
+        "configurable": {"block_id": "b3", "block_timestamp": 3.0, "session_id": "s"}
+    })
+
+    store.invoke({"message": HumanMessage("m1"), "timestamp": 1.1}, config=cfg1)
+    store.invoke({"message": HumanMessage("m2"), "timestamp": 2.1}, config=cfg2)
+    store.invoke({"message": HumanMessage("m3"), "timestamp": 3.1}, config=cfg3)
+
+    ids_ts = store.get_session_block_ids_with_timestamps("s", start=1.5, end=2.5)
+    assert ids_ts == [("b2", 2.0)]
+    ids = store.get_session_block_ids("s", start=1.5, end=2.5)
+    assert ids == ["b2"]
+
+    hist_ts = store.get_session_history_with_timestamps("s", start=1.05, end=2.8)
+    assert [m.content for m, _ in hist_ts] == ["m1", "m2"]
+    hist = store.get_session_history("s", start=1.05, end=2.8)
+    assert [m.content for m in hist] == ["m1", "m2"]
+
+
+async def test_async_session_range_utilities(tmp_path: Path) -> None:
+    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/range_async.sqlite")
+
+    cfg1 = cast("RunnableConfig", {
+        "configurable": {"block_id": "b1", "block_timestamp": 1.0, "session_id": "s"}
+    })
+    cfg2 = cast("RunnableConfig", {
+        "configurable": {"block_id": "b2", "block_timestamp": 2.0, "session_id": "s"}
+    })
+    cfg3 = cast("RunnableConfig", {
+        "configurable": {"block_id": "b3", "block_timestamp": 3.0, "session_id": "s"}
+    })
+
+    await store.ainvoke({"message": HumanMessage("m1"), "timestamp": 1.1}, config=cfg1)
+    await store.ainvoke({"message": HumanMessage("m2"), "timestamp": 2.1}, config=cfg2)
+    await store.ainvoke({"message": HumanMessage("m3"), "timestamp": 3.1}, config=cfg3)
+
+    ids_ts = await store.aget_session_block_ids_with_timestamps("s", start=1.5, end=2.5)
+    assert ids_ts == [("b2", 2.0)]
+    ids = await store.aget_session_block_ids("s", start=1.5, end=2.5)
+    assert ids == ["b2"]
+
+    hist_ts = await store.aget_session_history_with_timestamps("s", start=1.05, end=2.8)
+    assert [m.content for m, _ in hist_ts] == ["m1", "m2"]
+    hist = await store.aget_session_history("s", start=1.05, end=2.8)
+    assert [m.content for m in hist] == ["m1", "m2"]
+
+
