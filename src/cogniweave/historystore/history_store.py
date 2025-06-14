@@ -609,7 +609,11 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
                 )
             if end_time is not None:
                 stmt = stmt.filter(ChatBlock.start_time <= datetime.fromtimestamp(end_time, tz=UTC))
-            blocks = stmt.order_by(ChatBlock.start_time).all()
+            if limit is not None:
+                stmt = stmt.order_by(ChatBlock.start_time.desc()).limit(limit)
+                blocks = list(reversed(stmt.all()))
+            else:
+                blocks = stmt.order_by(ChatBlock.start_time).all()
             result = [
                 (
                     block.context_id,
@@ -617,8 +621,6 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
                 )
                 for block in blocks
             ]
-            if limit is not None:
-                result = result[-limit:]
             return result
 
     async def aget_session_block_ids_with_timestamps(
@@ -657,9 +659,14 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
                 )
             if end_time is not None:
                 stmt = stmt.filter(ChatBlock.start_time <= datetime.fromtimestamp(end_time, tz=UTC))
-            stmt = stmt.order_by(ChatBlock.start_time)
-            res = await session.execute(stmt)
-            blocks = res.scalars().all()
+            if limit is not None:
+                stmt = stmt.order_by(ChatBlock.start_time.desc()).limit(limit)
+                res = await session.execute(stmt)
+                blocks = list(reversed(res.scalars().all()))
+            else:
+                stmt = stmt.order_by(ChatBlock.start_time)
+                res = await session.execute(stmt)
+                blocks = res.scalars().all()
             result = [
                 (
                     block.context_id,
@@ -667,8 +674,6 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
                 )
                 for block in blocks
             ]
-            if limit is not None:
-                result = result[-limit:]
             return result
 
     def get_session_block_ids(
@@ -746,7 +751,10 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         if limit is not None and limit <= 0:
             return []
 
-        all_blocks = self.get_session_block_ids_with_timestamps(session_id)
+        block_limit = limit if start_time is None and end_time is None else None
+        all_blocks = self.get_session_block_ids_with_timestamps(
+            session_id, limit=block_limit
+        )
         if not all_blocks:
             return []
 
@@ -801,7 +809,10 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         if limit is not None and limit <= 0:
             return []
 
-        all_blocks = await self.aget_session_block_ids_with_timestamps(session_id)
+        block_limit = limit if start_time is None and end_time is None else None
+        all_blocks = await self.aget_session_block_ids_with_timestamps(
+            session_id, limit=block_limit
+        )
         if not all_blocks:
             return []
 
