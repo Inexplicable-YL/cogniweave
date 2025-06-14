@@ -2,7 +2,14 @@ from pathlib import Path
 
 from langchain_core.messages import HumanMessage
 
-from cogniweave.historystore import BaseHistoryStore, ChatBlock, ChatMessage
+from cogniweave.historystore import (
+    BaseHistoryStore,
+    ChatBlock,
+    ChatBlockAttribute,
+    ChatMessage,
+    User,
+)
+from sqlalchemy import select
 
 
 def test_basic_operations(tmp_path: Path) -> None:
@@ -20,9 +27,13 @@ def test_basic_operations(tmp_path: Path) -> None:
 
     # Verify database records
     with store._session_local() as session:
+        users = session.query(User).all()
         blocks = session.query(ChatBlock).all()
         messages = session.query(ChatMessage).all()
+        assert len(users) == 1
+        assert users[0].id is not None
         assert len(blocks) == 1
+        assert blocks[0].session_id == users[0].id
         assert len(messages) == len(test_messages)
 
     # Test retrieval methods
@@ -47,6 +58,20 @@ async def test_async_basic_operations(tmp_path: Path) -> None:
         block_id="s2",
         block_ts=50.0,
     )
+
+    # Verify database records
+    async with store._async_session_local() as session:
+        result_users = await session.execute(select(User))
+        users = result_users.scalars().all()
+        result_blocks = await session.execute(select(ChatBlock))
+        blocks = result_blocks.scalars().all()
+        result_messages = await session.execute(select(ChatMessage))
+        messages = result_messages.scalars().all()
+        assert len(users) == 1
+        assert users[0].id is not None
+        assert len(blocks) == 1
+        assert blocks[0].session_id == users[0].id
+        assert len(messages) == 2
 
     # Test async retrieval
     history = await store.aget_block_history("s2")
@@ -76,6 +101,17 @@ def test_block_attributes_operations(tmp_path: Path) -> None:
             block_id="attr",
             block_ts=1.0,
         )
+
+    # Verify database records
+    with store._session_local() as session:
+        users = session.query(User).all()
+        blocks = session.query(ChatBlock).all()
+        attrs = session.query(ChatBlockAttribute).all()
+        assert len(users) == 1
+        assert users[0].id is not None
+        assert len(blocks) == 1
+        assert blocks[0].session_id == users[0].id
+        assert len(attrs) == len(test_attrs)
 
     # Test attribute retrieval
     attrs = store.get_block_attributes("attr")
@@ -110,6 +146,20 @@ async def test_async_block_attributes_operations(tmp_path: Path) -> None:
             block_id="attr",
             block_ts=1.0,
         )
+
+    # Verify database records
+    async with store._async_session_local() as session:
+        result_users = await session.execute(select(User))
+        users = result_users.scalars().all()
+        result_blocks = await session.execute(select(ChatBlock))
+        blocks = result_blocks.scalars().all()
+        result_attrs = await session.execute(select(ChatBlockAttribute))
+        attrs_db = result_attrs.scalars().all()
+        assert len(users) == 1
+        assert users[0].id is not None
+        assert len(blocks) == 1
+        assert blocks[0].session_id == users[0].id
+        assert len(attrs_db) == len(test_attrs)
 
     # Test async retrieval
     attrs = await store.aget_block_attributes("attr")
