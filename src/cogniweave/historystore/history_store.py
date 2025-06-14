@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Iterable, TypedDict, cast
 from typing_extensions import override
 
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
@@ -25,15 +25,15 @@ if TYPE_CHECKING:
 
 
 class MessageInput(TypedDict):
-    """Input for storing a single message.
+    """Input for storing one or more messages of a block.
 
     Attributes:
-        message: The chat message to store.
-        timestamp: Unix timestamp when the message was created.
+        block_messages: A list of ``(message, timestamp)`` tuples where the
+            timestamp is a Unix timestamp representing when the message was
+            created.
     """
 
-    message: BaseMessage
-    timestamp: float
+    block_messages: list[tuple[BaseMessage, float]]
 
 
 class BlockAttributeData(TypedDict, total=False):
@@ -49,13 +49,9 @@ class BlockAttributeData(TypedDict, total=False):
 
 
 class AttributeInput(TypedDict):
-    """Input for storing a block attribute.
+    """Input for storing one or more block attributes."""
 
-    Attributes:
-        block_attribute: The attribute data to store.
-    """
-
-    block_attribute: BlockAttributeData
+    block_attributes: list[BlockAttributeData]
 
 
 class BlockAttributeOutput(TypedDict):
@@ -82,9 +78,8 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
     attributes.
 
     Attributes:
-        message_key: Key for message in input dict.
-        timestamp_key: Key for timestamp in input dict.
-        attribute_key: Key for block attribute in input dict.
+        messages_key: Key for block messages in the input dict.
+        attributes_key: Key for block attributes in the input dict.
     """
 
     """Persist chat messages grouped by session."""
@@ -92,9 +87,8 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
     _session_local: sessionmaker[Session] = PrivateAttr()
     _async_session_local: async_sessionmaker[AsyncSession] = PrivateAttr()
 
-    message_key: str = "message"
-    timestamp_key: str = "timestamp"
-    attribute_key: str = "block_attribute"
+    messages_key: str = "block_messages"
+    attributes_key: str = "block_attributes"
 
     def __init__(self, *, db_url: str | None = None, echo: bool = False, **kwargs: Any) -> None:
         """Initialize a new HistoryStore instance.
@@ -245,24 +239,38 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         if not isinstance(block_ts, (int, float)):
             raise TypeError("block_timestamp is required")
 
-        message = input.get(self.message_key)
-        timestamp = input.get(self.timestamp_key)
-        attribute = input.get(self.attribute_key)
+        messages_raw = input.get(self.messages_key)
+        attrs_raw = input.get(self.attributes_key)
 
-        if message is None and attribute is None:
+        if messages_raw is None and attrs_raw is None:
             raise ValueError("nothing to store")
 
-        if message is not None:
-            if not isinstance(message, BaseMessage):
-                raise TypeError("message must be a BaseMessage")
-            if not isinstance(timestamp, (int, float)):
-                raise TypeError("timestamp must be a number")
+        messages: list[tuple[BaseMessage, float]] = []
+        if messages_raw is not None:
+            if not isinstance(messages_raw, Iterable):
+                raise TypeError("block_messages must be iterable")
+            for pair in messages_raw:
+                if (
+                    not isinstance(pair, (list, tuple))
+                    or len(pair) != 2
+                    or not isinstance(pair[0], BaseMessage)
+                    or not isinstance(pair[1], (int, float))
+                ):
+                    raise TypeError(
+                        "block_messages must contain (BaseMessage, timestamp) tuples"
+                    )
+                messages.append((pair[0], float(pair[1])))
 
-        if attribute is not None:
-            if not isinstance(attribute, dict):
-                raise TypeError("block_attribute must be a dict")
-            if not isinstance(attribute.get("type"), str):
-                raise TypeError("block_attribute.type must be a str")
+        attrs: list[BlockAttributeData] = []
+        if attrs_raw is not None:
+            if not isinstance(attrs_raw, Iterable):
+                raise TypeError("block_attributes must be iterable")
+            for attr in attrs_raw:
+                if not isinstance(attr, dict):
+                    raise TypeError("each block attribute must be a dict")
+                if not isinstance(attr.get("type"), str):
+                    raise TypeError("block_attribute.type must be a str")
+                attrs.append(attr)
 
         context_id = block_id
         start_ts = float(block_ts)
@@ -270,20 +278,23 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         with self._session_local() as session:
             db_user = self._get_or_create_user(session, session_id)
             block = self._get_or_create_block(session, db_user, context_id, start_ts)
-            if message is not None:
+
+            for msg, ts in messages:
                 record = ChatMessage(
                     block_id=block.id,
-                    timestamp=datetime.fromtimestamp(float(cast("float | int", timestamp)), tz=UTC),
-                    content=message_to_dict(message),
+                    timestamp=datetime.fromtimestamp(float(ts), tz=UTC),
+                    content=message_to_dict(msg),
                 )
                 session.add(record)
-            if attribute is not None:
-                attr = ChatBlockAttribute(
+
+            for attr in attrs:
+                attr_rec = ChatBlockAttribute(
                     block_id=block.id,
-                    type=attribute["type"],
-                    value=attribute.get("value"),
+                    type=attr["type"],
+                    value=attr.get("value"),
                 )
-                session.add(attr)
+                session.add(attr_rec)
+
             session.commit()
 
     @override
@@ -316,24 +327,38 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         if not isinstance(block_ts, (int, float)):
             raise TypeError("block_timestamp is required")
 
-        message = input.get(self.message_key)
-        timestamp = input.get(self.timestamp_key)
-        attribute = input.get(self.attribute_key)
+        messages_raw = input.get(self.messages_key)
+        attrs_raw = input.get(self.attributes_key)
 
-        if message is None and attribute is None:
+        if messages_raw is None and attrs_raw is None:
             raise ValueError("nothing to store")
 
-        if message is not None:
-            if not isinstance(message, BaseMessage):
-                raise TypeError("message must be a BaseMessage")
-            if not isinstance(timestamp, (int, float)):
-                raise TypeError("timestamp must be a number")
+        messages: list[tuple[BaseMessage, float]] = []
+        if messages_raw is not None:
+            if not isinstance(messages_raw, Iterable):
+                raise TypeError("block_messages must be iterable")
+            for pair in messages_raw:
+                if (
+                    not isinstance(pair, (list, tuple))
+                    or len(pair) != 2
+                    or not isinstance(pair[0], BaseMessage)
+                    or not isinstance(pair[1], (int, float))
+                ):
+                    raise TypeError(
+                        "block_messages must contain (BaseMessage, timestamp) tuples"
+                    )
+                messages.append((pair[0], float(pair[1])))
 
-        if attribute is not None:
-            if not isinstance(attribute, dict):
-                raise TypeError("block_attribute must be a dict")
-            if not isinstance(attribute.get("type"), str):
-                raise TypeError("block_attribute.type must be a str")
+        attrs: list[BlockAttributeData] = []
+        if attrs_raw is not None:
+            if not isinstance(attrs_raw, Iterable):
+                raise TypeError("block_attributes must be iterable")
+            for attr in attrs_raw:
+                if not isinstance(attr, dict):
+                    raise TypeError("each block attribute must be a dict")
+                if not isinstance(attr.get("type"), str):
+                    raise TypeError("block_attribute.type must be a str")
+                attrs.append(attr)
 
         context_id = block_id
         start_ts = float(block_ts)
@@ -341,20 +366,23 @@ class HistoryStore(RunnableSerializable[dict[str, Any] | MessageInput | Attribut
         async with self._async_session_local() as session:
             db_user = await self._a_get_or_create_user(session, session_id)
             block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
-            if message is not None:
+
+            for msg, ts in messages:
                 record = ChatMessage(
                     block_id=block.id,
-                    timestamp=datetime.fromtimestamp(float(cast("float | int", timestamp)), tz=UTC),
-                    content=message_to_dict(message),
+                    timestamp=datetime.fromtimestamp(float(ts), tz=UTC),
+                    content=message_to_dict(msg),
                 )
                 session.add(record)
-            if attribute is not None:
-                attr = ChatBlockAttribute(
+
+            for attr in attrs:
+                attr_rec = ChatBlockAttribute(
                     block_id=block.id,
-                    type=attribute["type"],
-                    value=attribute.get("value"),
+                    type=attr["type"],
+                    value=attr.get("value"),
                 )
-                session.add(attr)
+                session.add(attr_rec)
+
             await session.commit()
 
     def get_block_timestamp(self, block_id: str) -> float | None:

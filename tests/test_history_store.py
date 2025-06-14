@@ -19,7 +19,7 @@ def test_basic_operations(tmp_path: Path) -> None:
     cfg = cast("RunnableConfig", {"configurable": {"block_id": "s1", "block_timestamp": 1000.0}})
     test_messages = ["hi", "how", "are", "you"]
     for i, text in enumerate(test_messages):
-        store.invoke({"message": HumanMessage(text), "timestamp": 1000.0 + i}, config=cfg)
+        store.invoke({"block_messages": [(HumanMessage(text), 1000.0 + i)]}, config=cfg)
 
     # Verify database records
     with store._session_local() as session:
@@ -41,8 +41,8 @@ async def test_async_basic_operations(tmp_path: Path) -> None:
 
     # Test async message storage
     cfg = cast("RunnableConfig", {"configurable": {"block_id": "s2", "block_timestamp": 50.0}})
-    await store.ainvoke({"message": HumanMessage("hello"), "timestamp": 51.0}, config=cfg)
-    await store.ainvoke({"message": HumanMessage("world"), "timestamp": 52.0}, config=cfg)
+    await store.ainvoke({"block_messages": [(HumanMessage("hello"), 51.0)]}, config=cfg)
+    await store.ainvoke({"block_messages": [(HumanMessage("world"), 52.0)]}, config=cfg)
 
     # Test async retrieval
     history = await store.aget_history("s2")
@@ -56,7 +56,7 @@ def test_block_attributes_operations(tmp_path: Path) -> None:
     cfg = cast("RunnableConfig", {"configurable": {"block_id": "attr", "block_timestamp": 1.0}})
 
     # Store initial message
-    store.invoke({"message": HumanMessage("hello"), "timestamp": 1.1}, config=cfg)
+    store.invoke({"block_messages": [(HumanMessage("hello"), 1.1)]}, config=cfg)
 
     # Test attribute storage
     test_attrs = [
@@ -64,7 +64,7 @@ def test_block_attributes_operations(tmp_path: Path) -> None:
         {"type": "tag", "value": ["important"]},
     ]
     for attr in test_attrs:
-        store.invoke({"block_attribute": attr}, config=cfg)
+        store.invoke({"block_attributes": [attr]}, config=cfg)
 
     # Test attribute retrieval
     attrs = store.get_block_attributes("attr")
@@ -83,7 +83,7 @@ async def test_async_block_attributes_operations(tmp_path: Path) -> None:
     cfg = cast("RunnableConfig", {"configurable": {"block_id": "attr", "block_timestamp": 1.0}})
 
     # Store initial message
-    await store.ainvoke({"message": HumanMessage("hello"), "timestamp": 1.1}, config=cfg)
+    await store.ainvoke({"block_messages": [(HumanMessage("hello"), 1.1)]}, config=cfg)
 
     # Test async attribute storage
     test_attrs = [
@@ -91,7 +91,7 @@ async def test_async_block_attributes_operations(tmp_path: Path) -> None:
         {"type": "tag", "value": ["important"]},
     ]
     for attr in test_attrs:
-        await store.ainvoke({"block_attribute": attr}, config=cfg)
+        await store.ainvoke({"block_attributes": [attr]}, config=cfg)
 
     # Test async retrieval
     attrs = await store.aget_block_attributes("attr")
@@ -111,22 +111,22 @@ def test_invoke_validation(tmp_path: Path) -> None:
 
     bad_cfg = cast("RunnableConfig", {"configurable": {"block_timestamp": 1.0}})
     with pytest.raises(ValueError, match="block_id is required"):
-        store.invoke({"message": HumanMessage("x"), "timestamp": 1.0}, config=bad_cfg)
+        store.invoke({"block_messages": [(HumanMessage("x"), 1.0)]}, config=bad_cfg)
 
     with pytest.raises(TypeError):
-        store.invoke({"message": "not msg", "timestamp": 1.0}, config=good_cfg)
+        store.invoke({"block_messages": [("not msg", 1.0)]}, config=good_cfg)
 
     with pytest.raises(TypeError):
-        store.invoke({"message": HumanMessage("hi"), "timestamp": "bad"}, config=good_cfg)
+        store.invoke({"block_messages": [(HumanMessage("hi"), "bad")]}, config=good_cfg)
 
     with pytest.raises(ValueError, match="nothing to store"):
         store.invoke({}, config=good_cfg)
 
     with pytest.raises(TypeError):
-        store.invoke({"block_attribute": "bad"}, config=good_cfg)
+        store.invoke({"block_attributes": "bad"}, config=good_cfg)
 
     with pytest.raises(TypeError):
-        store.invoke({"block_attribute": {"type": 123}}, config=good_cfg)
+        store.invoke({"block_attributes": [{"type": 123}]}, config=good_cfg)
 
 
 async def test_ainvoke_validation(tmp_path: Path) -> None:
@@ -141,22 +141,22 @@ async def test_ainvoke_validation(tmp_path: Path) -> None:
 
     bad_cfg = cast("RunnableConfig", {"configurable": {"block_timestamp": 1.0}})
     with pytest.raises(ValueError, match="block_id is required"):
-        await store.ainvoke({"message": HumanMessage("x"), "timestamp": 1.0}, config=bad_cfg)
+        await store.ainvoke({"block_messages": [(HumanMessage("x"), 1.0)]}, config=bad_cfg)
 
     with pytest.raises(TypeError):
-        await store.ainvoke({"message": "not msg", "timestamp": 1.0}, config=good_cfg)
+        await store.ainvoke({"block_messages": [("not msg", 1.0)]}, config=good_cfg)
 
     with pytest.raises(TypeError):
-        await store.ainvoke({"message": HumanMessage("hi"), "timestamp": "bad"}, config=good_cfg)
+        await store.ainvoke({"block_messages": [(HumanMessage("hi"), "bad")]}, config=good_cfg)
 
     with pytest.raises(ValueError, match="nothing to store"):
         await store.ainvoke({}, config=good_cfg)
 
     with pytest.raises(TypeError):
-        await store.ainvoke({"block_attribute": "bad"}, config=good_cfg)
+        await store.ainvoke({"block_attributes": "bad"}, config=good_cfg)
 
     with pytest.raises(TypeError):
-        await store.ainvoke({"block_attribute": {"type": 123}}, config=good_cfg)
+        await store.ainvoke({"block_attributes": [{"type": 123}]}, config=good_cfg)
 
 
 def test_history_utilities(tmp_path: Path) -> None:
@@ -165,11 +165,11 @@ def test_history_utilities(tmp_path: Path) -> None:
     cfg1 = cast("RunnableConfig", {"configurable": {"block_id": "b1", "block_timestamp": 1.0}})
     cfg2 = cast("RunnableConfig", {"configurable": {"block_id": "b2", "block_timestamp": 2.0}})
 
-    store.invoke({"message": HumanMessage("m1"), "timestamp": 1.1}, config=cfg1)
-    store.invoke({"message": HumanMessage("m2"), "timestamp": 2.1}, config=cfg2)
-    store.invoke({"message": HumanMessage("m3"), "timestamp": 1.2}, config=cfg1)
-    store.invoke({"block_attribute": {"type": "summary", "value": "s"}}, config=cfg1)
-    store.invoke({"block_attribute": {"type": "tag", "value": ["t"]}}, config=cfg1)
+    store.invoke({"block_messages": [(HumanMessage("m1"), 1.1)]}, config=cfg1)
+    store.invoke({"block_messages": [(HumanMessage("m2"), 2.1)]}, config=cfg2)
+    store.invoke({"block_messages": [(HumanMessage("m3"), 1.2)]}, config=cfg1)
+    store.invoke({"block_attributes": [{"type": "summary", "value": "s"}]}, config=cfg1)
+    store.invoke({"block_attributes": [{"type": "tag", "value": ["t"]}]}, config=cfg1)
 
     assert [m.content for m, _ in store.get_history_with_timestamps("b1")] == ["m1", "m3"]
     assert len(store.get_histories(["b2", "b1"])) == 3
@@ -191,10 +191,10 @@ async def test_async_history_utilities(tmp_path: Path) -> None:
     cfg1 = cast("RunnableConfig", {"configurable": {"block_id": "b1", "block_timestamp": 1.0}})
     cfg2 = cast("RunnableConfig", {"configurable": {"block_id": "b2", "block_timestamp": 2.0}})
 
-    await store.ainvoke({"message": HumanMessage("m1"), "timestamp": 1.1}, config=cfg1)
-    await store.ainvoke({"message": HumanMessage("m2"), "timestamp": 2.1}, config=cfg2)
-    await store.ainvoke({"message": HumanMessage("m3"), "timestamp": 1.2}, config=cfg1)
-    await store.ainvoke({"block_attribute": {"type": "summary", "value": "s"}}, config=cfg1)
+    await store.ainvoke({"block_messages": [(HumanMessage("m1"), 1.1)]}, config=cfg1)
+    await store.ainvoke({"block_messages": [(HumanMessage("m2"), 2.1)]}, config=cfg2)
+    await store.ainvoke({"block_messages": [(HumanMessage("m3"), 1.2)]}, config=cfg1)
+    await store.ainvoke({"block_attributes": [{"type": "summary", "value": "s"}]}, config=cfg1)
 
     res = await store.aget_history_with_timestamps("b1")
     assert [m.content for m, _ in res] == ["m1", "m3"]
@@ -222,9 +222,9 @@ def test_session_range_utilities(tmp_path: Path) -> None:
         {"configurable": {"block_id": "b3", "block_timestamp": 3.0, "session_id": "s"}},
     )
 
-    store.invoke({"message": HumanMessage("m1"), "timestamp": 1.1}, config=cfg1)
-    store.invoke({"message": HumanMessage("m2"), "timestamp": 2.1}, config=cfg2)
-    store.invoke({"message": HumanMessage("m3"), "timestamp": 3.1}, config=cfg3)
+    store.invoke({"block_messages": [(HumanMessage("m1"), 1.1)]}, config=cfg1)
+    store.invoke({"block_messages": [(HumanMessage("m2"), 2.1)]}, config=cfg2)
+    store.invoke({"block_messages": [(HumanMessage("m3"), 3.1)]}, config=cfg3)
 
     ids_ts = store.get_session_block_ids_with_timestamps("s", start_time=1.5, end_time=2.5)
     assert ids_ts == [("b2", 2.0)]
@@ -289,9 +289,9 @@ async def test_async_session_range_utilities(tmp_path: Path) -> None:
         {"configurable": {"block_id": "b3", "block_timestamp": 3.0, "session_id": "s"}},
     )
 
-    await store.ainvoke({"message": HumanMessage("m1"), "timestamp": 1.1}, config=cfg1)
-    await store.ainvoke({"message": HumanMessage("m2"), "timestamp": 2.1}, config=cfg2)
-    await store.ainvoke({"message": HumanMessage("m3"), "timestamp": 3.1}, config=cfg3)
+    await store.ainvoke({"block_messages": [(HumanMessage("m1"), 1.1)]}, config=cfg1)
+    await store.ainvoke({"block_messages": [(HumanMessage("m2"), 2.1)]}, config=cfg2)
+    await store.ainvoke({"block_messages": [(HumanMessage("m3"), 3.1)]}, config=cfg3)
 
     ids_ts = await store.aget_session_block_ids_with_timestamps("s", start_time=1.5, end_time=2.5)
     assert ids_ts == [("b2", 2.0)]
