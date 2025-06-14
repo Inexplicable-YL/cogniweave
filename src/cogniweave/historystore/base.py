@@ -46,7 +46,9 @@ class BaseHistoryStore(BaseModel):
     messages_key: str = "block_messages"
     attributes_key: str = "block_attributes"
 
-    def __init__(self, *, db_url: str | None = None, echo: bool = False, **kwargs: Any) -> None:
+    def __init__(
+        self, *, db_url: str | None = None, echo: bool = False, **kwargs: Any
+    ) -> None:
         """Initialize a new HistoryStore instance.
 
         Args:
@@ -59,7 +61,9 @@ class BaseHistoryStore(BaseModel):
         """
         url = db_url or os.getenv("CHAT_DB_URL", "sqlite:///optimized_chat_db.sqlite")
         engine = create_engine(url, echo=echo, future=True)
-        session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+        session_local = sessionmaker(
+            bind=engine, autoflush=False, autocommit=False, future=True
+        )
 
         async_url = url.replace("sqlite://", "sqlite+aiosqlite://")
         async_engine = create_async_engine(async_url, echo=echo, future=True)
@@ -152,7 +156,9 @@ class BaseHistoryStore(BaseModel):
         Return:
             ChatBlock: The existing or newly created ChatBlock instance.
         """
-        result = await session.execute(select(ChatBlock).filter_by(context_id=context_id))
+        result = await session.execute(
+            select(ChatBlock).filter_by(context_id=context_id)
+        )
         block = result.scalar_one_or_none()
         if block is None:
             block = ChatBlock(
@@ -195,7 +201,9 @@ class BaseHistoryStore(BaseModel):
         with self._session_local() as session:
             try:
                 db_user = self._get_or_create_user(session, sid)
-                block = self._get_or_create_block(session, db_user, context_id, start_ts)
+                block = self._get_or_create_block(
+                    session, db_user, context_id, start_ts
+                )
 
                 records = [
                     ChatMessage(
@@ -244,7 +252,9 @@ class BaseHistoryStore(BaseModel):
         async with self._async_session_local() as session:
             try:
                 db_user = await self._a_get_or_create_user(session, sid)
-                block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
+                block = await self._a_get_or_create_block(
+                    session, db_user, context_id, start_ts
+                )
 
                 records = [
                     ChatMessage(
@@ -292,7 +302,9 @@ class BaseHistoryStore(BaseModel):
         with self._session_local() as session:
             try:
                 db_user = self._get_or_create_user(session, sid)
-                block = self._get_or_create_block(session, db_user, context_id, start_ts)
+                block = self._get_or_create_block(
+                    session, db_user, context_id, start_ts
+                )
 
                 attr_recs = [
                     ChatBlockAttribute(
@@ -341,7 +353,9 @@ class BaseHistoryStore(BaseModel):
         async with self._async_session_local() as session:
             try:
                 db_user = await self._a_get_or_create_user(session, sid)
-                block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
+                block = await self._a_get_or_create_block(
+                    session, db_user, context_id, start_ts
+                )
 
                 attr_recs = [
                     ChatBlockAttribute(
@@ -383,13 +397,17 @@ class BaseHistoryStore(BaseModel):
             float | None: Unix timestamp of block start time, or None if not found.
         """
         async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
+            result = await session.execute(
+                select(ChatBlock).filter_by(context_id=block_id)
+            )
             block = result.scalar_one_or_none()
             if not block:
                 return None
             return block.start_time.replace(tzinfo=UTC).timestamp()
 
-    def get_history_with_timestamps(self, block_id: str) -> list[tuple[BaseMessage, float]]:
+    def get_history_with_timestamps(
+        self, block_id: str
+    ) -> list[tuple[BaseMessage, float]]:
         """Get all messages in a block with their timestamps.
 
         Args:
@@ -403,11 +421,16 @@ class BaseHistoryStore(BaseModel):
             if not block:
                 return []
             return [
-                (messages_from_dict([m.content])[0], m.timestamp.replace(tzinfo=UTC).timestamp())
+                (
+                    messages_from_dict([m.content])[0],
+                    m.timestamp.replace(tzinfo=UTC).timestamp(),
+                )
                 for m in block.messages
             ]
 
-    async def aget_history_with_timestamps(self, block_id: str) -> list[tuple[BaseMessage, float]]:
+    async def aget_history_with_timestamps(
+        self, block_id: str
+    ) -> list[tuple[BaseMessage, float]]:
         """Async version of get_history_with_timestamps.
 
         Args:
@@ -417,12 +440,17 @@ class BaseHistoryStore(BaseModel):
             list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
         """
         async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
+            result = await session.execute(
+                select(ChatBlock).filter_by(context_id=block_id)
+            )
             block = result.scalar_one_or_none()
             if not block:
                 return []
             return [
-                (messages_from_dict([m.content])[0], m.timestamp.replace(tzinfo=UTC).timestamp())
+                (
+                    messages_from_dict([m.content])[0],
+                    m.timestamp.replace(tzinfo=UTC).timestamp(),
+                )
                 for m in block.messages
             ]
 
@@ -448,7 +476,9 @@ class BaseHistoryStore(BaseModel):
         """
         return [m for m, _ in await self.aget_history_with_timestamps(block_id)]
 
-    def _query_messages(self, session: Session, block_ids: list[str]) -> list[ChatMessage]:
+    def _query_messages(
+        self, session: Session, block_ids: list[str]
+    ) -> list[ChatMessage]:
         """Return messages for multiple blocks ordered by timestamp."""
 
         if not block_ids:
@@ -596,7 +626,9 @@ class BaseHistoryStore(BaseModel):
                 optionally filtered by type.
         """
         async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
+            result = await session.execute(
+                select(ChatBlock).filter_by(context_id=block_id)
+            )
             block = result.scalar_one_or_none()
             if not block:
                 return []
@@ -641,17 +673,53 @@ class BaseHistoryStore(BaseModel):
                 return []
 
             stmt = session.query(ChatBlock).filter_by(session_id=user.id)
-            if start_time is not None:
-                stmt = stmt.filter(
-                    ChatBlock.start_time >= datetime.fromtimestamp(start_time, tz=UTC)
-                )
-            if end_time is not None:
-                stmt = stmt.filter(ChatBlock.start_time <= datetime.fromtimestamp(end_time, tz=UTC))
-            if limit is not None:
-                stmt = stmt.order_by(ChatBlock.start_time.desc()).limit(limit)
-                blocks = list(reversed(stmt.all()))
+            start_dt = (
+                datetime.fromtimestamp(start_time, tz=UTC)
+                if start_time is not None
+                else None
+            )
+            end_dt = (
+                datetime.fromtimestamp(end_time, tz=UTC)
+                if end_time is not None
+                else None
+            )
+
+            if start_time is None and end_time is None:
+                if limit is not None:
+                    stmt = stmt.order_by(ChatBlock.start_time.desc()).limit(limit)
+                    blocks = list(reversed(stmt.all()))
+                else:
+                    blocks = stmt.order_by(ChatBlock.start_time).all()
             else:
+                if start_dt is not None:
+                    stmt = stmt.filter(ChatBlock.start_time >= start_dt)
+                if end_dt is not None:
+                    stmt = stmt.filter(ChatBlock.start_time <= end_dt)
                 blocks = stmt.order_by(ChatBlock.start_time).all()
+
+                # fetch one block before the range if it exists
+                if start_dt is not None:
+                    prev = (
+                        session.query(ChatBlock)
+                        .filter(ChatBlock.session_id == user.id)
+                        .filter(ChatBlock.start_time < start_dt)
+                        .order_by(ChatBlock.start_time.desc())
+                        .limit(1)
+                        .all()
+                    )
+                    blocks = prev + blocks
+                # and one block after the range
+                if end_dt is not None:
+                    nxt = (
+                        session.query(ChatBlock)
+                        .filter(ChatBlock.session_id == user.id)
+                        .filter(ChatBlock.start_time > end_dt)
+                        .order_by(ChatBlock.start_time)
+                        .limit(1)
+                        .all()
+                    )
+                    blocks = blocks + nxt
+
             return [
                 (
                     block.context_id,
@@ -690,20 +758,58 @@ class BaseHistoryStore(BaseModel):
                 return []
 
             stmt = select(ChatBlock).filter_by(session_id=user.id)
-            if start_time is not None:
-                stmt = stmt.filter(
-                    ChatBlock.start_time >= datetime.fromtimestamp(start_time, tz=UTC)
-                )
-            if end_time is not None:
-                stmt = stmt.filter(ChatBlock.start_time <= datetime.fromtimestamp(end_time, tz=UTC))
-            if limit is not None:
-                stmt = stmt.order_by(ChatBlock.start_time.desc()).limit(limit)
-                res = await session.execute(stmt)
-                blocks = list(reversed(res.scalars().all()))
+            start_dt = (
+                datetime.fromtimestamp(start_time, tz=UTC)
+                if start_time is not None
+                else None
+            )
+            end_dt = (
+                datetime.fromtimestamp(end_time, tz=UTC)
+                if end_time is not None
+                else None
+            )
+
+            if start_time is None and end_time is None:
+                if limit is not None:
+                    stmt = stmt.order_by(ChatBlock.start_time.desc()).limit(limit)
+                    res = await session.execute(stmt)
+                    blocks = list(reversed(res.scalars().all()))
+                else:
+                    stmt = stmt.order_by(ChatBlock.start_time)
+                    res = await session.execute(stmt)
+                    blocks = res.scalars().all()
             else:
+                if start_dt is not None:
+                    stmt = stmt.filter(ChatBlock.start_time >= start_dt)
+                if end_dt is not None:
+                    stmt = stmt.filter(ChatBlock.start_time <= end_dt)
                 stmt = stmt.order_by(ChatBlock.start_time)
                 res = await session.execute(stmt)
-                blocks = res.scalars().all()
+                blocks = list(res.scalars().all())
+
+                if start_dt is not None:
+                    q_prev = (
+                        select(ChatBlock)
+                        .filter(ChatBlock.session_id == user.id)
+                        .filter(ChatBlock.start_time < start_dt)
+                        .order_by(ChatBlock.start_time.desc())
+                        .limit(1)
+                    )
+                    res_prev = await session.execute(q_prev)
+                    prev = list(res_prev.scalars().all())
+                    blocks = prev + blocks
+                if end_dt is not None:
+                    q_next = (
+                        select(ChatBlock)
+                        .filter(ChatBlock.session_id == user.id)
+                        .filter(ChatBlock.start_time > end_dt)
+                        .order_by(ChatBlock.start_time)
+                        .limit(1)
+                    )
+                    res_next = await session.execute(q_next)
+                    nxt = list(res_next.scalars().all())
+                    blocks = blocks + nxt
+
             return [
                 (
                     block.context_id,
@@ -788,33 +894,22 @@ class BaseHistoryStore(BaseModel):
             return []
 
         block_limit = limit if start_time is None and end_time is None else None
-        all_blocks = self.get_session_block_ids_with_timestamps(session_id, limit=block_limit)
+        all_blocks = self.get_session_block_ids_with_timestamps(
+            session_id,
+            limit=block_limit,
+            start_time=start_time,
+            end_time=end_time,
+        )
         if not all_blocks:
             return []
 
-        start_idx = 0
-        end_idx = len(all_blocks)
-
-        if start_time is not None:
-            for i, (_, ts) in enumerate(all_blocks):
-                if ts >= start_time:
-                    start_idx = max(i - 1, 0)
-                    break
-            else:
-                start_idx = len(all_blocks) - 1
-
-        if end_time is not None:
-            for i, (_, ts) in enumerate(all_blocks):
-                if ts > end_time:
-                    end_idx = min(i + 1, len(all_blocks))
-                    break
-
-        block_ids = [bid for bid, _ in all_blocks[start_idx:end_idx]]
+        block_ids = [bid for bid, _ in all_blocks]
         history = self.get_histories_with_timestamps(block_ids)
         result = [
             (msg, ts)
             for msg, ts in history
-            if (start_time is None or ts >= start_time) and (end_time is None or ts <= end_time)
+            if (start_time is None or ts >= start_time)
+            and (end_time is None or ts <= end_time)
         ]
         if limit is not None:
             result = result[-limit:]
@@ -845,34 +940,21 @@ class BaseHistoryStore(BaseModel):
 
         block_limit = limit if start_time is None and end_time is None else None
         all_blocks = await self.aget_session_block_ids_with_timestamps(
-            session_id, limit=block_limit
+            session_id,
+            limit=block_limit,
+            start_time=start_time,
+            end_time=end_time,
         )
         if not all_blocks:
             return []
 
-        start_idx = 0
-        end_idx = len(all_blocks)
-
-        if start_time is not None:
-            for i, (_, ts) in enumerate(all_blocks):
-                if ts >= start_time:
-                    start_idx = max(i - 1, 0)
-                    break
-            else:
-                start_idx = len(all_blocks) - 1
-
-        if end_time is not None:
-            for i, (_, ts) in enumerate(all_blocks):
-                if ts > end_time:
-                    end_idx = min(i + 1, len(all_blocks))
-                    break
-
-        block_ids = [bid for bid, _ in all_blocks[start_idx:end_idx]]
+        block_ids = [bid for bid, _ in all_blocks]
         history = await self.aget_histories_with_timestamps(block_ids)
         result = [
             (msg, ts)
             for msg, ts in history
-            if (start_time is None or ts >= start_time) and (end_time is None or ts <= end_time)
+            if (start_time is None or ts >= start_time)
+            and (end_time is None or ts <= end_time)
         ]
         if limit is not None:
             result = result[-limit:]
