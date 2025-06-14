@@ -86,8 +86,7 @@ class BaseHistoryStore(BaseModel):
         if user is None:
             user = User(name=name)
             session.add(user)
-            session.commit()
-            session.refresh(user)
+            session.flush()
         return user
 
     async def _a_get_or_create_user(self, session: AsyncSession, name: str) -> User:
@@ -105,8 +104,7 @@ class BaseHistoryStore(BaseModel):
         if user is None:
             user = User(name=name)
             session.add(user)
-            await session.commit()
-            await session.refresh(user)
+            await session.flush()
         return user
 
     def _get_or_create_block(
@@ -131,8 +129,7 @@ class BaseHistoryStore(BaseModel):
                 start_time=datetime.fromtimestamp(start_ts, tz=UTC),
             )
             session.add(block)
-            session.commit()
-            session.refresh(block)
+            session.flush()
         return block
 
     async def _a_get_or_create_block(
@@ -158,8 +155,7 @@ class BaseHistoryStore(BaseModel):
                 start_time=datetime.fromtimestamp(start_ts, tz=UTC),
             )
             session.add(block)
-            await session.commit()
-            await session.refresh(block)
+            await session.flush()
         return block
 
     def add_messages(
