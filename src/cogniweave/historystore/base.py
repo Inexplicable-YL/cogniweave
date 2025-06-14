@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
+import asyncio
 from typing import Any, TypedDict
 
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
@@ -165,6 +166,70 @@ class BaseHistoryStore(BaseModel):
             await session.refresh(block)
         return block
 
+    async def _insert_messages(
+        self,
+        session: Session | AsyncSession,
+        messages: list[tuple[BaseMessage, float]],
+        context_id: str,
+        start_ts: float,
+        sid: str,
+    ) -> None:
+        """Insert messages for the given block using a generic session."""
+
+        if isinstance(session, AsyncSession):
+            db_user = await self._a_get_or_create_user(session, sid)
+            block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
+        else:
+            db_user = self._get_or_create_user(session, sid)
+            block = self._get_or_create_block(session, db_user, context_id, start_ts)
+
+        records = [
+            ChatMessage(
+                block_id=block.id,
+                timestamp=datetime.fromtimestamp(float(ts), tz=UTC),
+                content=message_to_dict(msg),
+            )
+            for msg, ts in messages
+        ]
+
+        session.add_all(records)
+        if isinstance(session, AsyncSession):
+            await session.commit()
+        else:
+            session.commit()
+
+    async def _insert_attributes(
+        self,
+        session: Session | AsyncSession,
+        attributes: list[BlockAttributeData],
+        context_id: str,
+        start_ts: float,
+        sid: str,
+    ) -> None:
+        """Insert block attributes using a generic session."""
+
+        if isinstance(session, AsyncSession):
+            db_user = await self._a_get_or_create_user(session, sid)
+            block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
+        else:
+            db_user = self._get_or_create_user(session, sid)
+            block = self._get_or_create_block(session, db_user, context_id, start_ts)
+
+        attr_recs = [
+            ChatBlockAttribute(
+                block_id=block.id,
+                type=attr["type"],
+                value=attr.get("value"),
+            )
+            for attr in attributes
+        ]
+
+        session.add_all(attr_recs)
+        if isinstance(session, AsyncSession):
+            await session.commit()
+        else:
+            session.commit()
+
     def add_messages(
         self,
         messages: list[tuple[BaseMessage, float]],
@@ -194,20 +259,11 @@ class BaseHistoryStore(BaseModel):
 
         with self._session_local() as session:
             try:
-                db_user = self._get_or_create_user(session, sid)
-                block = self._get_or_create_block(session, db_user, context_id, start_ts)
-
-                records = [
-                    ChatMessage(
-                        block_id=block.id,
-                        timestamp=datetime.fromtimestamp(float(ts), tz=UTC),
-                        content=message_to_dict(msg),
+                asyncio.run(
+                    self._insert_messages(
+                        session, messages, context_id, start_ts, sid
                     )
-                    for msg, ts in messages
-                ]
-
-                session.add_all(records)
-                session.commit()
+                )
             except Exception:
                 session.rollback()
                 raise
@@ -243,21 +299,9 @@ class BaseHistoryStore(BaseModel):
 
         async with self._async_session_local() as session:
             try:
-                db_user = await self._a_get_or_create_user(session, sid)
-                block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
-
-                records = [
-                    ChatMessage(
-                        block_id=block.id,
-                        timestamp=datetime.fromtimestamp(float(ts), tz=UTC),
-                        content=message_to_dict(msg),
-                    )
-                    for msg, ts in messages
-                ]
-
-                session.add_all(records)
-                await session.commit()
-
+                await self._insert_messages(
+                    session, messages, context_id, start_ts, sid
+                )
             except Exception:
                 await session.rollback()
                 raise
@@ -291,20 +335,11 @@ class BaseHistoryStore(BaseModel):
 
         with self._session_local() as session:
             try:
-                db_user = self._get_or_create_user(session, sid)
-                block = self._get_or_create_block(session, db_user, context_id, start_ts)
-
-                attr_recs = [
-                    ChatBlockAttribute(
-                        block_id=block.id,
-                        type=attr["type"],
-                        value=attr.get("value"),
+                asyncio.run(
+                    self._insert_attributes(
+                        session, attributes, context_id, start_ts, sid
                     )
-                    for attr in attributes
-                ]
-
-                session.add_all(attr_recs)
-                session.commit()
+                )
             except Exception:
                 session.rollback()
                 raise
@@ -340,20 +375,9 @@ class BaseHistoryStore(BaseModel):
 
         async with self._async_session_local() as session:
             try:
-                db_user = await self._a_get_or_create_user(session, sid)
-                block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
-
-                attr_recs = [
-                    ChatBlockAttribute(
-                        block_id=block.id,
-                        type=attr["type"],
-                        value=attr.get("value"),
-                    )
-                    for attr in attributes
-                ]
-
-                session.add_all(attr_recs)
-                await session.commit()
+                await self._insert_attributes(
+                    session, attributes, context_id, start_ts, sid
+                )
             except Exception:
                 await session.rollback()
                 raise
