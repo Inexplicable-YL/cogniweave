@@ -359,6 +359,27 @@ def test_histories_with_multiple_blocks_order(tmp_path: Path) -> None:
     ]
 
 
+def test_histories_with_multiple_blocks_order_no_ts(tmp_path: Path) -> None:
+    """`get_histories` preserves chronological ordering across blocks."""
+
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/multi_no_ts.sqlite")
+
+    store.add_messages([(HumanMessage("b1-1"), 1.1)], block_id="b1", block_ts=1.0)
+    store.add_messages([(HumanMessage("b1-2"), 1.3)], block_id="b1", block_ts=1.0)
+    store.add_messages([(HumanMessage("b2-1"), 0.6)], block_id="b2", block_ts=0.5)
+    store.add_messages([(HumanMessage("b2-2"), 1.2)], block_id="b2", block_ts=0.5)
+    store.add_messages([(HumanMessage("b2-3"), 1.4)], block_id="b2", block_ts=0.5)
+
+    result = store.get_histories(["b2", "b1"])
+    assert [m.content for m in result] == [
+        "b2-1",
+        "b1-1",
+        "b2-2",
+        "b1-2",
+        "b2-3",
+    ]
+
+
 async def test_async_histories_with_multiple_blocks_order(tmp_path: Path) -> None:
     """Async variant of multi-block history ordering."""
 
@@ -372,6 +393,27 @@ async def test_async_histories_with_multiple_blocks_order(tmp_path: Path) -> Non
 
     result = await store.aget_histories_with_timestamps(["b2", "b1"])
     assert [m.content for m, _ in result] == [
+        "b2-1",
+        "b1-1",
+        "b2-2",
+        "b1-2",
+        "b2-3",
+    ]
+
+
+async def test_async_histories_with_multiple_blocks_order_no_ts(tmp_path: Path) -> None:
+    """Async version of `get_histories` ordering test."""
+
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/multi_async_no_ts.sqlite")
+
+    await store.aadd_messages([(HumanMessage("b1-1"), 1.1)], block_id="b1", block_ts=1.0)
+    await store.aadd_messages([(HumanMessage("b1-2"), 1.3)], block_id="b1", block_ts=1.0)
+    await store.aadd_messages([(HumanMessage("b2-1"), 0.6)], block_id="b2", block_ts=0.5)
+    await store.aadd_messages([(HumanMessage("b2-2"), 1.2)], block_id="b2", block_ts=0.5)
+    await store.aadd_messages([(HumanMessage("b2-3"), 1.4)], block_id="b2", block_ts=0.5)
+
+    result = await store.aget_histories(["b2", "b1"])
+    assert [m.content for m in result] == [
         "b2-1",
         "b1-1",
         "b2-2",

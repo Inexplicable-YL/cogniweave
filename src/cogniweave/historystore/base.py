@@ -533,10 +533,7 @@ class BaseHistoryStore(BaseModel):
             list[BaseMessage]: Combined list of messages from all blocks,
                 in chronological order.
         """
-        messages: list[BaseMessage] = []
-        for sid in sorted(block_ids):
-            messages.extend(self.get_history(sid))
-        return messages
+        return [msg for msg, _ in self.get_histories_with_timestamps(block_ids)]
 
     async def aget_histories(self, block_ids: list[str]) -> list[BaseMessage]:
         """Async version of get_histories.
@@ -548,10 +545,8 @@ class BaseHistoryStore(BaseModel):
             list[BaseMessage]: Combined list of messages from all blocks,
                 in chronological order.
         """
-        messages: list[BaseMessage] = []
-        for sid in sorted(block_ids):
-            messages.extend(await self.aget_history(sid))
-        return messages
+        pairs = await self.aget_histories_with_timestamps(block_ids)
+        return [msg for msg, _ in pairs]
 
     def get_block_attributes(
         self, block_id: str, *, types: list[str] | None = None
