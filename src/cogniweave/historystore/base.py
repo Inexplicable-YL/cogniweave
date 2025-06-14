@@ -19,18 +19,6 @@ from cogniweave.historystore.models import (
 )
 
 
-class MessageInput(TypedDict):
-    """Input for storing one or more messages of a block.
-
-    Attributes:
-        block_messages: A list of ``(message, timestamp)`` tuples where the
-            timestamp is a Unix timestamp representing when the message was
-            created.
-    """
-
-    block_messages: list[tuple[BaseMessage, float]]
-
-
 class BlockAttributeData(TypedDict):
     """Structure of a block attribute.
 
@@ -43,42 +31,15 @@ class BlockAttributeData(TypedDict):
     value: Any
 
 
-class AttributeInput(TypedDict):
-    """Input for storing one or more block attributes."""
-
-    block_attributes: list[BlockAttributeData]
-
-
-class BlockAttributeOutput(TypedDict):
-    """TypedDict representation of a stored block attribute.
-
-    Attributes:
-        id: The attribute's database ID.
-        block_id: ID of the block this attribute belongs to.
-        type: The attribute type/name.
-        value: The stored attribute value.
-    """
-
-    id: int
-    block_id: int
-    type: str
-    value: Any | None
-
-
 class BaseHistoryStore(BaseModel):
     """Persist chat messages grouped by session.
 
     This class provides both synchronous and asynchronous interfaces for storing and retrieving
     chat messages and their metadata. Messages are grouped into blocks which can have additional
     attributes.
-
-    Attributes:
-        messages_key: Key for block messages in the input dict.
-        attributes_key: Key for block attributes in the input dict.
     """
 
-    """Persist chat messages grouped by session."""
-
+    # persist chat messages grouped by session
     _session_local: sessionmaker[Session] = PrivateAttr()
     _async_session_local: async_sessionmaker[AsyncSession] = PrivateAttr()
 
@@ -212,7 +173,17 @@ class BaseHistoryStore(BaseModel):
         block_ts: float,
         session_id: str | None = None,
     ) -> None:
-        """Persist a list of messages to the store."""
+        """Persist a list of messages with timestamps to the store.
+
+        Args:
+            messages: List of (message, timestamp) pairs to store.
+            block_id: Unique identifier for the message block.
+            block_ts: Unix timestamp for the block start time.
+            session_id: Optional session/user ID. Uses block_id if not provided.
+
+        Return:
+            None: Messages are persisted to the database.
+        """
 
         if not messages:
             return
@@ -222,20 +193,24 @@ class BaseHistoryStore(BaseModel):
         sid = session_id or block_id
 
         with self._session_local() as session:
-            db_user = self._get_or_create_user(session, sid)
-            block = self._get_or_create_block(session, db_user, context_id, start_ts)
+            try:
+                db_user = self._get_or_create_user(session, sid)
+                block = self._get_or_create_block(session, db_user, context_id, start_ts)
 
-            records = [
-                ChatMessage(
-                    block_id=block.id,
-                    timestamp=datetime.fromtimestamp(float(ts), tz=UTC),
-                    content=message_to_dict(msg),
-                )
-                for msg, ts in messages
-            ]
+                records = [
+                    ChatMessage(
+                        block_id=block.id,
+                        timestamp=datetime.fromtimestamp(float(ts), tz=UTC),
+                        content=message_to_dict(msg),
+                    )
+                    for msg, ts in messages
+                ]
 
-            session.add_all(records)
-            session.commit()
+                session.add_all(records)
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
     async def aadd_messages(
         self,
@@ -245,7 +220,19 @@ class BaseHistoryStore(BaseModel):
         block_ts: float,
         session_id: str | None = None,
     ) -> None:
-        """Async variant of :meth:`add_messages`."""
+        """Async version of :meth:`add_messages`.
+
+        Persist a list of messages with timestamps to the store asynchronously.
+
+        Args:
+            messages: List of (message, timestamp) pairs to store.
+            block_id: Unique identifier for the message block.
+            block_ts: Unix timestamp for the block start time.
+            session_id: Optional session/user ID. Uses block_id if not provided.
+
+        Return:
+            None: Messages are persisted to the database.
+        """
 
         if not messages:
             return
@@ -255,20 +242,25 @@ class BaseHistoryStore(BaseModel):
         sid = session_id or block_id
 
         async with self._async_session_local() as session:
-            db_user = await self._a_get_or_create_user(session, sid)
-            block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
+            try:
+                db_user = await self._a_get_or_create_user(session, sid)
+                block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
 
-            records = [
-                ChatMessage(
-                    block_id=block.id,
-                    timestamp=datetime.fromtimestamp(float(ts), tz=UTC),
-                    content=message_to_dict(msg),
-                )
-                for msg, ts in messages
-            ]
+                records = [
+                    ChatMessage(
+                        block_id=block.id,
+                        timestamp=datetime.fromtimestamp(float(ts), tz=UTC),
+                        content=message_to_dict(msg),
+                    )
+                    for msg, ts in messages
+                ]
 
-            session.add_all(records)
-            await session.commit()
+                session.add_all(records)
+                await session.commit()
+
+            except Exception:
+                await session.rollback()
+                raise
 
     def add_attributes(
         self,
@@ -278,7 +270,17 @@ class BaseHistoryStore(BaseModel):
         block_ts: float,
         session_id: str | None = None,
     ) -> None:
-        """Persist a list of block attributes to the store."""
+        """Persist a list of block attributes to the store.
+
+        Args:
+            attributes: List of attribute dictionaries containing 'type' and optional 'value'.
+            block_id: Unique identifier for the attribute block.
+            block_ts: Unix timestamp for the block start time.
+            session_id: Optional session/user ID. Uses block_id if not provided.
+
+        Return:
+            None: Attributes are persisted to the database.
+        """
 
         if not attributes:
             return
@@ -288,20 +290,24 @@ class BaseHistoryStore(BaseModel):
         sid = session_id or block_id
 
         with self._session_local() as session:
-            db_user = self._get_or_create_user(session, sid)
-            block = self._get_or_create_block(session, db_user, context_id, start_ts)
+            try:
+                db_user = self._get_or_create_user(session, sid)
+                block = self._get_or_create_block(session, db_user, context_id, start_ts)
 
-            attr_recs = [
-                ChatBlockAttribute(
-                    block_id=block.id,
-                    type=attr["type"],
-                    value=attr.get("value"),
-                )
-                for attr in attributes
-            ]
+                attr_recs = [
+                    ChatBlockAttribute(
+                        block_id=block.id,
+                        type=attr["type"],
+                        value=attr.get("value"),
+                    )
+                    for attr in attributes
+                ]
 
-            session.add_all(attr_recs)
-            session.commit()
+                session.add_all(attr_recs)
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
     async def aadd_attributes(
         self,
@@ -311,7 +317,19 @@ class BaseHistoryStore(BaseModel):
         block_ts: float,
         session_id: str | None = None,
     ) -> None:
-        """Async variant of :meth:`add_attributes`."""
+        """Async version of :meth:`add_attributes`.
+
+        Persist a list of block attributes to the store asynchronously.
+
+        Args:
+            attributes: List of attribute dictionaries containing 'type' and optional 'value'.
+            block_id: Unique identifier for the attribute block.
+            block_ts: Unix timestamp for the block start time.
+            session_id: Optional session/user ID. Uses block_id if not provided.
+
+        Return:
+            None: Attributes are persisted to the database.
+        """
 
         if not attributes:
             return
@@ -321,21 +339,24 @@ class BaseHistoryStore(BaseModel):
         sid = session_id or block_id
 
         async with self._async_session_local() as session:
-            db_user = await self._a_get_or_create_user(session, sid)
-            block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
+            try:
+                db_user = await self._a_get_or_create_user(session, sid)
+                block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
 
-            attr_recs = [
-                ChatBlockAttribute(
-                    block_id=block.id,
-                    type=attr["type"],
-                    value=attr.get("value"),
-                )
-                for attr in attributes
-            ]
+                attr_recs = [
+                    ChatBlockAttribute(
+                        block_id=block.id,
+                        type=attr["type"],
+                        value=attr.get("value"),
+                    )
+                    for attr in attributes
+                ]
 
-            session.add_all(attr_recs)
-            await session.commit()
-
+                session.add_all(attr_recs)
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     def get_block_timestamp(self, block_id: str) -> float | None:
         """Get the start timestamp of a chat block.
@@ -493,7 +514,7 @@ class BaseHistoryStore(BaseModel):
 
     def get_block_attributes(
         self, block_id: str, *, types: list[str] | None = None
-    ) -> list[BlockAttributeOutput]:
+    ) -> list[BlockAttributeData]:
         """Get all attributes for a chat block, optionally filtered by type.
 
         Args:
@@ -501,7 +522,7 @@ class BaseHistoryStore(BaseModel):
             types: Optional list of attribute types to filter by.
 
         Return:
-            list[BlockAttributeOutput]: List of block attributes in insertion order,
+            list[BlockAttributeData]: List of block attributes in insertion order,
                 optionally filtered by type.
         """
         with self._session_local() as session:
@@ -513,9 +534,7 @@ class BaseHistoryStore(BaseModel):
             if types is not None:
                 attrs = [attr for attr in attrs if attr.type in types]
             return [
-                BlockAttributeOutput(
-                    id=attr.id,
-                    block_id=attr.block_id,
+                BlockAttributeData(
                     type=attr.type,
                     value=attr.value,
                 )
@@ -524,7 +543,7 @@ class BaseHistoryStore(BaseModel):
 
     async def aget_block_attributes(
         self, block_id: str, *, types: list[str] | None = None
-    ) -> list[BlockAttributeOutput]:
+    ) -> list[BlockAttributeData]:
         """Async version of get_block_attributes.
 
         Args:
@@ -532,7 +551,7 @@ class BaseHistoryStore(BaseModel):
             types: Optional list of attribute types to filter by.
 
         Return:
-            list[BlockAttributeOutput]: List of block attributes in insertion order,
+            list[BlockAttributeData]: List of block attributes in insertion order,
                 optionally filtered by type.
         """
         async with self._async_session_local() as session:
@@ -545,9 +564,7 @@ class BaseHistoryStore(BaseModel):
             if types is not None:
                 attrs = [attr for attr in attrs if attr.type in types]
             return [
-                BlockAttributeOutput(
-                    id=attr.id,
-                    block_id=attr.block_id,
+                BlockAttributeData(
                     type=attr.type,
                     value=attr.value,
                 )

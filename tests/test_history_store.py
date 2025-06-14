@@ -72,7 +72,7 @@ def test_block_attributes_operations(tmp_path: Path) -> None:
     ]
     for attr in test_attrs:
         store.add_attributes(
-            [attr],
+            [attr],  # type: ignore
             block_id="attr",
             block_ts=1.0,
         )
@@ -106,7 +106,7 @@ async def test_async_block_attributes_operations(tmp_path: Path) -> None:
     ]
     for attr in test_attrs:
         await store.aadd_attributes(
-            [attr],
+            [attr],  # type: ignore
             block_id="attr",
             block_ts=1.0,
         )
@@ -115,7 +115,6 @@ async def test_async_block_attributes_operations(tmp_path: Path) -> None:
     attrs = await store.aget_block_attributes("attr")
     assert len(attrs) == len(test_attrs)
     assert {a["type"] for a in attrs} == {a["type"] for a in test_attrs}
-
 
 
 def test_history_utilities(tmp_path: Path) -> None:
