@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, TypedDict, cast
+from typing import Any, TypedDict
 
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
 from pydantic import BaseModel, PrivateAttr
@@ -18,9 +17,6 @@ from cogniweave.historystore.models import (
     ChatMessage,
     User,
 )
-
-if TYPE_CHECKING:
-    from langchain_core.runnables.config import RunnableConfig
 
 
 class MessageInput(TypedDict):
@@ -215,104 +211,18 @@ class BaseHistoryStore(BaseModel):
         block_id: str,
         block_ts: float,
         session_id: str | None = None,
-        **kwargs: Any,
-    ) -> None: ...
-
-    async def aadd_messages(
-        self,
-        messages: list[tuple[BaseMessage, float]],
-        *,
-        block_id: str,
-        block_ts: float,
-        session_id: str | None = None,
-        **kwargs: Any,
-    ) -> None: ...
-
-    def add_attributes(
-        self,
-        attributes: list[BlockAttributeData],
-        *,
-        block_id: str,
-        block_ts: float,
-        session_id: str | None = None,
-        **kwargs: Any,
-    ) -> None: ...
-
-    async def aadd_attributes(
-        self,
-        attributes: list[BlockAttributeData],
-        *,
-        block_id: str,
-        block_ts: float,
-        session_id: str | None = None,
-        **kwargs: Any,
-    ) -> None: ...
-
-    def invoke(
-        self,
-        input: dict[str, Any] | MessageInput | AttributeInput,
-        config: RunnableConfig | None = None,
-        **kwargs: Any,
     ) -> None:
-        """Store a message or block attribute.
+        """Persist a list of messages to the store."""
 
-        Args:
-            input: Contains either message+timestamp or block attribute data.
-            config: Must contain 'configurable' dict with block_id and block_timestamp.
-            **kwargs: Additional keyword arguments.
-
-        Raises:
-            ValueError: If config is None or missing required fields.
-            TypeError: If input data has invalid types.
-            ValueError: If input contains neither message nor attribute.
-        """
-        if not config:
-            raise ValueError("config must be provided")
-        block_id = config.get("configurable", {}).get("block_id", "")
-        block_ts = config.get("configurable", {}).get("block_timestamp")
-        session_id = config.get("configurable", {}).get("session_id", block_id)
-
-        if not block_id:
-            raise ValueError("block_id is required")
-        if not isinstance(block_ts, (int, float)):
-            raise TypeError("block_timestamp is required")
-
-        messages_raw = input.get(self.messages_key)
-        attrs_raw = input.get(self.attributes_key)
-
-        if messages_raw is None and attrs_raw is None:
-            raise ValueError("nothing to store")
-
-        messages: list[tuple[BaseMessage, float]] = []
-        if messages_raw is not None:
-            if not isinstance(messages_raw, Iterable):
-                raise TypeError("block_messages must be iterable")
-            for pair in messages_raw:
-                if (
-                    not isinstance(pair, (list, tuple))
-                    or len(pair) != 2  # noqa: PLR2004
-                    or not isinstance(pair[0], BaseMessage)
-                    or not isinstance(pair[1], (int, float))
-                ):
-                    raise TypeError("block_messages must contain (BaseMessage, timestamp) tuples")
-                messages.append((pair[0], float(pair[1])))
-
-        attrs: list[BlockAttributeData] = []
-        if attrs_raw is not None:
-            if not isinstance(attrs_raw, Iterable):
-                raise TypeError("block_attributes must be iterable")
-            for attr in attrs_raw:
-                if not isinstance(attr, dict) or set(attr.keys()) != {"type", "value"}:
-                    raise TypeError("each block attribute must be a dict with type and value keys")
-                if not isinstance(attr.get("type"), str):
-                    raise TypeError("block_attribute.type must be a str")
-                attrs.append(cast("BlockAttributeData", attr))
+        if not messages:
+            return
 
         context_id = block_id
         start_ts = float(block_ts)
+        sid = session_id or block_id
 
         with self._session_local() as session:
-            db_user = self._get_or_create_user(session, session_id)
+            db_user = self._get_or_create_user(session, sid)
             block = self._get_or_create_block(session, db_user, context_id, start_ts)
 
             records = [
@@ -323,82 +233,29 @@ class BaseHistoryStore(BaseModel):
                 )
                 for msg, ts in messages
             ]
-            attr_recs = [
-                ChatBlockAttribute(
-                    block_id=block.id,
-                    type=attr["type"],
-                    value=attr.get("value"),
-                )
-                for attr in attrs
-            ]
-            session.add_all(records + attr_recs)
+
+            session.add_all(records)
             session.commit()
 
-    async def ainvoke(
+    async def aadd_messages(
         self,
-        input: dict[str, Any] | MessageInput | AttributeInput,
-        config: RunnableConfig | None = None,
-        **kwargs: Any,
+        messages: list[tuple[BaseMessage, float]],
+        *,
+        block_id: str,
+        block_ts: float,
+        session_id: str | None = None,
     ) -> None:
-        """Async version of invoke - store a message or block attribute.
+        """Async variant of :meth:`add_messages`."""
 
-        Args:
-            input: Contains either message+timestamp or block attribute data.
-            config: Must contain 'configurable' dict with block_id and block_timestamp.
-            **kwargs: Additional keyword arguments.
-
-        Raises:
-            ValueError: If config is None or missing required fields.
-            TypeError: If input data has invalid types.
-            ValueError: If input contains neither message nor attribute.
-        """
-        if not config:
-            raise ValueError("config must be provided")
-        block_id = config.get("configurable", {}).get("block_id", "")
-        block_ts = config.get("configurable", {}).get("block_timestamp")
-        session_id = config.get("configurable", {}).get("session_id", block_id)
-
-        if not block_id:
-            raise ValueError("block_id is required")
-        if not isinstance(block_ts, (int, float)):
-            raise TypeError("block_timestamp is required")
-
-        messages_raw = input.get(self.messages_key)
-        attrs_raw = input.get(self.attributes_key)
-
-        if messages_raw is None and attrs_raw is None:
-            raise ValueError("nothing to store")
-
-        messages: list[tuple[BaseMessage, float]] = []
-        if messages_raw is not None:
-            if not isinstance(messages_raw, Iterable):
-                raise TypeError("block_messages must be iterable")
-            for pair in messages_raw:
-                if (
-                    not isinstance(pair, (list, tuple))
-                    or len(pair) != 2  # noqa: PLR2004
-                    or not isinstance(pair[0], BaseMessage)
-                    or not isinstance(pair[1], (int, float))
-                ):
-                    raise TypeError("block_messages must contain (BaseMessage, timestamp) tuples")
-                messages.append((pair[0], float(pair[1])))
-
-        attrs: list[BlockAttributeData] = []
-        if attrs_raw is not None:
-            if not isinstance(attrs_raw, Iterable):
-                raise TypeError("block_attributes must be iterable")
-            for attr in attrs_raw:
-                if not isinstance(attr, dict) or set(attr.keys()) != {"type", "value"}:
-                    raise TypeError("each block attribute must be a dict with type and value keys")
-                if not isinstance(attr.get("type"), str):
-                    raise TypeError("block_attribute.type must be a str")
-                attrs.append(cast("BlockAttributeData", attr))
+        if not messages:
+            return
 
         context_id = block_id
         start_ts = float(block_ts)
+        sid = session_id or block_id
 
         async with self._async_session_local() as session:
-            db_user = await self._a_get_or_create_user(session, session_id)
+            db_user = await self._a_get_or_create_user(session, sid)
             block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
 
             records = [
@@ -409,16 +266,76 @@ class BaseHistoryStore(BaseModel):
                 )
                 for msg, ts in messages
             ]
+
+            session.add_all(records)
+            await session.commit()
+
+    def add_attributes(
+        self,
+        attributes: list[BlockAttributeData],
+        *,
+        block_id: str,
+        block_ts: float,
+        session_id: str | None = None,
+    ) -> None:
+        """Persist a list of block attributes to the store."""
+
+        if not attributes:
+            return
+
+        context_id = block_id
+        start_ts = float(block_ts)
+        sid = session_id or block_id
+
+        with self._session_local() as session:
+            db_user = self._get_or_create_user(session, sid)
+            block = self._get_or_create_block(session, db_user, context_id, start_ts)
+
             attr_recs = [
                 ChatBlockAttribute(
                     block_id=block.id,
                     type=attr["type"],
                     value=attr.get("value"),
                 )
-                for attr in attrs
+                for attr in attributes
             ]
-            session.add_all(records + attr_recs)
+
+            session.add_all(attr_recs)
+            session.commit()
+
+    async def aadd_attributes(
+        self,
+        attributes: list[BlockAttributeData],
+        *,
+        block_id: str,
+        block_ts: float,
+        session_id: str | None = None,
+    ) -> None:
+        """Async variant of :meth:`add_attributes`."""
+
+        if not attributes:
+            return
+
+        context_id = block_id
+        start_ts = float(block_ts)
+        sid = session_id or block_id
+
+        async with self._async_session_local() as session:
+            db_user = await self._a_get_or_create_user(session, sid)
+            block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
+
+            attr_recs = [
+                ChatBlockAttribute(
+                    block_id=block.id,
+                    type=attr["type"],
+                    value=attr.get("value"),
+                )
+                for attr in attributes
+            ]
+
+            session.add_all(attr_recs)
             await session.commit()
+
 
     def get_block_timestamp(self, block_id: str) -> float | None:
         """Get the start timestamp of a chat block.

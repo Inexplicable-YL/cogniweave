@@ -1,13 +1,8 @@
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
 
-import pytest
 from langchain_core.messages import HumanMessage
 
 from cogniweave.historystore import BaseHistoryStore, ChatBlock, ChatMessage
-
-if TYPE_CHECKING:
-    from langchain_core.runnables.config import RunnableConfig
 
 
 def test_basic_operations(tmp_path: Path) -> None:
@@ -15,16 +10,12 @@ def test_basic_operations(tmp_path: Path) -> None:
     store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/test.sqlite")
 
     # Test message storage
-    cfg = cast("RunnableConfig", {"configurable": {"block_id": "s1", "block_timestamp": 1000.0}})
     test_messages = ["hi", "how", "are", "you"]
 
-    store.invoke(
-        {
-            "block_messages": [
-                (HumanMessage(text), 1000.0 + i) for i, text in enumerate(test_messages)
-            ]
-        },
-        config=cfg,
+    store.add_messages(
+        [(HumanMessage(text), 1000.0 + i) for i, text in enumerate(test_messages)],
+        block_id="s1",
+        block_ts=1000.0,
     )
 
     # Verify database records
@@ -46,9 +37,16 @@ async def test_async_basic_operations(tmp_path: Path) -> None:
     store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/async.sqlite")
 
     # Test async message storage
-    cfg = cast("RunnableConfig", {"configurable": {"block_id": "s2", "block_timestamp": 50.0}})
-    await store.ainvoke({"block_messages": [(HumanMessage("hello"), 51.0)]}, config=cfg)
-    await store.ainvoke({"block_messages": [(HumanMessage("world"), 52.0)]}, config=cfg)
+    await store.aadd_messages(
+        [(HumanMessage("hello"), 51.0)],
+        block_id="s2",
+        block_ts=50.0,
+    )
+    await store.aadd_messages(
+        [(HumanMessage("world"), 52.0)],
+        block_id="s2",
+        block_ts=50.0,
+    )
 
     # Test async retrieval
     history = await store.aget_history("s2")
@@ -59,10 +57,13 @@ async def test_async_basic_operations(tmp_path: Path) -> None:
 def test_block_attributes_operations(tmp_path: Path) -> None:
     """Test block attribute storage and retrieval."""
     store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/attrs.sqlite")
-    cfg = cast("RunnableConfig", {"configurable": {"block_id": "attr", "block_timestamp": 1.0}})
 
     # Store initial message
-    store.invoke({"block_messages": [(HumanMessage("hello"), 1.1)]}, config=cfg)
+    store.add_messages(
+        [(HumanMessage("hello"), 1.1)],
+        block_id="attr",
+        block_ts=1.0,
+    )
 
     # Test attribute storage
     test_attrs = [
@@ -70,7 +71,11 @@ def test_block_attributes_operations(tmp_path: Path) -> None:
         {"type": "tag", "value": ["important"]},
     ]
     for attr in test_attrs:
-        store.invoke({"block_attributes": [attr]}, config=cfg)
+        store.add_attributes(
+            [attr],
+            block_id="attr",
+            block_ts=1.0,
+        )
 
     # Test attribute retrieval
     attrs = store.get_block_attributes("attr")
@@ -86,10 +91,13 @@ def test_block_attributes_operations(tmp_path: Path) -> None:
 async def test_async_block_attributes_operations(tmp_path: Path) -> None:
     """Test async block attribute operations."""
     store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/attrs_async.sqlite")
-    cfg = cast("RunnableConfig", {"configurable": {"block_id": "attr", "block_timestamp": 1.0}})
 
     # Store initial message
-    await store.ainvoke({"block_messages": [(HumanMessage("hello"), 1.1)]}, config=cfg)
+    await store.aadd_messages(
+        [(HumanMessage("hello"), 1.1)],
+        block_id="attr",
+        block_ts=1.0,
+    )
 
     # Test async attribute storage
     test_attrs = [
@@ -97,7 +105,11 @@ async def test_async_block_attributes_operations(tmp_path: Path) -> None:
         {"type": "tag", "value": ["important"]},
     ]
     for attr in test_attrs:
-        await store.ainvoke({"block_attributes": [attr]}, config=cfg)
+        await store.aadd_attributes(
+            [attr],
+            block_id="attr",
+            block_ts=1.0,
+        )
 
     # Test async retrieval
     attrs = await store.aget_block_attributes("attr")
@@ -105,77 +117,35 @@ async def test_async_block_attributes_operations(tmp_path: Path) -> None:
     assert {a["type"] for a in attrs} == {a["type"] for a in test_attrs}
 
 
-def test_invoke_validation(tmp_path: Path) -> None:
-    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/val.sqlite")
-    good_cfg = cast(
-        "RunnableConfig",
-        {"configurable": {"block_id": "b", "block_timestamp": 1.0}},
-    )
-
-    with pytest.raises(ValueError, match="config must be provided"):
-        store.invoke({}, config=None)
-
-    bad_cfg = cast("RunnableConfig", {"configurable": {"block_timestamp": 1.0}})
-    with pytest.raises(ValueError, match="block_id is required"):
-        store.invoke({"block_messages": [(HumanMessage("x"), 1.0)]}, config=bad_cfg)
-
-    with pytest.raises(TypeError):
-        store.invoke({"block_messages": [("not msg", 1.0)]}, config=good_cfg)
-
-    with pytest.raises(TypeError):
-        store.invoke({"block_messages": [(HumanMessage("hi"), "bad")]}, config=good_cfg)
-
-    with pytest.raises(ValueError, match="nothing to store"):
-        store.invoke({}, config=good_cfg)
-
-    with pytest.raises(TypeError):
-        store.invoke({"block_attributes": "bad"}, config=good_cfg)
-
-    with pytest.raises(TypeError):
-        store.invoke({"block_attributes": [{"type": 123}]}, config=good_cfg)
-
-
-async def test_ainvoke_validation(tmp_path: Path) -> None:
-    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/aval.sqlite")
-    good_cfg = cast(
-        "RunnableConfig",
-        {"configurable": {"block_id": "b", "block_timestamp": 1.0}},
-    )
-
-    with pytest.raises(ValueError, match="config must be provided"):
-        await store.ainvoke({}, config=None)
-
-    bad_cfg = cast("RunnableConfig", {"configurable": {"block_timestamp": 1.0}})
-    with pytest.raises(ValueError, match="block_id is required"):
-        await store.ainvoke({"block_messages": [(HumanMessage("x"), 1.0)]}, config=bad_cfg)
-
-    with pytest.raises(TypeError):
-        await store.ainvoke({"block_messages": [("not msg", 1.0)]}, config=good_cfg)
-
-    with pytest.raises(TypeError):
-        await store.ainvoke({"block_messages": [(HumanMessage("hi"), "bad")]}, config=good_cfg)
-
-    with pytest.raises(ValueError, match="nothing to store"):
-        await store.ainvoke({}, config=good_cfg)
-
-    with pytest.raises(TypeError):
-        await store.ainvoke({"block_attributes": "bad"}, config=good_cfg)
-
-    with pytest.raises(TypeError):
-        await store.ainvoke({"block_attributes": [{"type": 123}]}, config=good_cfg)
-
 
 def test_history_utilities(tmp_path: Path) -> None:
     store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/util.sqlite")
 
-    cfg1 = cast("RunnableConfig", {"configurable": {"block_id": "b1", "block_timestamp": 1.0}})
-    cfg2 = cast("RunnableConfig", {"configurable": {"block_id": "b2", "block_timestamp": 2.0}})
-
-    store.invoke({"block_messages": [(HumanMessage("m1"), 1.1)]}, config=cfg1)
-    store.invoke({"block_messages": [(HumanMessage("m2"), 2.1)]}, config=cfg2)
-    store.invoke({"block_messages": [(HumanMessage("m3"), 1.2)]}, config=cfg1)
-    store.invoke({"block_attributes": [{"type": "summary", "value": "s"}]}, config=cfg1)
-    store.invoke({"block_attributes": [{"type": "tag", "value": ["t"]}]}, config=cfg1)
+    store.add_messages(
+        [(HumanMessage("m1"), 1.1)],
+        block_id="b1",
+        block_ts=1.0,
+    )
+    store.add_messages(
+        [(HumanMessage("m2"), 2.1)],
+        block_id="b2",
+        block_ts=2.0,
+    )
+    store.add_messages(
+        [(HumanMessage("m3"), 1.2)],
+        block_id="b1",
+        block_ts=1.0,
+    )
+    store.add_attributes(
+        [{"type": "summary", "value": "s"}],
+        block_id="b1",
+        block_ts=1.0,
+    )
+    store.add_attributes(
+        [{"type": "tag", "value": ["t"]}],
+        block_id="b1",
+        block_ts=1.0,
+    )
 
     assert [m.content for m, _ in store.get_history_with_timestamps("b1")] == ["m1", "m3"]
     assert len(store.get_histories(["b2", "b1"])) == 3
@@ -194,13 +164,26 @@ def test_history_utilities(tmp_path: Path) -> None:
 async def test_async_history_utilities(tmp_path: Path) -> None:
     store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/util_async.sqlite")
 
-    cfg1 = cast("RunnableConfig", {"configurable": {"block_id": "b1", "block_timestamp": 1.0}})
-    cfg2 = cast("RunnableConfig", {"configurable": {"block_id": "b2", "block_timestamp": 2.0}})
-
-    await store.ainvoke({"block_messages": [(HumanMessage("m1"), 1.1)]}, config=cfg1)
-    await store.ainvoke({"block_messages": [(HumanMessage("m2"), 2.1)]}, config=cfg2)
-    await store.ainvoke({"block_messages": [(HumanMessage("m3"), 1.2)]}, config=cfg1)
-    await store.ainvoke({"block_attributes": [{"type": "summary", "value": "s"}]}, config=cfg1)
+    await store.aadd_messages(
+        [(HumanMessage("m1"), 1.1)],
+        block_id="b1",
+        block_ts=1.0,
+    )
+    await store.aadd_messages(
+        [(HumanMessage("m2"), 2.1)],
+        block_id="b2",
+        block_ts=2.0,
+    )
+    await store.aadd_messages(
+        [(HumanMessage("m3"), 1.2)],
+        block_id="b1",
+        block_ts=1.0,
+    )
+    await store.aadd_attributes(
+        [{"type": "summary", "value": "s"}],
+        block_id="b1",
+        block_ts=1.0,
+    )
 
     res = await store.aget_history_with_timestamps("b1")
     assert [m.content for m, _ in res] == ["m1", "m3"]
@@ -215,22 +198,24 @@ async def test_async_history_utilities(tmp_path: Path) -> None:
 def test_session_range_utilities(tmp_path: Path) -> None:
     store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/range.sqlite")
 
-    cfg1 = cast(
-        "RunnableConfig",
-        {"configurable": {"block_id": "b1", "block_timestamp": 1.0, "session_id": "s"}},
+    store.add_messages(
+        [(HumanMessage("m1"), 1.1)],
+        block_id="b1",
+        block_ts=1.0,
+        session_id="s",
     )
-    cfg2 = cast(
-        "RunnableConfig",
-        {"configurable": {"block_id": "b2", "block_timestamp": 2.0, "session_id": "s"}},
+    store.add_messages(
+        [(HumanMessage("m2"), 2.1)],
+        block_id="b2",
+        block_ts=2.0,
+        session_id="s",
     )
-    cfg3 = cast(
-        "RunnableConfig",
-        {"configurable": {"block_id": "b3", "block_timestamp": 3.0, "session_id": "s"}},
+    store.add_messages(
+        [(HumanMessage("m3"), 3.1)],
+        block_id="b3",
+        block_ts=3.0,
+        session_id="s",
     )
-
-    store.invoke({"block_messages": [(HumanMessage("m1"), 1.1)]}, config=cfg1)
-    store.invoke({"block_messages": [(HumanMessage("m2"), 2.1)]}, config=cfg2)
-    store.invoke({"block_messages": [(HumanMessage("m3"), 3.1)]}, config=cfg3)
 
     ids_ts = store.get_session_block_ids_with_timestamps("s", start_time=1.5, end_time=2.5)
     assert ids_ts == [("b2", 2.0)]
@@ -282,22 +267,24 @@ def test_session_range_utilities(tmp_path: Path) -> None:
 async def test_async_session_range_utilities(tmp_path: Path) -> None:
     store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/range_async.sqlite")
 
-    cfg1 = cast(
-        "RunnableConfig",
-        {"configurable": {"block_id": "b1", "block_timestamp": 1.0, "session_id": "s"}},
+    await store.aadd_messages(
+        [(HumanMessage("m1"), 1.1)],
+        block_id="b1",
+        block_ts=1.0,
+        session_id="s",
     )
-    cfg2 = cast(
-        "RunnableConfig",
-        {"configurable": {"block_id": "b2", "block_timestamp": 2.0, "session_id": "s"}},
+    await store.aadd_messages(
+        [(HumanMessage("m2"), 2.1)],
+        block_id="b2",
+        block_ts=2.0,
+        session_id="s",
     )
-    cfg3 = cast(
-        "RunnableConfig",
-        {"configurable": {"block_id": "b3", "block_timestamp": 3.0, "session_id": "s"}},
+    await store.aadd_messages(
+        [(HumanMessage("m3"), 3.1)],
+        block_id="b3",
+        block_ts=3.0,
+        session_id="s",
     )
-
-    await store.ainvoke({"block_messages": [(HumanMessage("m1"), 1.1)]}, config=cfg1)
-    await store.ainvoke({"block_messages": [(HumanMessage("m2"), 2.1)]}, config=cfg2)
-    await store.ainvoke({"block_messages": [(HumanMessage("m3"), 3.1)]}, config=cfg3)
 
     ids_ts = await store.aget_session_block_ids_with_timestamps("s", start_time=1.5, end_time=2.5)
     assert ids_ts == [("b2", 2.0)]
