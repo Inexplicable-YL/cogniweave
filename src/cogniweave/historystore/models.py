@@ -16,7 +16,6 @@ class User(Base):
     """Represents a chat user."""
 
     __tablename__ = "users"
-    __table_args__ = (Index("idx_user_name", "name"),)
 
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
 
@@ -26,6 +25,8 @@ class User(Base):
         order_by="ChatBlock.start_time",
         lazy="selectin",
     )
+
+    __table_args__ = (Index("idx_user_name", "name"),)
 
     @override
     def __repr__(self) -> str:

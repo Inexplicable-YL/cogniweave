@@ -4,8 +4,7 @@ from typing import TYPE_CHECKING, cast
 import pytest
 from langchain_core.messages import HumanMessage
 
-from cogniweave.historystore import ChatBlock, ChatMessage
-from cogniweave.historystore.history_store import HistoryStore
+from cogniweave.historystore import BaseHistoryStore, ChatBlock, ChatMessage
 
 if TYPE_CHECKING:
     from langchain_core.runnables.config import RunnableConfig
@@ -13,13 +12,20 @@ if TYPE_CHECKING:
 
 def test_basic_operations(tmp_path: Path) -> None:
     """Test basic store operations including message persistence and retrieval."""
-    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/test.sqlite")
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/test.sqlite")
 
     # Test message storage
     cfg = cast("RunnableConfig", {"configurable": {"block_id": "s1", "block_timestamp": 1000.0}})
     test_messages = ["hi", "how", "are", "you"]
-    for i, text in enumerate(test_messages):
-        store.invoke({"block_messages": [(HumanMessage(text), 1000.0 + i)]}, config=cfg)
+
+    store.invoke(
+        {
+            "block_messages": [
+                (HumanMessage(text), 1000.0 + i) for i, text in enumerate(test_messages)
+            ]
+        },
+        config=cfg,
+    )
 
     # Verify database records
     with store._session_local() as session:
@@ -37,7 +43,7 @@ def test_basic_operations(tmp_path: Path) -> None:
 
 async def test_async_basic_operations(tmp_path: Path) -> None:
     """Test basic async store operations."""
-    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/async.sqlite")
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/async.sqlite")
 
     # Test async message storage
     cfg = cast("RunnableConfig", {"configurable": {"block_id": "s2", "block_timestamp": 50.0}})
@@ -52,7 +58,7 @@ async def test_async_basic_operations(tmp_path: Path) -> None:
 
 def test_block_attributes_operations(tmp_path: Path) -> None:
     """Test block attribute storage and retrieval."""
-    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/attrs.sqlite")
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/attrs.sqlite")
     cfg = cast("RunnableConfig", {"configurable": {"block_id": "attr", "block_timestamp": 1.0}})
 
     # Store initial message
@@ -79,7 +85,7 @@ def test_block_attributes_operations(tmp_path: Path) -> None:
 
 async def test_async_block_attributes_operations(tmp_path: Path) -> None:
     """Test async block attribute operations."""
-    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/attrs_async.sqlite")
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/attrs_async.sqlite")
     cfg = cast("RunnableConfig", {"configurable": {"block_id": "attr", "block_timestamp": 1.0}})
 
     # Store initial message
@@ -100,7 +106,7 @@ async def test_async_block_attributes_operations(tmp_path: Path) -> None:
 
 
 def test_invoke_validation(tmp_path: Path) -> None:
-    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/val.sqlite")
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/val.sqlite")
     good_cfg = cast(
         "RunnableConfig",
         {"configurable": {"block_id": "b", "block_timestamp": 1.0}},
@@ -130,7 +136,7 @@ def test_invoke_validation(tmp_path: Path) -> None:
 
 
 async def test_ainvoke_validation(tmp_path: Path) -> None:
-    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/aval.sqlite")
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/aval.sqlite")
     good_cfg = cast(
         "RunnableConfig",
         {"configurable": {"block_id": "b", "block_timestamp": 1.0}},
@@ -160,7 +166,7 @@ async def test_ainvoke_validation(tmp_path: Path) -> None:
 
 
 def test_history_utilities(tmp_path: Path) -> None:
-    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/util.sqlite")
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/util.sqlite")
 
     cfg1 = cast("RunnableConfig", {"configurable": {"block_id": "b1", "block_timestamp": 1.0}})
     cfg2 = cast("RunnableConfig", {"configurable": {"block_id": "b2", "block_timestamp": 2.0}})
@@ -186,7 +192,7 @@ def test_history_utilities(tmp_path: Path) -> None:
 
 
 async def test_async_history_utilities(tmp_path: Path) -> None:
-    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/util_async.sqlite")
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/util_async.sqlite")
 
     cfg1 = cast("RunnableConfig", {"configurable": {"block_id": "b1", "block_timestamp": 1.0}})
     cfg2 = cast("RunnableConfig", {"configurable": {"block_id": "b2", "block_timestamp": 2.0}})
@@ -207,7 +213,7 @@ async def test_async_history_utilities(tmp_path: Path) -> None:
 
 
 def test_session_range_utilities(tmp_path: Path) -> None:
-    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/range.sqlite")
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/range.sqlite")
 
     cfg1 = cast(
         "RunnableConfig",
@@ -274,7 +280,7 @@ def test_session_range_utilities(tmp_path: Path) -> None:
 
 
 async def test_async_session_range_utilities(tmp_path: Path) -> None:
-    store = HistoryStore(db_url=f"sqlite:///{tmp_path}/range_async.sqlite")
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/range_async.sqlite")
 
     cfg1 = cast(
         "RunnableConfig",

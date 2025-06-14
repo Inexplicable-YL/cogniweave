@@ -1,7 +1,7 @@
-from .history_store import (
+from .base import (
+    BaseHistoryStore,
     BlockAttributeData,
     BlockAttributeOutput,
-    HistoryStore,
     MessageInput,
 )
 from .models import (
@@ -14,12 +14,12 @@ from .models import (
 
 __all__ = [
     "Base",
+    "BaseHistoryStore",
     "BlockAttributeData",
     "BlockAttributeOutput",
     "ChatBlock",
     "ChatBlockAttribute",
     "ChatMessage",
-    "HistoryStore",
     "MessageInput",
     "User",
 ]
