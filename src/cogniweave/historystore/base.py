@@ -448,6 +448,39 @@ class BaseHistoryStore(BaseModel):
         """
         return [m for m, _ in await self.aget_history_with_timestamps(block_id)]
 
+    def _query_messages(
+        self, session: Session, block_ids: list[str]
+    ) -> list[ChatMessage]:
+        """Return messages for multiple blocks ordered by timestamp."""
+
+        if not block_ids:
+            return []
+
+        stmt = (
+            select(ChatMessage)
+            .join(ChatBlock, ChatMessage.block_id == ChatBlock.id)
+            .filter(ChatBlock.context_id.in_(block_ids))
+            .order_by(ChatMessage.timestamp)
+        )
+        return list(session.scalars(stmt).all())
+
+    async def _a_query_messages(
+        self, session: AsyncSession, block_ids: list[str]
+    ) -> list[ChatMessage]:
+        """Async version of ``_query_messages``."""
+
+        if not block_ids:
+            return []
+
+        stmt = (
+            select(ChatMessage)
+            .join(ChatBlock, ChatMessage.block_id == ChatBlock.id)
+            .filter(ChatBlock.context_id.in_(block_ids))
+            .order_by(ChatMessage.timestamp)
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
     def get_histories_with_timestamps(
         self, block_ids: list[str]
     ) -> list[tuple[BaseMessage, float]]:
@@ -460,10 +493,15 @@ class BaseHistoryStore(BaseModel):
             list[tuple[BaseMessage, float]]: Combined list of (message, timestamp) pairs
                 from all blocks, in chronological order.
         """
-        messages: list[tuple[BaseMessage, float]] = []
-        for sid in sorted(block_ids):
-            messages.extend(self.get_history_with_timestamps(sid))
-        return messages
+        with self._session_local() as session:
+            records = self._query_messages(session, block_ids)
+            return [
+                (
+                    messages_from_dict([rec.content])[0],
+                    rec.timestamp.replace(tzinfo=UTC).timestamp(),
+                )
+                for rec in records
+            ]
 
     async def aget_histories_with_timestamps(
         self, block_ids: list[str]
@@ -477,10 +515,15 @@ class BaseHistoryStore(BaseModel):
             list[tuple[BaseMessage, float]]: Combined list of (message, timestamp) pairs
                 from all blocks, in chronological order.
         """
-        messages: list[tuple[BaseMessage, float]] = []
-        for sid in sorted(block_ids):
-            messages.extend(await self.aget_history_with_timestamps(sid))
-        return messages
+        async with self._async_session_local() as session:
+            records = await self._a_query_messages(session, block_ids)
+            return [
+                (
+                    messages_from_dict([rec.content])[0],
+                    rec.timestamp.replace(tzinfo=UTC).timestamp(),
+                )
+                for rec in records
+            ]
 
     def get_histories(self, block_ids: list[str]) -> list[BaseMessage]:
         """Get messages from multiple blocks, concatenated in order.
