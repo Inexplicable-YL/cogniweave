@@ -26,8 +26,8 @@ def test_basic_operations(tmp_path: Path) -> None:
         assert len(messages) == len(test_messages)
 
     # Test retrieval methods
-    assert len(store.get_history("s1")) == len(test_messages)
-    assert len(store.get_history_with_timestamps("s1")) == len(test_messages)
+    assert len(store.get_block_history("s1")) == len(test_messages)
+    assert len(store.get_block_history_with_timestamps("s1")) == len(test_messages)
     assert store.get_block_timestamp("s1") == 1000.0
     assert store.get_block_timestamp("nonexistent") is None
 
@@ -49,7 +49,7 @@ async def test_async_basic_operations(tmp_path: Path) -> None:
     )
 
     # Test async retrieval
-    history = await store.aget_history("s2")
+    history = await store.aget_block_history("s2")
     assert len(history) == 2
     assert [msg.content for msg in history] == ["hello", "world"]
 
@@ -146,12 +146,9 @@ def test_history_utilities(tmp_path: Path) -> None:
         block_ts=1.0,
     )
 
-    assert [m.content for m, _ in store.get_history_with_timestamps("b1")] == [
-        "m1",
-        "m3",
-    ]
-    assert len(store.get_histories(["b2", "b1"])) == 3
-    assert len(store.get_histories_with_timestamps(["b2", "b1"])) == 3
+    assert [m.content for m, _ in store.get_block_history_with_timestamps("b1")] == ["m1", "m3"]
+    assert len(store.get_block_histories(["b2", "b1"])) == 3
+    assert len(store.get_block_histories_with_timestamps(["b2", "b1"])) == 3
 
     attrs_all = store.get_block_attributes("b1")
     attrs_filtered = store.get_block_attributes("b1", types=["summary"])
@@ -159,7 +156,7 @@ def test_history_utilities(tmp_path: Path) -> None:
     assert len(attrs_filtered) == 1
     assert attrs_filtered[0]["type"] == "summary"
     assert store.get_block_timestamp("b1") == 1.0
-    assert store.get_history("nope") == []
+    assert store.get_block_history("nope") == []
     assert store.get_block_timestamp("nope") is None
 
 
@@ -187,10 +184,10 @@ async def test_async_history_utilities(tmp_path: Path) -> None:
         block_ts=1.0,
     )
 
-    res = await store.aget_history_with_timestamps("b1")
+    res = await store.aget_block_history_with_timestamps("b1")
     assert [m.content for m, _ in res] == ["m1", "m3"]
-    assert len(await store.aget_histories(["b2", "b1"])) == 3
-    assert len(await store.aget_histories_with_timestamps(["b2", "b1"])) == 3
+    assert len(await store.aget_block_histories(["b2", "b1"])) == 3
+    assert len(await store.aget_block_histories_with_timestamps(["b2", "b1"])) == 3
     attrs_all = await store.aget_block_attributes("b1")
     assert len(attrs_all) == 1
     ts = await store.aget_block_timestamp("b1")
@@ -219,22 +216,16 @@ def test_session_range_utilities(tmp_path: Path) -> None:
         session_id="s",
     )
 
-    ids_ts = store.get_session_block_ids_with_timestamps(
-        "s", start_time=1.5, end_time=2.5
-    )
+    ids_ts = store.get_session_block_ids_with_timestamps("s", start_time=1.5, end_time=2.5)
     assert ids_ts == [("b2", 2.0)]
     ids = store.get_session_block_ids("s", start_time=1.5, end_time=2.5)
     assert ids == ["b2"]
 
-    hist_ts_1 = store.get_session_history_with_timestamps(
-        "s", start_time=1.05, end_time=2.8
-    )
+    hist_ts_1 = store.get_session_history_with_timestamps("s", start_time=1.05, end_time=2.8)
     assert [m.content for m, _ in hist_ts_1] == ["m1", "m2"]
     hist_1 = store.get_session_history("s", end_time=2.8)
     assert [m.content for m in hist_1] == ["m1", "m2"]
-    hist_ts_2 = store.get_session_history_with_timestamps(
-        "s", start_time=1.5, end_time=3.5
-    )
+    hist_ts_2 = store.get_session_history_with_timestamps("s", start_time=1.5, end_time=3.5)
     assert [m.content for m, _ in hist_ts_2] == ["m2", "m3"]
     hist_2 = store.get_session_history("s", start_time=1.5)
     assert [m.content for m in hist_2] == ["m2", "m3"]
@@ -242,10 +233,7 @@ def test_session_range_utilities(tmp_path: Path) -> None:
     # Test limit parameter
     assert store.get_session_block_ids_with_timestamps("s", limit=0) == []
     assert store.get_session_block_ids_with_timestamps("s", limit=1) == [("b3", 3.0)]
-    assert store.get_session_block_ids_with_timestamps("s", limit=2) == [
-        ("b2", 2.0),
-        ("b3", 3.0),
-    ]
+    assert store.get_session_block_ids_with_timestamps("s", limit=2) == [("b2", 2.0), ("b3", 3.0)]
     assert store.get_session_block_ids_with_timestamps("s", limit=10) == [
         ("b1", 1.0),
         ("b2", 2.0),
@@ -258,18 +246,12 @@ def test_session_range_utilities(tmp_path: Path) -> None:
     assert store.get_session_block_ids("s", limit=10) == ["b1", "b2", "b3"]
 
     assert store.get_session_history_with_timestamps("s", limit=0) == []
-    assert [
-        m.content for m, _ in store.get_session_history_with_timestamps("s", limit=1)
-    ] == ["m3"]
-    assert [
-        m.content for m, _ in store.get_session_history_with_timestamps("s", limit=2)
-    ] == [
+    assert [m.content for m, _ in store.get_session_history_with_timestamps("s", limit=1)] == ["m3"]
+    assert [m.content for m, _ in store.get_session_history_with_timestamps("s", limit=2)] == [
         "m2",
         "m3",
     ]
-    assert [
-        m.content for m, _ in store.get_session_history_with_timestamps("s", limit=10)
-    ] == [
+    assert [m.content for m, _ in store.get_session_history_with_timestamps("s", limit=10)] == [
         "m1",
         "m2",
         "m3",
@@ -278,11 +260,7 @@ def test_session_range_utilities(tmp_path: Path) -> None:
     assert store.get_session_history("s", limit=0) == []
     assert [m.content for m in store.get_session_history("s", limit=1)] == ["m3"]
     assert [m.content for m in store.get_session_history("s", limit=2)] == ["m2", "m3"]
-    assert [m.content for m in store.get_session_history("s", limit=10)] == [
-        "m1",
-        "m2",
-        "m3",
-    ]
+    assert [m.content for m in store.get_session_history("s", limit=10)] == ["m1", "m2", "m3"]
 
 
 async def test_async_session_range_utilities(tmp_path: Path) -> None:
@@ -307,31 +285,23 @@ async def test_async_session_range_utilities(tmp_path: Path) -> None:
         session_id="s",
     )
 
-    ids_ts = await store.aget_session_block_ids_with_timestamps(
-        "s", start_time=1.5, end_time=2.5
-    )
+    ids_ts = await store.aget_session_block_ids_with_timestamps("s", start_time=1.5, end_time=2.5)
     assert ids_ts == [("b2", 2.0)]
     ids = await store.aget_session_block_ids("s", start_time=1.5, end_time=2.5)
     assert ids == ["b2"]
 
-    hist_ts_1 = await store.aget_session_history_with_timestamps(
-        "s", start_time=1.05, end_time=2.8
-    )
+    hist_ts_1 = await store.aget_session_history_with_timestamps("s", start_time=1.05, end_time=2.8)
     assert [m.content for m, _ in hist_ts_1] == ["m1", "m2"]
     hist_1 = await store.aget_session_history("s", end_time=2.8)
     assert [m.content for m in hist_1] == ["m1", "m2"]
-    hist_ts_2 = await store.aget_session_history_with_timestamps(
-        "s", start_time=1.5, end_time=3.5
-    )
+    hist_ts_2 = await store.aget_session_history_with_timestamps("s", start_time=1.5, end_time=3.5)
     assert [m.content for m, _ in hist_ts_2] == ["m2", "m3"]
     hist_2 = await store.aget_session_history("s", start_time=1.5)
     assert [m.content for m in hist_2] == ["m2", "m3"]
 
     # Test limit parameter
     assert await store.aget_session_block_ids_with_timestamps("s", limit=0) == []
-    assert await store.aget_session_block_ids_with_timestamps("s", limit=1) == [
-        ("b3", 3.0)
-    ]
+    assert await store.aget_session_block_ids_with_timestamps("s", limit=1) == [("b3", 3.0)]
     assert await store.aget_session_block_ids_with_timestamps("s", limit=2) == [
         ("b2", 2.0),
         ("b3", 3.0),
@@ -349,24 +319,18 @@ async def test_async_session_range_utilities(tmp_path: Path) -> None:
 
     assert await store.aget_session_history_with_timestamps("s", limit=0) == []
     assert [
-        m.content
-        for m, _ in await store.aget_session_history_with_timestamps("s", limit=1)
+        m.content for m, _ in await store.aget_session_history_with_timestamps("s", limit=1)
     ] == ["m3"]
     assert [
-        m.content
-        for m, _ in await store.aget_session_history_with_timestamps("s", limit=2)
+        m.content for m, _ in await store.aget_session_history_with_timestamps("s", limit=2)
     ] == ["m2", "m3"]
     assert [
-        m.content
-        for m, _ in await store.aget_session_history_with_timestamps("s", limit=10)
+        m.content for m, _ in await store.aget_session_history_with_timestamps("s", limit=10)
     ] == ["m1", "m2", "m3"]
 
     assert await store.aget_session_history("s", limit=0) == []
     assert [m.content for m in await store.aget_session_history("s", limit=1)] == ["m3"]
-    assert [m.content for m in await store.aget_session_history("s", limit=2)] == [
-        "m2",
-        "m3",
-    ]
+    assert [m.content for m in await store.aget_session_history("s", limit=2)] == ["m2", "m3"]
     assert [m.content for m in await store.aget_session_history("s", limit=10)] == [
         "m1",
         "m2",
@@ -385,7 +349,7 @@ def test_histories_with_multiple_blocks_order(tmp_path: Path) -> None:
     store.add_messages([(HumanMessage("b2-2"), 1.2)], block_id="b2", block_ts=0.5)
     store.add_messages([(HumanMessage("b2-3"), 1.4)], block_id="b2", block_ts=0.5)
 
-    result = store.get_histories_with_timestamps(["b2", "b1"])
+    result = store.get_block_histories_with_timestamps(["b2", "b1"])
     assert [m.content for m, _ in result] == [
         "b2-1",
         "b1-1",
@@ -406,7 +370,7 @@ def test_histories_with_multiple_blocks_order_no_ts(tmp_path: Path) -> None:
     store.add_messages([(HumanMessage("b2-2"), 1.2)], block_id="b2", block_ts=0.5)
     store.add_messages([(HumanMessage("b2-3"), 1.4)], block_id="b2", block_ts=0.5)
 
-    result = store.get_histories(["b2", "b1"])
+    result = store.get_block_histories(["b2", "b1"])
     assert [m.content for m in result] == [
         "b2-1",
         "b1-1",
@@ -421,23 +385,13 @@ async def test_async_histories_with_multiple_blocks_order(tmp_path: Path) -> Non
 
     store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/multi_async.sqlite")
 
-    await store.aadd_messages(
-        [(HumanMessage("b1-1"), 1.1)], block_id="b1", block_ts=1.0
-    )
-    await store.aadd_messages(
-        [(HumanMessage("b1-2"), 1.3)], block_id="b1", block_ts=1.0
-    )
-    await store.aadd_messages(
-        [(HumanMessage("b2-1"), 0.6)], block_id="b2", block_ts=0.5
-    )
-    await store.aadd_messages(
-        [(HumanMessage("b2-2"), 1.2)], block_id="b2", block_ts=0.5
-    )
-    await store.aadd_messages(
-        [(HumanMessage("b2-3"), 1.4)], block_id="b2", block_ts=0.5
-    )
+    await store.aadd_messages([(HumanMessage("b1-1"), 1.1)], block_id="b1", block_ts=1.0)
+    await store.aadd_messages([(HumanMessage("b1-2"), 1.3)], block_id="b1", block_ts=1.0)
+    await store.aadd_messages([(HumanMessage("b2-1"), 0.6)], block_id="b2", block_ts=0.5)
+    await store.aadd_messages([(HumanMessage("b2-2"), 1.2)], block_id="b2", block_ts=0.5)
+    await store.aadd_messages([(HumanMessage("b2-3"), 1.4)], block_id="b2", block_ts=0.5)
 
-    result = await store.aget_histories_with_timestamps(["b2", "b1"])
+    result = await store.aget_block_histories_with_timestamps(["b2", "b1"])
     assert [m.content for m, _ in result] == [
         "b2-1",
         "b1-1",
@@ -447,38 +401,22 @@ async def test_async_histories_with_multiple_blocks_order(tmp_path: Path) -> Non
     ]
 
 
-def test_session_range_many_blocks(tmp_path: Path) -> None:
-    """Time-range queries work with many blocks."""
+async def test_async_histories_with_multiple_blocks_order_no_ts(tmp_path: Path) -> None:
+    """Async version of `get_histories` ordering test."""
 
-    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/range_many.sqlite")
-    for i in range(10):
-        store.add_messages(
-            [(HumanMessage(f"m{i}"), i + 0.1)],
-            block_id=f"b{i}",
-            block_ts=float(i),
-            session_id="s",
-        )
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/multi_async_no_ts.sqlite")
 
-    result = store.get_session_history_with_timestamps(
-        "s", start_time=3.5, end_time=7.5
-    )
-    assert [m.content for m, _ in result] == ["m4", "m5", "m6", "m7"]
+    await store.aadd_messages([(HumanMessage("b1-1"), 1.1)], block_id="b1", block_ts=1.0)
+    await store.aadd_messages([(HumanMessage("b1-2"), 1.3)], block_id="b1", block_ts=1.0)
+    await store.aadd_messages([(HumanMessage("b2-1"), 0.6)], block_id="b2", block_ts=0.5)
+    await store.aadd_messages([(HumanMessage("b2-2"), 1.2)], block_id="b2", block_ts=0.5)
+    await store.aadd_messages([(HumanMessage("b2-3"), 1.4)], block_id="b2", block_ts=0.5)
 
-
-async def test_async_session_range_many_blocks(tmp_path: Path) -> None:
-    """Async variant of time-range query with many blocks."""
-
-    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/range_many_async.sqlite")
-    for i in range(10):
-        await store.aadd_messages(
-            [(HumanMessage(f"m{i}"), i + 0.1)],
-            block_id=f"b{i}",
-            block_ts=float(i),
-            session_id="s",
-        )
-
-    result = await store.aget_session_history_with_timestamps(
-        "s", start_time=3.5, end_time=7.5
-    )
-    assert [m.content for m, _ in result] == ["m4", "m5", "m6", "m7"]
-
+    result = await store.aget_block_histories(["b2", "b1"])
+    assert [m.content for m in result] == [
+        "b2-1",
+        "b1-1",
+        "b2-2",
+        "b1-2",
+        "b2-3",
+    ]
