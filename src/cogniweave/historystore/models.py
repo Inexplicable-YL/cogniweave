@@ -22,7 +22,7 @@ class User(Base):
     chat_blocks: Mapped[list[ChatBlock]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
-        order_by="ChatBlock.start_time",
+        order_by="ChatBlock.timestamp",
         lazy="selectin",
     )
 
@@ -44,7 +44,7 @@ class ChatBlock(Base):
         nullable=False,
         index=True,
     )
-    start_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
 
     user: Mapped[User] = relationship("User", back_populates="chat_blocks", lazy="joined")
     messages: Mapped[list[ChatMessage]] = relationship(
@@ -59,13 +59,13 @@ class ChatBlock(Base):
         lazy="selectin",
     )
 
-    __table_args__ = (Index("idx_chat_blocks_session_start", "session_id", "start_time"),)
+    __table_args__ = (Index("idx_chat_blocks_session_start", "session_id", "timestamp"),)
 
     @override
     def __repr__(self) -> str:
         return (
             f"<ChatBlock(id={self.id}, context_id={self.context_id!r}, "
-            f"session_id={self.session_id}, start_time={self.start_time})>"
+            f"session_id={self.session_id}, timestamp={self.timestamp})>"
         )
 
 

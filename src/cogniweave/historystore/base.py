@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
+from itertools import groupby
 from typing import Any, TypedDict
 
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
@@ -126,7 +127,7 @@ class BaseHistoryStore(BaseModel):
             block = ChatBlock(
                 context_id=context_id,
                 session_id=user.id,
-                start_time=datetime.fromtimestamp(start_ts, tz=UTC),
+                timestamp=datetime.fromtimestamp(start_ts, tz=UTC),
             )
             session.add(block)
             session.flush()
@@ -152,7 +153,7 @@ class BaseHistoryStore(BaseModel):
             block = ChatBlock(
                 context_id=context_id,
                 session_id=user.id,
-                start_time=datetime.fromtimestamp(start_ts, tz=UTC),
+                timestamp=datetime.fromtimestamp(start_ts, tz=UTC),
             )
             session.add(block)
             await session.flush()
@@ -364,7 +365,7 @@ class BaseHistoryStore(BaseModel):
             block = session.query(ChatBlock).filter_by(context_id=block_id).first()
             if not block:
                 return None
-            return block.start_time.replace(tzinfo=UTC).timestamp()
+            return block.timestamp.replace(tzinfo=UTC).timestamp()
 
     async def aget_block_timestamp(self, block_id: str) -> float | None:
         """Async version of get_block_timestamp.
@@ -380,7 +381,7 @@ class BaseHistoryStore(BaseModel):
             block = result.scalar_one_or_none()
             if not block:
                 return None
-            return block.start_time.replace(tzinfo=UTC).timestamp()
+            return block.timestamp.replace(tzinfo=UTC).timestamp()
 
     def get_block_history_with_timestamps(self, block_id: str) -> list[tuple[BaseMessage, float]]:
         """Get all messages in a block with their timestamps.
@@ -609,6 +610,7 @@ class BaseHistoryStore(BaseModel):
         limit: int | None = None,
         start_time: float | None = None,
         end_time: float | None = None,
+        **kwargs: Any,
     ) -> list[tuple[str, float]]:
         """Get block IDs and their start timestamps for a session, optionally filtered by time range.
 
@@ -633,19 +635,25 @@ class BaseHistoryStore(BaseModel):
             stmt = session.query(ChatBlock).filter_by(session_id=user.id)
             if start_time is not None:
                 stmt = stmt.filter(
-                    ChatBlock.start_time >= datetime.fromtimestamp(start_time, tz=UTC)
+                    ChatBlock.timestamp >= datetime.fromtimestamp(start_time, tz=UTC)
                 )
             if end_time is not None:
-                stmt = stmt.filter(ChatBlock.start_time <= datetime.fromtimestamp(end_time, tz=UTC))
+                stmt = stmt.filter(ChatBlock.timestamp <= datetime.fromtimestamp(end_time, tz=UTC))
             if limit is not None:
-                stmt = stmt.order_by(ChatBlock.start_time.desc()).limit(limit)
-                blocks = list(reversed(stmt.all()))
+                if kwargs.get("from_first", False):
+                    # if from_first is True, order by ascending timestamp
+                    stmt = stmt.order_by(ChatBlock.timestamp).limit(limit)
+                    blocks = stmt.all()
+                else:
+                    # default behavior: order by descending timestamp
+                    stmt = stmt.order_by(ChatBlock.timestamp.desc()).limit(limit)
+                    blocks = list(reversed(stmt.all()))
             else:
-                blocks = stmt.order_by(ChatBlock.start_time).all()
+                blocks = stmt.order_by(ChatBlock.timestamp).all()
             return [
                 (
                     block.context_id,
-                    block.start_time.replace(tzinfo=UTC).timestamp(),
+                    block.timestamp.replace(tzinfo=UTC).timestamp(),
                 )
                 for block in blocks
             ]
@@ -657,6 +665,7 @@ class BaseHistoryStore(BaseModel):
         limit: int | None = None,
         start_time: float | None = None,
         end_time: float | None = None,
+        **kwargs: Any,
     ) -> list[tuple[str, float]]:
         """Async version of get_session_block_ids_with_timestamps.
 
@@ -682,22 +691,29 @@ class BaseHistoryStore(BaseModel):
             stmt = select(ChatBlock).filter_by(session_id=user.id)
             if start_time is not None:
                 stmt = stmt.filter(
-                    ChatBlock.start_time >= datetime.fromtimestamp(start_time, tz=UTC)
+                    ChatBlock.timestamp >= datetime.fromtimestamp(start_time, tz=UTC)
                 )
             if end_time is not None:
-                stmt = stmt.filter(ChatBlock.start_time <= datetime.fromtimestamp(end_time, tz=UTC))
+                stmt = stmt.filter(ChatBlock.timestamp <= datetime.fromtimestamp(end_time, tz=UTC))
             if limit is not None:
-                stmt = stmt.order_by(ChatBlock.start_time.desc()).limit(limit)
-                res = await session.execute(stmt)
-                blocks = list(reversed(res.scalars().all()))
+                if kwargs.get("from_first", False):
+                    # if from_first is True, order by ascending timestamp
+                    stmt = stmt.order_by(ChatBlock.timestamp).limit(limit)
+                    res = await session.execute(stmt)
+                    blocks = res.scalars().all()
+                else:
+                    # default behavior: order by descending timestamp
+                    stmt = stmt.order_by(ChatBlock.timestamp.desc()).limit(limit)
+                    res = await session.execute(stmt)
+                    blocks = list(reversed(res.scalars().all()))
             else:
-                stmt = stmt.order_by(ChatBlock.start_time)
+                stmt = stmt.order_by(ChatBlock.timestamp)
                 res = await session.execute(stmt)
                 blocks = res.scalars().all()
             return [
                 (
                     block.context_id,
-                    block.start_time.replace(tzinfo=UTC).timestamp(),
+                    block.timestamp.replace(tzinfo=UTC).timestamp(),
                 )
                 for block in blocks
             ]
@@ -709,6 +725,7 @@ class BaseHistoryStore(BaseModel):
         limit: int | None = None,
         start_time: float | None = None,
         end_time: float | None = None,
+        **kwargs: Any,
     ) -> list[str]:
         """Get block IDs for a session, optionally filtered by time range.
 
@@ -725,7 +742,7 @@ class BaseHistoryStore(BaseModel):
         return [
             bid
             for bid, _ in self.get_session_block_ids_with_timestamps(
-                session_id, start_time=start_time, end_time=end_time, limit=limit
+                session_id, start_time=start_time, end_time=end_time, limit=limit, **kwargs
             )
         ]
 
@@ -736,6 +753,7 @@ class BaseHistoryStore(BaseModel):
         limit: int | None = None,
         start_time: float | None = None,
         end_time: float | None = None,
+        **kwargs: Any,
     ) -> list[str]:
         """Async version of get_session_block_ids.
 
@@ -750,7 +768,7 @@ class BaseHistoryStore(BaseModel):
                 Returns empty list if session not found or no matching blocks.
         """
         pairs = await self.aget_session_block_ids_with_timestamps(
-            session_id, start_time=start_time, end_time=end_time, limit=limit
+            session_id, start_time=start_time, end_time=end_time, limit=limit, **kwargs
         )
         return [bid for bid, _ in pairs]
 
@@ -761,6 +779,7 @@ class BaseHistoryStore(BaseModel):
         limit: int | None = None,
         start_time: float | None = None,
         end_time: float | None = None,
+        **kwargs: Any,
     ) -> list[tuple[BaseMessage, float]]:
         """Get all messages with timestamps for a session, optionally filtered by time range.
 
@@ -778,28 +797,23 @@ class BaseHistoryStore(BaseModel):
             return []
 
         block_limit = limit if start_time is None and end_time is None else None
-        all_blocks = self.get_session_block_ids_with_timestamps(session_id, limit=block_limit)
+        all_blocks = self.get_session_block_ids_with_timestamps(
+            session_id, limit=block_limit, start_time=start_time, end_time=end_time
+        )
         if not all_blocks:
             return []
 
-        start_idx = 0
-        end_idx = len(all_blocks)
-
         if start_time is not None:
-            for i, (_, ts) in enumerate(all_blocks):
-                if ts >= start_time:
-                    start_idx = max(i - 1, 0)
-                    break
-            else:
-                start_idx = len(all_blocks) - 1
-
+            all_blocks = (
+                self.get_session_block_ids_with_timestamps(session_id, limit=2, end_time=start_time)
+                + all_blocks
+            )
         if end_time is not None:
-            for i, (_, ts) in enumerate(all_blocks):
-                if ts > end_time:
-                    end_idx = min(i + 1, len(all_blocks))
-                    break
+            all_blocks = all_blocks + self.get_session_block_ids_with_timestamps(
+                session_id, limit=2, start_time=end_time, from_first=True
+            )
 
-        block_ids = [bid for bid, _ in all_blocks[start_idx:end_idx]]
+        block_ids = [next(group)[0] for _, group in groupby(all_blocks)]
         history = self.get_block_histories_with_timestamps(block_ids)
         result = [
             (msg, ts)
@@ -807,7 +821,7 @@ class BaseHistoryStore(BaseModel):
             if (start_time is None or ts >= start_time) and (end_time is None or ts <= end_time)
         ]
         if limit is not None:
-            result = result[-limit:]
+            result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
         return result
 
     async def aget_session_history_with_timestamps(
@@ -817,6 +831,7 @@ class BaseHistoryStore(BaseModel):
         limit: int | None = None,
         start_time: float | None = None,
         end_time: float | None = None,
+        **kwargs: Any,
     ) -> list[tuple[BaseMessage, float]]:
         """Async version of get_session_history_with_timestamps.
 
@@ -835,29 +850,24 @@ class BaseHistoryStore(BaseModel):
 
         block_limit = limit if start_time is None and end_time is None else None
         all_blocks = await self.aget_session_block_ids_with_timestamps(
-            session_id, limit=block_limit
+            session_id, limit=block_limit, start_time=start_time, end_time=end_time
         )
         if not all_blocks:
             return []
 
-        start_idx = 0
-        end_idx = len(all_blocks)
-
         if start_time is not None:
-            for i, (_, ts) in enumerate(all_blocks):
-                if ts >= start_time:
-                    start_idx = max(i - 1, 0)
-                    break
-            else:
-                start_idx = len(all_blocks) - 1
-
+            all_blocks = (
+                await self.aget_session_block_ids_with_timestamps(
+                    session_id, limit=2, end_time=start_time
+                )
+                + all_blocks
+            )
         if end_time is not None:
-            for i, (_, ts) in enumerate(all_blocks):
-                if ts > end_time:
-                    end_idx = min(i + 1, len(all_blocks))
-                    break
+            all_blocks = all_blocks + await self.aget_session_block_ids_with_timestamps(
+                session_id, limit=2, start_time=end_time, from_first=True
+            )
 
-        block_ids = [bid for bid, _ in all_blocks[start_idx:end_idx]]
+        block_ids = [next(group)[0] for _, group in groupby(all_blocks)]
         history = await self.aget_block_histories_with_timestamps(block_ids)
         result = [
             (msg, ts)
@@ -865,7 +875,7 @@ class BaseHistoryStore(BaseModel):
             if (start_time is None or ts >= start_time) and (end_time is None or ts <= end_time)
         ]
         if limit is not None:
-            result = result[-limit:]
+            result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
         return result
 
     def get_session_history(
@@ -875,6 +885,7 @@ class BaseHistoryStore(BaseModel):
         limit: int | None = None,
         start_time: float | None = None,
         end_time: float | None = None,
+        **kwargs: Any,
     ) -> list[BaseMessage]:
         """Get all messages for a session, optionally filtered by time range.
 
@@ -891,7 +902,7 @@ class BaseHistoryStore(BaseModel):
         return [
             msg
             for msg, _ in self.get_session_history_with_timestamps(
-                session_id, start_time=start_time, end_time=end_time, limit=limit
+                session_id, start_time=start_time, end_time=end_time, limit=limit, **kwargs
             )
         ]
 
@@ -902,6 +913,7 @@ class BaseHistoryStore(BaseModel):
         limit: int | None = None,
         start_time: float | None = None,
         end_time: float | None = None,
+        **kwargs: Any,
     ) -> list[BaseMessage]:
         """Async version of get_session_history.
 
@@ -916,6 +928,6 @@ class BaseHistoryStore(BaseModel):
                 Returns empty list if session not found or no matching messages.
         """
         pairs = await self.aget_session_history_with_timestamps(
-            session_id, start_time=start_time, end_time=end_time, limit=limit
+            session_id, start_time=start_time, end_time=end_time, limit=limit, **kwargs
         )
         return [msg for msg, _ in pairs]

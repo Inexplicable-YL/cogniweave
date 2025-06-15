@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage
+from sqlalchemy import select
 
 from cogniweave.historystore import (
     BaseHistoryStore,
@@ -9,7 +10,6 @@ from cogniweave.historystore import (
     ChatMessage,
     User,
 )
-from sqlalchemy import select
 
 
 def test_basic_operations(tmp_path: Path) -> None:
