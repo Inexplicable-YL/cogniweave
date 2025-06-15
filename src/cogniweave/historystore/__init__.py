@@ -2,6 +2,9 @@ from .base import (
     BaseHistoryStore,
     BlockAttributeData,
 )
+from .cache import (
+    BaseHistoryStoreWithCache,
+)
 from .models import (
     Base,
     ChatBlock,
@@ -13,6 +16,7 @@ from .models import (
 __all__ = [
     "Base",
     "BaseHistoryStore",
+    "BaseHistoryStoreWithCache",
     "BlockAttributeData",
     "ChatBlock",
     "ChatBlockAttribute",
