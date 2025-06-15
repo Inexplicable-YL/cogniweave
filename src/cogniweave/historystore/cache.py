@@ -25,7 +25,7 @@ class SessionCache:
     max_blocks: int
 
     blocks: dict[tuple[str, float], list[tuple[BaseMessage, float]]] = field(
-        default_factory=lambda: SortedDict(key=lambda x: x[1]), init=False
+        default_factory=lambda: SortedDict(lambda x: x[1]), init=False
     )
     start_block_ts: float = field(init=False)
     end_block_ts: float = field(init=False)
@@ -222,11 +222,15 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
                 + self._session_caches[session_id].get_blocks(
                     start_time=self._session_caches[session_id].start_block_ts,
                     end_time=end_time,
-                )[1:]
+                )
             )
         if result:
             result = sorted(result, key=lambda x: x[1])
+            # Remove duplicates that may occur at DB/cache boundary
+            result = list(dict.fromkeys(result))
             if limit is not None:
+                if limit == 0:
+                    return []
                 result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
             return result
 
@@ -278,11 +282,15 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
                 + self._session_caches[session_id].get_blocks(
                     start_time=self._session_caches[session_id].start_block_ts,
                     end_time=end_time,
-                )[1:]
+                )
             )
         if result:
             result = sorted(result, key=lambda x: x[1])
+            # Remove duplicates that may occur at DB/cache boundary
+            result = list(dict.fromkeys(result))
             if limit is not None:
+                if limit == 0:
+                    return []
                 result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
             return result
 
@@ -334,11 +342,22 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
                 + self._session_caches[session_id].get_messages(
                     start_time=self._session_caches[session_id].start_msg_ts,
                     end_time=end_time,
-                )[1:]
+                )
             )
         if result:
             result = sorted(result, key=lambda x: x[1])
+            # Remove exact duplicates that may occur at DB/cache boundary
+            seen = set()
+            deduped = []
+            for msg, ts in result:
+                key = (getattr(msg, "content", str(msg)), ts)
+                if key not in seen:
+                    seen.add(key)
+                    deduped.append((msg, ts))
+            result = deduped
             if limit is not None:
+                if limit == 0:
+                    return []
                 result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
             return result
 
@@ -390,11 +409,22 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
                 + self._session_caches[session_id].get_messages(
                     start_time=self._session_caches[session_id].start_msg_ts,
                     end_time=end_time,
-                )[1:]
+                )
             )
         if result:
             result = sorted(result, key=lambda x: x[1])
+            # Remove exact duplicates that may occur at DB/cache boundary
+            seen = set()
+            deduped = []
+            for msg, ts in result:
+                key = (getattr(msg, "content", str(msg)), ts)
+                if key not in seen:
+                    seen.add(key)
+                    deduped.append((msg, ts))
+            result = deduped
             if limit is not None:
+                if limit == 0:
+                    return []
                 result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
             return result
 
