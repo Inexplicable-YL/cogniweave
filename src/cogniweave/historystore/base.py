@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime
 from itertools import groupby
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
 from pydantic import BaseModel, PrivateAttr
@@ -18,6 +18,11 @@ from cogniweave.historystore.models import (
     ChatMessage,
     User,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from sqlalchemy.sql._typing import _ColumnExpressionArgument
 
 
 class BlockAttributeData(TypedDict):
@@ -444,36 +449,86 @@ class BaseHistoryStore(BaseModel):
         """
         return [m for m, _ in await self.aget_block_history_with_timestamps(block_id)]
 
-    def _query_messages(self, session: Session, block_ids: list[str]) -> list[ChatMessage]:
+    def _query_messages(
+        self,
+        session: Session,
+        block_ids: list[str],
+        *,
+        limit: int | None = None,
+        criteria: Sequence[_ColumnExpressionArgument[bool]] | None = None,
+        **kwargs: Any,
+    ) -> list[tuple[BaseMessage, float]]:
         """Return messages for multiple blocks ordered by timestamp."""
 
-        if not block_ids:
+        if not block_ids or (limit is not None and limit <= 0):
             return []
+        criteria = criteria or []
 
         stmt = (
             select(ChatMessage)
             .join(ChatBlock, ChatMessage.block_id == ChatBlock.id)
             .filter(ChatBlock.context_id.in_(block_ids))
-            .order_by(ChatMessage.timestamp)
+            .filter(*criteria)
         )
-        return list(session.scalars(stmt).all())
+        if limit is not None:
+            if kwargs.get("from_first", False):
+                stmt = stmt.order_by(ChatMessage.timestamp).limit(limit)
+                result = list(session.scalars(stmt).all())
+            else:
+                stmt = stmt.order_by(ChatMessage.timestamp.desc()).limit(limit)
+                result = list(reversed(session.scalars(stmt).all()))
+        else:
+            stmt = stmt.order_by(ChatMessage.timestamp)
+            result = list(session.scalars(stmt).all())
+        return [
+            (
+                messages_from_dict([rec.content])[0],
+                rec.timestamp.replace(tzinfo=UTC).timestamp(),
+            )
+            for rec in result
+        ]
 
     async def _a_query_messages(
-        self, session: AsyncSession, block_ids: list[str]
-    ) -> list[ChatMessage]:
+        self,
+        session: AsyncSession,
+        block_ids: list[str],
+        *,
+        limit: int | None = None,
+        criteria: Sequence[_ColumnExpressionArgument[bool]] | None = None,
+        **kwargs: Any,
+    ) -> list[tuple[BaseMessage, float]]:
         """Async version of ``_query_messages``."""
 
-        if not block_ids:
+        if not block_ids or (limit is not None and limit <= 0):
             return []
+        criteria = criteria or []
 
         stmt = (
             select(ChatMessage)
             .join(ChatBlock, ChatMessage.block_id == ChatBlock.id)
             .filter(ChatBlock.context_id.in_(block_ids))
-            .order_by(ChatMessage.timestamp)
+            .filter(*criteria)
         )
-        result = await session.execute(stmt)
-        return list(result.scalars().all())
+        if limit is not None:
+            if kwargs.get("from_first", False):
+                stmt = stmt.order_by(ChatMessage.timestamp).limit(limit)
+                rec = await session.execute(stmt)
+                result = list(rec.scalars().all())
+            else:
+                stmt = stmt.order_by(ChatMessage.timestamp.desc()).limit(limit)
+                rec = await session.execute(stmt)
+                result = list(reversed(rec.scalars().all()))
+        else:
+            stmt = stmt.order_by(ChatMessage.timestamp)
+            rec = await session.execute(stmt)
+            result = list(rec.scalars().all())
+        return [
+            (
+                messages_from_dict([rec.content])[0],
+                rec.timestamp.replace(tzinfo=UTC).timestamp(),
+            )
+            for rec in result
+        ]
 
     def get_block_histories_with_timestamps(
         self, block_ids: list[str]
@@ -488,14 +543,7 @@ class BaseHistoryStore(BaseModel):
                 from all blocks, in chronological order.
         """
         with self._session_local() as session:
-            records = self._query_messages(session, block_ids)
-            return [
-                (
-                    messages_from_dict([rec.content])[0],
-                    rec.timestamp.replace(tzinfo=UTC).timestamp(),
-                )
-                for rec in records
-            ]
+            return self._query_messages(session, block_ids)
 
     async def aget_block_histories_with_timestamps(
         self, block_ids: list[str]
@@ -510,14 +558,7 @@ class BaseHistoryStore(BaseModel):
                 from all blocks, in chronological order.
         """
         async with self._async_session_local() as session:
-            records = await self._a_query_messages(session, block_ids)
-            return [
-                (
-                    messages_from_dict([rec.content])[0],
-                    rec.timestamp.replace(tzinfo=UTC).timestamp(),
-                )
-                for rec in records
-            ]
+            return await self._a_query_messages(session, block_ids)
 
     def get_block_histories(self, block_ids: list[str]) -> list[BaseMessage]:
         """Get messages from multiple blocks, concatenated in order.
@@ -814,15 +855,23 @@ class BaseHistoryStore(BaseModel):
             )
 
         block_ids = [next(group)[0] for _, group in groupby(all_blocks)]
-        history = self.get_block_histories_with_timestamps(block_ids)
-        result = [
-            (msg, ts)
-            for msg, ts in history
-            if (start_time is None or ts >= start_time) and (end_time is None or ts <= end_time)
-        ]
-        if limit is not None:
-            result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
-        return result
+        with self._session_local() as session:
+            return self._query_messages(
+                session,
+                block_ids,
+                limit=limit,
+                criteria=(
+                    [ChatMessage.timestamp >= datetime.fromtimestamp(start_time, tz=UTC)]
+                    if start_time
+                    else []
+                )
+                + (
+                    [ChatMessage.timestamp <= datetime.fromtimestamp(end_time, tz=UTC)]
+                    if end_time
+                    else []
+                ),
+                from_first=kwargs.get("from_first", False),
+            )
 
     async def aget_session_history_with_timestamps(
         self,
@@ -868,15 +917,23 @@ class BaseHistoryStore(BaseModel):
             )
 
         block_ids = [next(group)[0] for _, group in groupby(all_blocks)]
-        history = await self.aget_block_histories_with_timestamps(block_ids)
-        result = [
-            (msg, ts)
-            for msg, ts in history
-            if (start_time is None or ts >= start_time) and (end_time is None or ts <= end_time)
-        ]
-        if limit is not None:
-            result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
-        return result
+        async with self._async_session_local() as session:
+            return await self._a_query_messages(
+                session,
+                block_ids,
+                limit=limit,
+                criteria=(
+                    [ChatMessage.timestamp >= datetime.fromtimestamp(start_time, tz=UTC)]
+                    if start_time
+                    else []
+                )
+                + (
+                    [ChatMessage.timestamp <= datetime.fromtimestamp(end_time, tz=UTC)]
+                    if end_time
+                    else []
+                ),
+                from_first=kwargs.get("from_first", False),
+            )
 
     def get_session_history(
         self,
