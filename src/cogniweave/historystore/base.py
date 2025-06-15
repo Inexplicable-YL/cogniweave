@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
-from itertools import groupby
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
@@ -854,7 +853,7 @@ class BaseHistoryStore(BaseModel):
                 session_id, limit=2, start_time=end_time, from_first=True
             )
 
-        block_ids = [next(group)[0] for _, group in groupby(all_blocks)]
+        block_ids = [bid for bid, _ in dict.fromkeys(all_blocks)]
         with self._session_local() as session:
             return self._query_messages(
                 session,
@@ -916,7 +915,7 @@ class BaseHistoryStore(BaseModel):
                 session_id, limit=2, start_time=end_time, from_first=True
             )
 
-        block_ids = [next(group)[0] for _, group in groupby(all_blocks)]
+        block_ids = [bid for bid, _ in dict.fromkeys(all_blocks)]
         async with self._async_session_local() as session:
             return await self._a_query_messages(
                 session,

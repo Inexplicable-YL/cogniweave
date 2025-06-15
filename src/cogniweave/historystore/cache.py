@@ -4,6 +4,7 @@ import bisect
 from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import partial
+from itertools import groupby
 from typing import TYPE_CHECKING, Any, cast
 from typing_extensions import override
 
@@ -27,14 +28,14 @@ class SessionCache:
     blocks: dict[tuple[str, float], list[tuple[BaseMessage, float]]] = field(
         default_factory=lambda: SortedDict(lambda x: x[1]), init=False
     )
-    start_block_ts: float = field(init=False)
-    end_block_ts: float = field(init=False)
-    start_msg_ts: float = field(init=False)
-    end_msg_ts: float = field(init=False)
+    start_block_ts: float = field(default=float("inf"), init=False)
+    end_block_ts: float = field(default=float("inf"), init=False)
+    start_msg_ts: float = field(default=float("inf"), init=False)
+    end_msg_ts: float = field(default=float("inf"), init=False)
 
     def _recompute_ranges(self) -> None:
-        first_block = cast("SortedDict", self.blocks).iloc[0]
-        last_block = cast("SortedDict", self.blocks).iloc[-1]
+        first_block = cast("SortedDict", self.blocks).keys()[0]
+        last_block = cast("SortedDict", self.blocks).keys()[-1]
 
         self.start_block_ts = first_block[1]
         self.end_block_ts = last_block[1]
@@ -202,10 +203,13 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
             list[tuple[str, float]]: List of (block_id, start_timestamp) pairs in chronological order.
                 Returns empty list if session not found or no matching blocks.
         """
+        if limit is not None and limit <= 0:
+            return []
+
         start_time = start_time or 0.0
         end_time = end_time or float("inf")
         get_blocks_from_db = partial(
-            super().get_session_block_ids_with_timestamps, session_id=session_id, limit=limit
+            super().get_session_block_ids_with_timestamps, session_id=session_id
         )
 
         result: list[tuple[str, float]] = []
@@ -214,27 +218,28 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
                 start_time=start_time, end_time=end_time
             )
         elif end_time >= self._session_caches[session_id].start_block_ts:
-            result = (
-                get_blocks_from_db(
-                    start_time=start_time,
-                    end_time=self._session_caches[session_id].start_block_ts,
-                )
-                + self._session_caches[session_id].get_blocks(
-                    start_time=self._session_caches[session_id].start_block_ts,
-                    end_time=end_time,
-                )
+            result = self._session_caches[session_id].get_blocks(
+                start_time=self._session_caches[session_id].start_block_ts,
+                end_time=end_time,
             )
+
+            if limit is None or len(result) < limit:
+                result = (
+                    get_blocks_from_db(
+                        limit=limit - len(result) if limit else None,
+                        start_time=start_time,
+                        end_time=self._session_caches[session_id].start_block_ts,
+                    )
+                    + result
+                )
         if result:
-            result = sorted(result, key=lambda x: x[1])
-            # Remove duplicates that may occur at DB/cache boundary
-            result = list(dict.fromkeys(result))
+            result = list(dict.fromkeys(sorted(result, key=lambda x: x[1])))
             if limit is not None:
-                if limit == 0:
-                    return []
                 result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
             return result
 
         return get_blocks_from_db(
+            limit=limit,
             start_time=start_time,
             end_time=end_time,
             **kwargs,
@@ -262,10 +267,13 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
             list[tuple[str, float]]: List of (block_id, start_timestamp) pairs in chronological order.
                 Returns empty list if session not found or no matching blocks.
         """
+        if limit is not None and limit <= 0:
+            return []
+
         start_time = start_time or 0.0
         end_time = end_time or float("inf")
         aget_blocks_from_db = partial(
-            super().aget_session_block_ids_with_timestamps, session_id=session_id, limit=limit
+            super().aget_session_block_ids_with_timestamps, session_id=session_id
         )
 
         result: list[tuple[str, float]] = []
@@ -274,27 +282,27 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
                 start_time=start_time, end_time=end_time
             )
         elif end_time >= self._session_caches[session_id].start_block_ts:
-            result = (
-                await aget_blocks_from_db(
-                    start_time=start_time,
-                    end_time=self._session_caches[session_id].start_block_ts,
-                )
-                + self._session_caches[session_id].get_blocks(
-                    start_time=self._session_caches[session_id].start_block_ts,
-                    end_time=end_time,
-                )
+            result = self._session_caches[session_id].get_blocks(
+                start_time=self._session_caches[session_id].start_block_ts,
+                end_time=end_time,
             )
+            if limit is None or len(result) < limit:
+                result = (
+                    await aget_blocks_from_db(
+                        limit=limit - len(result) if limit else None,
+                        start_time=start_time,
+                        end_time=self._session_caches[session_id].start_block_ts,
+                    )
+                    + result
+                )
         if result:
-            result = sorted(result, key=lambda x: x[1])
-            # Remove duplicates that may occur at DB/cache boundary
-            result = list(dict.fromkeys(result))
+            result = list(dict.fromkeys(sorted(result, key=lambda x: x[1])))
             if limit is not None:
-                if limit == 0:
-                    return []
                 result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
             return result
 
         return await aget_blocks_from_db(
+            limit=limit,
             start_time=start_time,
             end_time=end_time,
             **kwargs,
@@ -322,10 +330,13 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
             list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
                 Returns empty list if session not found or no matching messages.
         """
+        if limit is not None and limit <= 0:
+            return []
+
         start_time = start_time or 0.0
         end_time = end_time or float("inf")
         get_history_from_db = partial(
-            super().get_session_history_with_timestamps, session_id=session_id, limit=limit
+            super().get_session_history_with_timestamps, session_id=session_id
         )
 
         result: list[tuple[BaseMessage, float]] = []
@@ -334,34 +345,27 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
                 start_time=start_time, end_time=end_time
             )
         elif end_time >= self._session_caches[session_id].start_msg_ts:
-            result = (
-                get_history_from_db(
-                    start_time=start_time,
-                    end_time=self._session_caches[session_id].start_msg_ts,
-                )
-                + self._session_caches[session_id].get_messages(
-                    start_time=self._session_caches[session_id].start_msg_ts,
-                    end_time=end_time,
-                )
+            result = self._session_caches[session_id].get_messages(
+                start_time=self._session_caches[session_id].start_msg_ts,
+                end_time=end_time,
             )
+            if limit is None or len(result) < limit:
+                result = (
+                    get_history_from_db(
+                        limit=limit - len(result) if limit else None,
+                        start_time=start_time,
+                        end_time=self._session_caches[session_id].start_msg_ts,
+                    )
+                    + result
+                )
         if result:
-            result = sorted(result, key=lambda x: x[1])
-            # Remove exact duplicates that may occur at DB/cache boundary
-            seen = set()
-            deduped = []
-            for msg, ts in result:
-                key = (getattr(msg, "content", str(msg)), ts)
-                if key not in seen:
-                    seen.add(key)
-                    deduped.append((msg, ts))
-            result = deduped
+            result = [next(group) for _, group in groupby(sorted(result, key=lambda x: x[1]))]
             if limit is not None:
-                if limit == 0:
-                    return []
                 result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
             return result
 
         return get_history_from_db(
+            limit=limit,
             start_time=start_time,
             end_time=end_time,
             **kwargs,
@@ -389,10 +393,13 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
             list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
                 Returns empty list if session not found or no matching messages.
         """
+        if limit is not None and limit <= 0:
+            return []
+
         start_time = start_time or 0.0
         end_time = end_time or float("inf")
         aget_history_from_db = partial(
-            super().aget_session_history_with_timestamps, session_id=session_id, limit=limit
+            super().aget_session_history_with_timestamps, session_id=session_id
         )
 
         result: list[tuple[BaseMessage, float]] = []
@@ -401,34 +408,27 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
                 start_time=start_time, end_time=end_time
             )
         elif end_time >= self._session_caches[session_id].start_msg_ts:
-            result = (
-                await aget_history_from_db(
-                    start_time=start_time,
-                    end_time=self._session_caches[session_id].start_msg_ts,
-                )
-                + self._session_caches[session_id].get_messages(
-                    start_time=self._session_caches[session_id].start_msg_ts,
-                    end_time=end_time,
-                )
+            result = self._session_caches[session_id].get_messages(
+                start_time=self._session_caches[session_id].start_msg_ts,
+                end_time=end_time,
             )
+            if limit is None or len(result) < limit:
+                result = (
+                    await aget_history_from_db(
+                        limit=limit - len(result) if limit else None,
+                        start_time=start_time,
+                        end_time=self._session_caches[session_id].start_msg_ts,
+                    )
+                    + result
+                )
         if result:
-            result = sorted(result, key=lambda x: x[1])
-            # Remove exact duplicates that may occur at DB/cache boundary
-            seen = set()
-            deduped = []
-            for msg, ts in result:
-                key = (getattr(msg, "content", str(msg)), ts)
-                if key not in seen:
-                    seen.add(key)
-                    deduped.append((msg, ts))
-            result = deduped
+            result = [next(group) for _, group in groupby(sorted(result, key=lambda x: x[1]))]
             if limit is not None:
-                if limit == 0:
-                    return []
                 result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
             return result
 
         return await aget_history_from_db(
+            limit=limit,
             start_time=start_time,
             end_time=end_time,
             **kwargs,
