@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from cogniweave.core.prompts import (
-    ShortMemoryPromptTemplate,
-)
+from cogniweave.core.prompts import ShortMemoryPromptTemplate
 from cogniweave.historystore import BaseHistoryStoreWithCache, BlockAttributeData
 
 _SHORT_MEMORY_KEY: Literal["_short_memory"] = "_short_memory"
