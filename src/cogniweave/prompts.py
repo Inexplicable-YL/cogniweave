@@ -59,8 +59,6 @@ class MessageSegmentsPlaceholder(StringPromptTemplate):
                 `variable_name` must be passed in, even if the value is an empty list.
                 Defaults to False.]
         """
-        # mypy can't detect the init which is defined in the parent class
-        # b/c these are BaseModel classes.
         datas = {
             "variable_name": variable_name,
             "optional": optional,
@@ -87,7 +85,7 @@ class MessageSegmentsPlaceholder(StringPromptTemplate):
         value = kwargs.get(self.variable_name, []) if self.optional else kwargs[self.variable_name]
         if not isinstance(value, list):
             msg = (
-                f"variable {self.variable_name} should be a list of message segments prompt template, "
+                f"variable {self.variable_name} should be a list of str or StringPromptTemplate, "
                 f"got {value} of type {type(value)}"
             )
             raise ValueError(msg)  # noqa: TRY004
@@ -95,9 +93,14 @@ class MessageSegmentsPlaceholder(StringPromptTemplate):
             value = value[-self.n_messages :]
         content: str = ""
         for prompt in value:
-            if isinstance(prompt, StringPromptTemplate):
-                inputs = {var: kwargs[var] for var in prompt.input_variables}
-                formatted: str = prompt.format(**inputs)
+            if isinstance(prompt, MessageSegmentsPlaceholder):
+                raise TypeError(
+                    "MessageSegmentsPlaceholder can't be placed inside itself, it's a cycle"
+                )
+            if isinstance(prompt, str):
+                content += prompt
+            elif isinstance(prompt, StringPromptTemplate):
+                formatted: str = prompt.format(**kwargs)
                 content += formatted
         return content
 
@@ -117,7 +120,7 @@ class MessageSegmentsPlaceholder(StringPromptTemplate):
         value = kwargs.get(self.variable_name, []) if self.optional else kwargs[self.variable_name]
         if not isinstance(value, list):
             msg = (
-                f"variable {self.variable_name} should be a list of message segments prompt template, "
+                f"variable {self.variable_name} should be a list of str or StringPromptTemplate, "
                 f"got {value} of type {type(value)}"
             )
             raise ValueError(msg)  # noqa: TRY004
@@ -125,9 +128,14 @@ class MessageSegmentsPlaceholder(StringPromptTemplate):
             value = value[-self.n_messages :]
         content: str = ""
         for prompt in value:
-            if isinstance(prompt, StringPromptTemplate):
-                inputs = {var: kwargs[var] for var in prompt.input_variables}
-                formatted: str = await prompt.aformat(**inputs)
+            if isinstance(prompt, MessageSegmentsPlaceholder):
+                raise TypeError(
+                    "MessageSegmentsPlaceholder can't be placed inside itself, it's a cycle"
+                )
+            if isinstance(prompt, str):
+                content += prompt
+            elif isinstance(prompt, StringPromptTemplate):
+                formatted: str = prompt.format(**kwargs)
                 content += formatted
         return content
 
@@ -275,8 +283,7 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
             return self._msg_class(content=text, additional_kwargs=self.additional_kwargs)
         content: list = []
         for prompt in self.prompt:
-            inputs = {var: kwargs[var] for var in prompt.input_variables}
-            formatted: str | ImageURL | dict[str, Any] = prompt.format(**inputs)
+            formatted: str | ImageURL | dict[str, Any] = prompt.format(**kwargs)
             if isinstance(formatted, str):
                 if (
                     self.auto_merge_strings
@@ -319,8 +326,7 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
             return self._msg_class(content=text, additional_kwargs=self.additional_kwargs)
         content: list = []
         for prompt in self.prompt:
-            inputs = {var: kwargs[var] for var in prompt.input_variables}
-            formatted: str | ImageURL | dict[str, Any] = await prompt.aformat(**inputs)
+            formatted: str | ImageURL | dict[str, Any] = await prompt.aformat(**kwargs)
             if isinstance(formatted, str):
                 if (
                     self.auto_merge_strings

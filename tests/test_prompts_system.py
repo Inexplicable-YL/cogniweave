@@ -21,8 +21,14 @@ def test_message_segments_placeholder() -> None:
         ["prefix\n", placeholder, mem2, "suffix"]
     )
 
-    message = template.format(memories=[mem1, mem2])
-    expected = "prefix\n" + mem1.format() + mem2.format() * 2 + "suffix"
+    test_timestamp = datetime(2024, 1, 2, 14, 0, tzinfo=UTC)
+    message = template.format(memories=[mem1, mem2], timestamp=test_timestamp)
+    expected = (
+        "prefix\n"
+        + mem1.format(timestamp=test_timestamp)
+        + mem2.format(timestamp=test_timestamp) * 2
+        + "suffix"
+    )
 
     assert message.content == [{"type": "text", "text": expected}]
 
@@ -36,7 +42,13 @@ async def test_message_segments_placeholder_async() -> None:
         ["prefix\n", placeholder, mem2, "suffix"]
     )
 
-    message = await template.aformat(memories=[mem1, mem2])
-    expected = "prefix\n" + await mem1.aformat() + (await mem2.aformat()) * 2 + "suffix"
+    test_timestamp = datetime(2024, 1, 2, 14, 0, tzinfo=UTC)
+    message = await template.aformat(memories=[mem1, mem2], timestamp=test_timestamp)
+    expected = (
+        "prefix\n"
+        + await mem1.aformat(timestamp=test_timestamp)
+        + await mem2.aformat(timestamp=test_timestamp) * 2
+        + "suffix"
+    )
 
     assert message.content == [{"type": "text", "text": expected}]

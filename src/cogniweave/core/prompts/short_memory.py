@@ -95,6 +95,15 @@ class ShortMemoryPromptTemplate(PromptTemplate):
             **kwargs,
         )
 
+    @override
+    def format(self, **kwargs: Any) -> str:
+        kwargs.setdefault("chat_summary", self.chat_summary)
+        kwargs.setdefault(
+            "time_str",
+            format_datetime_relative(old_time=self.timestamp, now=kwargs.get("timestamp")),
+        )
+        return super().format(**kwargs)
+
     def to_template_dict(self) -> ShortMemoryTemplateDict:
         """Convert the prompt template to a dictionary."""
         return ShortMemoryTemplateDict(
