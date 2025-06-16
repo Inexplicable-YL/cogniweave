@@ -2,12 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from functools import partial
-from typing import Any, ClassVar, Self
+from typing import Any, ClassVar, TypedDict, overload
 from typing_extensions import override
 
 from langchain_core.prompts.prompt import PromptTemplate
 from langchain_core.prompts.string import PromptTemplateFormat  # noqa: TC002
 from pydantic import Field, model_validator
+
+
+class ShortMemoryTemplateDict(TypedDict):
+    template: str
+    timestamp: float | int
+    chat_summary: str
+    topic_tags: list[str]
+    template_format: PromptTemplateFormat
 
 
 def format_datetime_relative(old_time: datetime, now: datetime | None = None) -> str:
@@ -35,7 +43,7 @@ def format_datetime_relative(old_time: datetime, now: datetime | None = None) ->
 class ShortMemoryPromptTemplate(PromptTemplate):
     """Generative prompt template."""
 
-    _template: ClassVar[str] = "[{time_str}]\n{chat_summary}"
+    _template: ClassVar[str] = "[{time_str}]\n{chat_summary}\n"
     template: str = Field(default=_template)
     """The template to use for the prompt."""
 
@@ -43,19 +51,15 @@ class ShortMemoryPromptTemplate(PromptTemplate):
     chat_summary: str
     topic_tags: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="before")
     @classmethod
-    @override
-    def get_lc_namespace(cls) -> list[str]:
-        return ["src", "prompts", "generator"]
-
-    @model_validator(mode="after")
-    def build_partial_variables(self) -> Self:
+    def preprocess_input(cls, data: dict[str, Any]) -> dict[str, Any]:
         """Build the partial variables for the prompt."""
-        self.partial_variables = {
-            "chat_summary": self.chat_summary,
-            "time_str": partial(format_datetime_relative, old_time=self.timestamp),
+        data["partial_variables"] = {
+            "chat_summary": data["chat_summary"],
+            "time_str": partial(format_datetime_relative, old_time=data["timestamp"]),
         }
-        return self
+        return data
 
     @override
     @classmethod
@@ -90,3 +94,42 @@ class ShortMemoryPromptTemplate(PromptTemplate):
             template_format=template_format,
             **kwargs,
         )
+
+    def to_template_dict(self) -> ShortMemoryTemplateDict:
+        """Convert the prompt template to a dictionary."""
+        return ShortMemoryTemplateDict(
+            template=self.template,
+            timestamp=self.timestamp.timestamp(),
+            chat_summary=self.chat_summary,
+            topic_tags=self.topic_tags,
+            template_format=self.template_format,
+        )
+
+    @overload
+    @classmethod
+    def load(cls, obj: ShortMemoryTemplateDict | dict[Any, Any]) -> ShortMemoryPromptTemplate: ...
+
+    @overload
+    @classmethod
+    def load(
+        cls, obj: list[ShortMemoryTemplateDict | dict[Any, Any]]
+    ) -> list[ShortMemoryPromptTemplate]: ...
+
+    @classmethod
+    def load(
+        cls,
+        obj: Any,
+    ) -> ShortMemoryPromptTemplate | list[ShortMemoryPromptTemplate]:
+        """Load a prompt template from a dictionary."""
+
+        def _load(
+            obj: dict[Any, Any] | list[dict[Any, Any]],
+        ) -> Any:
+            if isinstance(obj, dict):
+                template_obj = ShortMemoryTemplateDict(**obj)
+                return ShortMemoryPromptTemplate.from_template(**template_obj)
+            if isinstance(obj, list):
+                return [_load(o) for o in obj]
+            return obj
+
+        return _load(obj)

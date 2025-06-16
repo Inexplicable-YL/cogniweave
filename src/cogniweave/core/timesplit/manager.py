@@ -210,14 +210,18 @@ class ConditionDensityManager(BaseModel):
 
     # non-init internal state
     _session_timestamps: dict[str, TimeWheel] = PrivateAttr(default_factory=dict)
-    _session_weights: dict[str, float] = PrivateAttr(default=defaultdict(lambda: 1.0))
+    _session_weights: dict[str, float] = PrivateAttr(
+        default_factory=lambda: defaultdict(lambda: 1.0)
+    )
     _last_timestamp: dict[str, float] = PrivateAttr(default_factory=dict)
-    _intervals: dict[str, deque[float]] = PrivateAttr(default=defaultdict(lambda: deque(maxlen=5)))
-    _message_count: dict[str, int] = PrivateAttr(default=defaultdict(int))
+    _intervals: dict[str, deque[float]] = PrivateAttr(
+        default_factory=lambda: defaultdict(lambda: deque(maxlen=5))
+    )
+    _message_count: dict[str, int] = PrivateAttr(default_factory=lambda: defaultdict(int))
     _segment_id_per_key: dict[str, str] = PrivateAttr(default_factory=dict)
     _density_calculator: DensityCalculator | None = PrivateAttr(default=None)
     _weighted_avg_calc: WeightedAverageCalculator | None = PrivateAttr(default=None)
-    _alocks: dict[str, anyio.Lock] = PrivateAttr(default=defaultdict(anyio.Lock))
+    _alocks: dict[str, anyio.Lock] = PrivateAttr(default_factory=lambda: defaultdict(anyio.Lock))
 
     def __init__(
         self,

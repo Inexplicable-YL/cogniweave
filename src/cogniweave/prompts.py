@@ -61,9 +61,13 @@ class MessageSegmentsPlaceholder(StringPromptTemplate):
         """
         # mypy can't detect the init which is defined in the parent class
         # b/c these are BaseModel classes.
+        datas = {
+            "variable_name": variable_name,
+            "optional": optional,
+            "input_variables": [variable_name] if not optional else [],
+        }
         super().__init__(
-            variable_name=variable_name,  # type: ignore[call-arg]
-            optional=optional,  # type: ignore[call-arg]
+            **datas,
             **kwargs,
         )
 
@@ -126,16 +130,6 @@ class MessageSegmentsPlaceholder(StringPromptTemplate):
                 formatted: str = await prompt.aformat(**inputs)
                 content += formatted
         return content
-
-    @property
-    @override
-    def input_variables(self) -> list[str]:  # type: ignore
-        """Input variables for this prompt template.
-
-        Returns:
-            List of input variable names.
-        """
-        return [self.variable_name] if not self.optional else []
 
     @override
     def pretty_repr(self, html: bool = False) -> str:
