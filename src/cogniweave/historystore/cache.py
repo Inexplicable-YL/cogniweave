@@ -34,6 +34,7 @@ class SessionCache:
     end_msg_ts: float = field(default=float("inf"), init=False)
 
     def _recompute_ranges(self) -> None:
+        """Recompute the start and end timestamps for blocks and messages."""
         first_block = cast("SortedDict", self.blocks).keys()[0]
         last_block = cast("SortedDict", self.blocks).keys()[-1]
 
@@ -46,6 +47,7 @@ class SessionCache:
     def add_messages(
         self, block_id: str, block_ts: float, messages: Iterable[tuple[BaseMessage, float]]
     ) -> None:
+        """Add messages with timestamps to the cache for a specific block."""
         key = (block_id, float(block_ts))
         if key in self.blocks:
             cast("SortedList", self.blocks[key]).update(messages)
@@ -56,6 +58,7 @@ class SessionCache:
         self._recompute_ranges()
 
     def get_blocks(self, start_time: float, end_time: float) -> list[tuple[str, float]]:
+        """Get block IDs and their start timestamps within a time range."""
         return list(
             cast("SortedDict", self.blocks).irange(("", start_time), (chr(0x10FFFF), end_time))
         )
@@ -70,6 +73,7 @@ class SessionCache:
     def get_block_histories_with_timestamps(
         self, block_ids: list[str]
     ) -> list[tuple[BaseMessage, float]]:
+        """Get messages with timestamps for specified block IDs."""
         result: list[tuple[BaseMessage, float]] = []
         for block_id in block_ids:
             for (bid, _), messages in self.blocks.items():
@@ -78,6 +82,7 @@ class SessionCache:
         return result
 
     def get_messages(self, start_time: float, end_time: float) -> list[tuple[BaseMessage, float]]:
+        """Get messages with timestamps within a time range."""
         keys = list(self.blocks.keys())
         block_ids = [k[0] for k in keys]
         timestamps = [k[1] for k in keys]
@@ -208,34 +213,46 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
 
         start_time = start_time or 0.0
         end_time = end_time or float("inf")
+        from_first = kwargs.get("from_first", False)
+
+        cache = self._session_caches[session_id]
         get_blocks_from_db = partial(
             super().get_session_block_ids_with_timestamps, session_id=session_id
         )
 
         result: list[tuple[str, float]] = []
-        if start_time >= self._session_caches[session_id].start_block_ts:
-            result = self._session_caches[session_id].get_blocks(
-                start_time=start_time, end_time=end_time
-            )
-        elif end_time >= self._session_caches[session_id].start_block_ts:
-            result = self._session_caches[session_id].get_blocks(
-                start_time=self._session_caches[session_id].start_block_ts,
-                end_time=end_time,
-            )
-
-            if limit is None or len(result) < limit:
-                result = (
-                    get_blocks_from_db(
-                        limit=limit - len(result) if limit else None,
-                        start_time=start_time,
-                        end_time=self._session_caches[session_id].start_block_ts,
-                    )
-                    + result
+        if start_time >= cache.start_block_ts:
+            result = cache.get_blocks(start_time=start_time, end_time=end_time)
+        elif end_time >= cache.start_block_ts:
+            if from_first:
+                result = get_blocks_from_db(
+                    limit=limit,
+                    start_time=start_time,
+                    end_time=cache.start_block_ts,
                 )
+                if limit is not None and len(result) < limit:
+                    result += cache.get_blocks(
+                        start_time=cache.start_block_ts,
+                        end_time=end_time,
+                    )
+            else:
+                result = cache.get_blocks(
+                    start_time=cache.start_block_ts,
+                    end_time=end_time,
+                )
+                if limit is None or len(result) < limit:
+                    result = (
+                        get_blocks_from_db(
+                            limit=limit + 2 - len(result) if limit else None,
+                            start_time=start_time,
+                            end_time=cache.start_block_ts,
+                        )
+                        + result
+                    )
         if result:
             result = list(dict.fromkeys(sorted(result, key=lambda x: x[1])))
             if limit is not None:
-                result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
+                result = result[:limit] if from_first else result[-limit:]
             return result
 
         return get_blocks_from_db(
@@ -272,33 +289,46 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
 
         start_time = start_time or 0.0
         end_time = end_time or float("inf")
+        from_first = kwargs.get("from_first", False)
+
+        cache = self._session_caches[session_id]
         aget_blocks_from_db = partial(
             super().aget_session_block_ids_with_timestamps, session_id=session_id
         )
 
         result: list[tuple[str, float]] = []
-        if start_time >= self._session_caches[session_id].start_block_ts:
-            result = self._session_caches[session_id].get_blocks(
-                start_time=start_time, end_time=end_time
-            )
-        elif end_time >= self._session_caches[session_id].start_block_ts:
-            result = self._session_caches[session_id].get_blocks(
-                start_time=self._session_caches[session_id].start_block_ts,
-                end_time=end_time,
-            )
-            if limit is None or len(result) < limit:
-                result = (
-                    await aget_blocks_from_db(
-                        limit=limit - len(result) if limit else None,
-                        start_time=start_time,
-                        end_time=self._session_caches[session_id].start_block_ts,
-                    )
-                    + result
+        if start_time >= cache.start_block_ts:
+            result = cache.get_blocks(start_time=start_time, end_time=end_time)
+        elif end_time >= cache.start_block_ts:
+            if from_first:
+                result = await aget_blocks_from_db(
+                    limit=limit,
+                    start_time=start_time,
+                    end_time=cache.start_block_ts,
                 )
+                if limit is not None and len(result) < limit:
+                    result += cache.get_blocks(
+                        start_time=cache.start_block_ts,
+                        end_time=end_time,
+                    )
+            else:
+                result = cache.get_blocks(
+                    start_time=cache.start_block_ts,
+                    end_time=end_time,
+                )
+                if limit is None or len(result) < limit:
+                    result = (
+                        await aget_blocks_from_db(
+                            limit=limit + 2 - len(result) if limit else None,
+                            start_time=start_time,
+                            end_time=cache.start_block_ts,
+                        )
+                        + result
+                    )
         if result:
             result = list(dict.fromkeys(sorted(result, key=lambda x: x[1])))
             if limit is not None:
-                result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
+                result = result[:limit] if from_first else result[-limit:]
             return result
 
         return await aget_blocks_from_db(
@@ -335,33 +365,46 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
 
         start_time = start_time or 0.0
         end_time = end_time or float("inf")
+        from_first = kwargs.get("from_first", False)
+
+        cache = self._session_caches[session_id]
         get_history_from_db = partial(
             super().get_session_history_with_timestamps, session_id=session_id
         )
 
         result: list[tuple[BaseMessage, float]] = []
-        if start_time >= self._session_caches[session_id].start_msg_ts:
-            result = self._session_caches[session_id].get_messages(
-                start_time=start_time, end_time=end_time
-            )
-        elif end_time >= self._session_caches[session_id].start_msg_ts:
-            result = self._session_caches[session_id].get_messages(
-                start_time=self._session_caches[session_id].start_msg_ts,
-                end_time=end_time,
-            )
-            if limit is None or len(result) < limit:
-                result = (
-                    get_history_from_db(
-                        limit=limit - len(result) if limit else None,
-                        start_time=start_time,
-                        end_time=self._session_caches[session_id].start_msg_ts,
-                    )
-                    + result
+        if start_time >= cache.start_msg_ts:
+            result = cache.get_messages(start_time=start_time, end_time=end_time)
+        elif end_time >= cache.start_msg_ts:
+            if from_first:
+                result = get_history_from_db(
+                    limit=limit,
+                    start_time=start_time,
+                    end_time=cache.start_msg_ts,
                 )
+                if limit is not None and len(result) < limit:
+                    result += cache.get_messages(
+                        start_time=cache.start_msg_ts,
+                        end_time=end_time,
+                    )
+            else:
+                result = cache.get_messages(
+                    start_time=cache.start_msg_ts,
+                    end_time=end_time,
+                )
+                if limit is None or len(result) < limit:
+                    result = (
+                        get_history_from_db(
+                            limit=limit + 2 - len(result) if limit else None,
+                            start_time=start_time,
+                            end_time=cache.start_msg_ts,
+                        )
+                        + result
+                    )
         if result:
             result = [next(group) for _, group in groupby(sorted(result, key=lambda x: x[1]))]
             if limit is not None:
-                result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
+                result = result[:limit] if from_first else result[-limit:]
             return result
 
         return get_history_from_db(
@@ -398,33 +441,46 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
 
         start_time = start_time or 0.0
         end_time = end_time or float("inf")
+        from_first = kwargs.get("from_first", False)
+
+        cache = self._session_caches[session_id]
         aget_history_from_db = partial(
             super().aget_session_history_with_timestamps, session_id=session_id
         )
 
         result: list[tuple[BaseMessage, float]] = []
-        if start_time >= self._session_caches[session_id].start_msg_ts:
-            result = self._session_caches[session_id].get_messages(
-                start_time=start_time, end_time=end_time
-            )
-        elif end_time >= self._session_caches[session_id].start_msg_ts:
-            result = self._session_caches[session_id].get_messages(
-                start_time=self._session_caches[session_id].start_msg_ts,
-                end_time=end_time,
-            )
-            if limit is None or len(result) < limit:
-                result = (
-                    await aget_history_from_db(
-                        limit=limit - len(result) if limit else None,
-                        start_time=start_time,
-                        end_time=self._session_caches[session_id].start_msg_ts,
-                    )
-                    + result
+        if start_time >= cache.start_msg_ts:
+            result = cache.get_messages(start_time=start_time, end_time=end_time)
+        elif end_time >= cache.start_msg_ts:
+            if from_first:
+                result = await aget_history_from_db(
+                    limit=limit,
+                    start_time=start_time,
+                    end_time=cache.start_msg_ts,
                 )
+                if limit is not None and len(result) < limit:
+                    result += cache.get_messages(
+                        start_time=cache.start_msg_ts,
+                        end_time=end_time,
+                    )
+            else:
+                result = cache.get_messages(
+                    start_time=cache.start_msg_ts,
+                    end_time=end_time,
+                )
+                if limit is None or len(result) < limit:
+                    result = (
+                        await aget_history_from_db(
+                            limit=limit + 2 - len(result) if limit else None,
+                            start_time=start_time,
+                            end_time=cache.start_msg_ts,
+                        )
+                        + result
+                    )
         if result:
             result = [next(group) for _, group in groupby(sorted(result, key=lambda x: x[1]))]
             if limit is not None:
-                result = result[:limit] if kwargs.get("from_first", False) else result[-limit:]
+                result = result[:limit] if from_first else result[-limit:]
             return result
 
         return await aget_history_from_db(
