@@ -6,7 +6,7 @@ from langgraph.graph import END, StateGraph
 from pydantic import BaseModel
 
 from cogniweave.core.end_detector import ConversationEndDetector
-from cogniweave.core.memory.updater import (
+from cogniweave.core.memory_makers.short_memory import (
     LongTermMemoryMaker,
     ShortTermMemoryMaker,
 )

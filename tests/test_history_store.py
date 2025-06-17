@@ -3,9 +3,7 @@ from pathlib import Path
 from langchain_core.messages import HumanMessage
 from sqlalchemy import select
 
-from cogniweave.historystore import (
-    BaseHistoryStoreWithCache as BaseHistoryStore,
-)
+from cogniweave.historystore import BaseHistoryStoreWithCache as BaseHistoryStore
 from cogniweave.historystore import (
     ChatBlock,
     ChatBlockAttribute,
