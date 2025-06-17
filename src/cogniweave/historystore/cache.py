@@ -2,36 +2,33 @@ from __future__ import annotations
 
 import bisect
 from collections import defaultdict
-from dataclasses import dataclass, field
 from functools import partial
 from itertools import groupby
 from typing import TYPE_CHECKING, Any, cast
 from typing_extensions import override
 
-from pydantic import PrivateAttr
+from langchain_core.messages import BaseMessage  # noqa: TC002
+from pydantic import BaseModel, Field, PrivateAttr
 from sortedcontainers import SortedDict, SortedList
+
+from .base import BaseHistoryStore
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from langchain_core.messages import BaseMessage
 
-from .base import BaseHistoryStore
-
-
-@dataclass
-class SessionCache:
+class SessionCache(BaseModel):
     """Cache for a single session."""
 
     max_blocks: int
 
-    blocks: dict[tuple[str, float], list[tuple[BaseMessage, float]]] = field(
+    blocks: dict[tuple[str, float], list[tuple[BaseMessage, float]]] = Field(
         default_factory=lambda: SortedDict(lambda x: x[1]), init=False
     )
-    start_block_ts: float = field(default=float("inf"), init=False)
-    end_block_ts: float = field(default=float("inf"), init=False)
-    start_msg_ts: float = field(default=float("inf"), init=False)
-    end_msg_ts: float = field(default=float("inf"), init=False)
+    start_block_ts: float = Field(default=float("inf"), init=False)
+    end_block_ts: float = Field(default=float("inf"), init=False)
+    start_msg_ts: float = Field(default=float("inf"), init=False)
+    end_msg_ts: float = Field(default=float("inf"), init=False)
 
     def _recompute_ranges(self) -> None:
         """Recompute the start and end timestamps for blocks and messages."""
@@ -62,13 +59,6 @@ class SessionCache:
         return list(
             cast("SortedDict", self.blocks).irange(("", start_time), (chr(0x10FFFF), end_time))
         )
-
-    def get_block_timestamp(self, block_id: str) -> float | None:
-        """Get the timestamp of a block by its ID."""
-        for bid, ts in self.blocks:
-            if bid == block_id:
-                return ts
-        return None
 
     def get_block_histories_with_timestamps(
         self, block_ids: list[str]
@@ -109,6 +99,7 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
     """
 
     _session_caches: dict[str, SessionCache] = PrivateAttr()
+    _blocks_time_session_ids: dict[str, tuple[float, str]] = PrivateAttr(default_factory=dict)
 
     def __init__(
         self,
@@ -155,6 +146,7 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
         session_id = session_id or block_id
         super().add_messages(messages, block_id=block_id, block_ts=block_ts, session_id=session_id)
         self._session_caches[session_id].add_messages(block_id, block_ts, messages)
+        self._blocks_time_session_ids[block_id] = (block_ts, session_id)
 
     @override
     async def aadd_messages(
@@ -185,6 +177,131 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
             messages, block_id=block_id, block_ts=block_ts, session_id=session_id
         )
         self._session_caches[session_id].add_messages(block_id, block_ts, messages)
+        self._blocks_time_session_ids[block_id] = (block_ts, session_id)
+
+    @override
+    def get_block_timestamp(self, block_id: str) -> float | None:
+        """Get the start timestamp of a chat block.
+
+        Args:
+            block_id: The ID of the chat block to query.
+
+        Return:
+            float | None: Unix timestamp of block start time, or None if not found.
+        """
+        if block_id in self._blocks_time_session_ids:
+            return self._blocks_time_session_ids[block_id][0]
+        return super().get_block_timestamp(block_id)
+
+    @override
+    async def aget_block_timestamp(self, block_id: str) -> float | None:
+        """Async version of get_block_timestamp.
+
+        Args:
+            block_id: The ID of the chat block to query.
+
+        Return:
+            float | None: Unix timestamp of block start time, or None if not found.
+        """
+        if block_id in self._blocks_time_session_ids:
+            return self._blocks_time_session_ids[block_id][0]
+        return await super().aget_block_timestamp(block_id)
+
+    @override
+    def get_block_history_with_timestamps(self, block_id: str) -> list[tuple[BaseMessage, float]]:
+        """Get all messages in a block with their timestamps.
+
+        Args:
+            block_id: The ID of the chat block to query.
+
+        Return:
+            list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
+        """
+        if block_id in self._blocks_time_session_ids:
+            cache = self._session_caches[self._blocks_time_session_ids[block_id][1]]
+            return cache.get_block_histories_with_timestamps([block_id])
+        return super().get_block_history_with_timestamps(block_id)
+
+    @override
+    async def aget_block_history_with_timestamps(
+        self, block_id: str
+    ) -> list[tuple[BaseMessage, float]]:
+        """Async version of get_history_with_timestamps.
+
+        Args:
+            block_id: The ID of the chat block to query.
+
+        Return:
+            list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
+        """
+        if block_id in self._blocks_time_session_ids:
+            cache = self._session_caches[self._blocks_time_session_ids[block_id][1]]
+            return cache.get_block_histories_with_timestamps([block_id])
+        return await super().aget_block_history_with_timestamps(block_id)
+
+    @override
+    def get_block_histories_with_timestamps(
+        self, block_ids: list[str]
+    ) -> list[tuple[BaseMessage, float]]:
+        """Get messages with timestamps from multiple blocks, concatenated in order.
+
+        Args:
+            block_ids: List of block IDs to retrieve messages from.
+
+        Return:
+            list[tuple[BaseMessage, float]]: Combined list of (message, timestamp) pairs
+                from all blocks, in chronological order.
+        """
+        existing_ids = set(block_ids) & set(self._blocks_time_session_ids.keys())
+        session_blocks: dict[str, list[tuple[str, float]]] = defaultdict(list)
+        ordered_history = SortedList(key=lambda x: x[1])
+
+        for bid in existing_ids:
+            timestamp, session = self._blocks_time_session_ids[bid]
+            session_blocks[session].append((bid, timestamp))
+
+        for session, blocks in session_blocks.items():
+            cache = self._session_caches[session]
+            for bid in blocks:
+                ordered_history.update(cache.blocks[bid])
+
+        missing_ids = set(block_ids) - existing_ids
+        for bid in missing_ids:
+            ordered_history.update(super().get_block_history_with_timestamps(bid))
+
+        return list(ordered_history)
+
+    @override
+    async def aget_block_histories_with_timestamps(
+        self, block_ids: list[str]
+    ) -> list[tuple[BaseMessage, float]]:
+        """Async version of get_histories_with_timestamps.
+
+        Args:
+            block_ids: List of block IDs to retrieve messages from.
+
+        Return:
+            list[tuple[BaseMessage, float]]: Combined list of (message, timestamp) pairs
+                from all blocks, in chronological order.
+        """
+        existing_ids = set(block_ids) & set(self._blocks_time_session_ids.keys())
+        session_blocks: dict[str, list[tuple[str, float]]] = defaultdict(list)
+        ordered_history = SortedList(key=lambda x: x[1])
+
+        for bid in existing_ids:
+            timestamp, session = self._blocks_time_session_ids[bid]
+            session_blocks[session].append((bid, timestamp))
+
+        for session, blocks in session_blocks.items():
+            cache = self._session_caches[session]
+            for bid in blocks:
+                ordered_history.update(cache.blocks[bid])
+
+        missing_ids = set(block_ids) - existing_ids
+        for bid in missing_ids:
+            ordered_history.update(await super().aget_block_history_with_timestamps(bid))
+
+        return list(ordered_history)
 
     @override
     def get_session_block_ids_with_timestamps(
