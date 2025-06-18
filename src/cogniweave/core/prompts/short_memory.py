@@ -53,13 +53,13 @@ class ShortMemoryPromptTemplate(PromptTemplate):
 
     @model_validator(mode="before")
     @classmethod
-    def preprocess_input(cls, data: dict[str, Any]) -> dict[str, Any]:
+    def preprocess_input(cls, values: dict[str, Any]) -> dict[str, Any]:
         """Build the partial variables for the prompt."""
-        data["partial_variables"] = {
-            "chat_summary": data["chat_summary"],
-            "time_str": partial(format_datetime_relative, old_time=data["timestamp"]),
+        values["partial_variables"] = values.get("partial_variables", {}) | {
+            "chat_summary": values["chat_summary"],
+            "time_str": partial(format_datetime_relative, old_time=values["timestamp"]),
         }
-        return data
+        return values
 
     @override
     @classmethod
@@ -97,7 +97,6 @@ class ShortMemoryPromptTemplate(PromptTemplate):
 
     @override
     def format(self, **kwargs: Any) -> str:
-        kwargs.setdefault("chat_summary", self.chat_summary)
         kwargs.setdefault(
             "time_str",
             format_datetime_relative(old_time=self.timestamp, now=kwargs.get("timestamp")),

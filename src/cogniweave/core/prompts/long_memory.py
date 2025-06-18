@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar, TypedDict, overload
 from typing_extensions import override
 
-from langchain_core.messages import get_buffer_string
 from langchain_core.prompts.prompt import PromptTemplate
 from pydantic import Field, model_validator
 
@@ -40,14 +38,13 @@ class LongMemoryExtractPromptTemplate(PromptTemplate):
 
     @model_validator(mode="before")
     @classmethod
-    def preprocess_input(cls, data: dict[str, Any]) -> dict[str, Any]:
-        # Format history list into a buffer string
-        hist = data.get("history")
-        if isinstance(hist, Sequence):
-            data["history"] = get_buffer_string(
-                hist, human_prefix="[User]", ai_prefix="[Assistant]"
-            )
-        return data
+    def add_partial_variables(cls, values: dict[str, Any]) -> dict[str, Any]:
+        values["partial_variables"] = values.get("partial_variables", {}) | {
+            "history": values["history"],
+            "current_time": values["current_time"],
+            "current_date": values["current_date"],
+        }
+        return values
 
     @override
     @classmethod
@@ -111,14 +108,21 @@ class LongMemoryMergePromptTemplate(PromptTemplate):
 
     @model_validator(mode="before")
     @classmethod
-    def preprocess_input(cls, data: dict[str, Any]) -> dict[str, Any]:
+    def preprocess_input(cls, values: dict[str, Any]) -> dict[str, Any]:
         # Format current_memory list or other types into a JSON string if needed
-        cm = data.get("current_memory")
+        cm = values.get("current_memory")
         if isinstance(cm, list):
-            data["current_memory"] = json.dumps(cm, ensure_ascii=False, indent=2)
+            values["current_memory"] = json.dumps(cm, ensure_ascii=False, indent=2)
         elif not isinstance(cm, str):
-            data["current_memory"] = str(cm)
-        return data
+            values["current_memory"] = str(cm)
+        values["partial_variables"] = values.get("partial_variables", {}) | {
+            "new_memory": values["new_memory"],
+            "current_memory": values["current_memory"],
+            "current_time": values["current_time"],
+            "current_date": values["current_date"],
+            "last_update_time": values["last_update_time"],
+        }
+        return values
 
     @override
     @classmethod
@@ -163,8 +167,7 @@ class LongMemoryTemplateDict(TypedDict):
 class LongMemoryPromptTemplate(PromptTemplate):
     """Generative prompt template for long-term memory output."""
 
-    _template: ClassVar[str] = ""
-    template: str = Field(default=_template)
+    template: str = Field(default="")
 
     updated_memory: list[str]
 

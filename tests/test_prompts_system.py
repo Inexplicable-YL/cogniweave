@@ -52,3 +52,7 @@ async def test_message_segments_placeholder_async() -> None:
     )
 
     assert message.content == [{"type": "text", "text": expected}]
+
+
+if __name__ == "__main__":
+    test_message_segments_placeholder()
