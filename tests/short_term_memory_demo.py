@@ -1,4 +1,4 @@
-"""測試 Short-term Memory 功能的腳本"""
+"""Script to test ShortTermMemoryMaker functionality."""
 
 import os
 from datetime import datetime
@@ -7,20 +7,26 @@ from typing import Any
 import anyio
 from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.table import Table
 
 from cogniweave.core.memory_makers.short_memory import ShortTermMemoryMaker
 from cogniweave.core.prompts.short_memory import ShortMemoryPromptTemplate
+
+console = Console()
 
 load_dotenv()
 
 
 def create_test_conversation() -> dict[str, Any]:
-    """創建測試用的對話資料"""
+    """Create a test conversation."""
     return {
         "name": "言灵",
         "history": [
             HumanMessage("我最近在学习 React，遇到了 useEffect 的问题。"),
-            AIMessage("useEffect 确实是 React 中比较复杂的概念。你遇到了什么具体问题？"),
+            AIMessage("useEffect 确实是 React 中比较复杂的概念。你遇到了什么具体问题？"),  # noqa: RUF001
             HumanMessage("就是不知道什么时候该用依赖数组。"),
             AIMessage(
                 "依赖数组决定了 effect 何时重新执行。空数组表示只在组件挂载时执行一次，"
@@ -34,7 +40,7 @@ def create_test_conversation() -> dict[str, Any]:
 
 
 def create_art_conversation() -> dict[str, Any]:
-    """創建另一個測試對話（繪畫主題）"""
+    """Create another test conversation (art topic)."""
     return {
         "name": "小梦",
         "history": [
@@ -48,74 +54,122 @@ def create_art_conversation() -> dict[str, Any]:
     }
 
 
+def print_history(conversation: dict[str, Any], title: str) -> None:
+    """Print conversation history as a table."""
+    table = Table(title=title, show_header=True, header_style="bold magenta")
+    table.add_column("#", style="dim", width=4)
+    table.add_column("角色", min_width=10)
+    table.add_column("内容", min_width=40)
+
+    history = conversation.get("history", [])
+    for i, msg in enumerate(history, 1):
+        role = "User" if isinstance(msg, HumanMessage) else "Assistant"
+        table.add_row(str(i), f"[cyan]{role}[/]", str(msg.content))
+
+    console.print(Panel(table, title="Test Data", border_style="blue"))
+
+
 def print_memory_result(result: ShortMemoryPromptTemplate, title: str) -> None:
-    """格式化輸出記憶結果"""
-    print(f"\n{'=' * 50}")
-    print(f"{title}")
-    print(f"{'=' * 50}")
-    print(f"時間戳記: {result.timestamp}")
-    print(f"標籤: {result.topic_tags}")
-    print("\n格式化後的記憶:")
-    print(result.format())
-    print(f"{'=' * 50}\n")
+    """Format and display memory result."""
+    table = Table(title=title, show_header=False)
+    table.add_column("字段", style="cyan")
+    table.add_column("值")
+    table.add_row("时间戳记", str(result.timestamp))
+    table.add_row("标签", ", ".join(result.topic_tags))
+
+    console.print(Panel(table, border_style="blue"))
+    console.print(Panel(result.format(), title="Formatted Memory", border_style="magenta"))
 
 
 def check_api_key() -> bool:
-    """檢查 API key 是否設置"""
+    """Check if the API key is set."""
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        print("❌ 錯誤：未找到 OPENAI_API_KEY")
-        print("請在專案根目錄創建 .env 文件，並添加：")
-        print("OPENAI_API_KEY=your_api_key_here")
+        console.print(
+            Panel(
+                "[bold red]Error: OPENAI_API_KEY not found[/]\nCreate a .env file in the project root and add:\nOPENAI_API_KEY=your_api_key_here",
+                title="Environment Check",
+                border_style="red",
+            )
+        )
         return False
 
-    print(f"✓ 找到 API Key: {api_key[:10]}...")
+    console.print(f"[bold green]✓ Found API Key: {api_key[:10]}...[/]")
     return True
 
 
-async def test_sync_memory() -> tuple[ShortMemoryPromptTemplate, ShortMemoryPromptTemplate]:
-    """測試同步版本的短期記憶生成"""
-    print("開始測試同步版本...")
+async def test_sync_memory(memory_maker: ShortTermMemoryMaker) -> tuple[ShortMemoryPromptTemplate, ShortMemoryPromptTemplate] | None:
+    """Test synchronous short-term memory generation."""
+    console.print(Panel("Step 1: Test synchronous memory", style="bold green", border_style="green"))
+    try:
+        conv1 = create_test_conversation()
+        print_history(conv1, "Conversation 1: React Learning")
+        result1 = memory_maker.invoke(conv1)
+        print_memory_result(result1, "Conversation 1: React Learning")
 
-    # 初始化 updater
-    updater = ShortTermMemoryMaker(lang="zh")
+        conv2 = create_art_conversation()
+        print_history(conv2, "Conversation 2: Art Sharing")
+        result2 = memory_maker.invoke(conv2)
+        print_memory_result(result2, "Conversation 2: Art Sharing")
+    except Exception as e:
+        console.print(
+            Panel(
+                f"[bold red]Synchronous test failed: {e}\nError type: {type(e).__name__}[/]",
+                title="Error",
+                border_style="red",
+            )
+        )
+        import traceback
 
-    # 測試第一個對話
-    conv1 = create_test_conversation()
-    result1 = updater.invoke(conv1)
-    print_memory_result(result1, "對話 1: React 學習")
-
-    # 測試第二個對話
-    conv2 = create_art_conversation()
-    result2 = updater.invoke(conv2)
-    print_memory_result(result2, "對話 2: 繪畫分享")
-
-    return result1, result2
-
-
-async def test_async_memory() -> ShortMemoryPromptTemplate:
-    """測試異步版本的短期記憶生成"""
-    print("\n開始測試異步版本...")
-
-    # 初始化 updater
-    updater = ShortTermMemoryMaker(lang="zh")
-
-    # 測試異步調用
-    conv = create_test_conversation()
-    result = await updater.ainvoke(conv)
-
-    print("\n異步結果:")
-    print(f"摘要: {result.chat_summary}")
-    print(f"標籤: {result.topic_tags}")
-
-    return result
+        console.print(Syntax(traceback.format_exc(), "python", theme="monokai"))
+        return None
+    else:
+        return result1, result2
 
 
-async def test_english_version() -> ShortMemoryPromptTemplate:
-    """測試英文版本"""
-    print("\n開始測試英文版本...")
+async def test_async_memory(memory_maker: ShortTermMemoryMaker) -> ShortMemoryPromptTemplate | None:
+    """Test asynchronous short-term memory generation."""
+    console.print(Panel("Step 2: Test asynchronous memory", style="bold green", border_style="green"))
+    try:
+        conv = create_test_conversation()
+        print_history(conv, "Async Conversation")
+        result = await memory_maker.ainvoke(conv)
+        console.print("[bold green]✓ Asynchronous version executed successfully![/]")
+        print_memory_result(result, "Async Result")
+    except Exception as e:
+        console.print(
+            Panel(
+                f"[bold red]Asynchronous test failed: {e}\nError type: {type(e).__name__}[/]",
+                title="Error",
+                border_style="red",
+            )
+        )
+        import traceback
 
-    # 創建英文對話
+        console.print(Syntax(traceback.format_exc(), "python", theme="monokai"))
+        return None
+    else:
+        return result
+
+
+def print_stats(memory_maker: ShortTermMemoryMaker) -> None:
+    """Print performance statistics."""
+    table = Table(title="Performance Statistics", show_header=False)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value")
+
+    table.add_row("Language used", memory_maker.lang)
+    chain_type = type(memory_maker.memory_chain).__name__ if memory_maker.memory_chain else "None"
+    table.add_row("Summary chain type", chain_type)
+    tags_chain_type = type(memory_maker.tags_chain).__name__ if memory_maker.tags_chain else "None"
+    table.add_row("Tagging chain type", tags_chain_type)
+
+    console.print(Panel(table, border_style="magenta"))
+
+
+async def test_english_version() -> ShortMemoryPromptTemplate | None:
+    """Test English version."""
+    console.print(Panel("Step 3: Test English version", style="bold green", border_style="green"))
     english_conv = {
         "name": "James",
         "history": [
@@ -126,86 +180,115 @@ async def test_english_version() -> ShortMemoryPromptTemplate:
         ],
         "timestamp": datetime.now().timestamp(),
     }
+    try:
+        updater = ShortTermMemoryMaker(lang="en")
+        print_history(english_conv, "English Conversation")
+        result = updater.invoke(english_conv)
+        console.print("[bold green]✓ English version executed successfully![/]")
+        print_memory_result(result, "English Conversation: Art Sharing")
+    except Exception as e:
+        console.print(
+            Panel(
+                f"[bold red]English version test failed: {e}\nError type: {type(e).__name__}[/]",
+                title="Error",
+                border_style="red",
+            )
+        )
+        import traceback
 
-    # 使用英文版 updater
-    updater = ShortTermMemoryMaker(lang="en")
-    result = updater.invoke(english_conv)
-
-    print_memory_result(result, "English Conversation: Art Sharing")
-
-    return result
+        console.print(Syntax(traceback.format_exc(), "python", theme="monokai"))
+        return None
+    else:
+        return result
 
 
 def test_error_handling() -> None:
-    """測試錯誤處理"""
-    print("\n測試錯誤處理...")
+    """Test error handling."""
+    console.print(Panel("Step 4: Test error handling", style="bold green", border_style="green"))
 
     updater = ShortTermMemoryMaker(lang="zh")
 
-    # 測試無效輸入
     try:
         invalid_input = {
-            "name": "測試用戶",
-            "history": "這不是一個列表",  # 錯誤：應該是列表
+            "name": "测试用户",
+            "history": "这不是一个列表",  # Should be a list
             "timestamp": datetime.now().timestamp(),
         }
         updater.invoke(invalid_input)
-        print("❌ 應該拋出錯誤但沒有")
+        console.print("❌ Expected an error but none was raised")
     except TypeError as e:
-        print(f"✓ 成功捕獲類型錯誤: {e}")
+        console.print(f"[bold green]✓ Successfully caught type error: {e}[/]")
     except Exception as e:
-        print(f"❌ 捕獲了意外的錯誤類型: {type(e).__name__}: {e}")
+        console.print(f"[bold red]❌ Caught unexpected error type: {type(e).__name__}: {e}[/]")
 
-    # 測試缺少必要欄位
     try:
         missing_field = {
-            "name": "測試用戶",
+            "name": "测试用户",
             # 缺少 history
             "timestamp": datetime.now().timestamp(),
         }
         updater.invoke(missing_field)
-        print("❌ 應該拋出錯誤但沒有")
+        console.print("❌ Expected an error but none was raised")
     except TypeError as e:
-        print(f"✓ 成功捕獲欄位缺失錯誤: {e}")
+        console.print(f"[bold green]✓ Successfully caught missing field error: {e}[/]")
     except Exception as e:
-        print(f"❌ 捕獲了意外的錯誤類型: {type(e).__name__}: {e}")
+        console.print(f"[bold red]❌ Caught unexpected error type: {type(e).__name__}: {e}[/]")
 
-    print("錯誤處理測試完成")
+    console.print("Error handling tests completed")
 
 
 async def main() -> None:
-    """主測試函數"""
-    print("=" * 70)
-    print("Short-term Memory 測試腳本")
-    print("=" * 70)
-
-    # 檢查 API key
+    """Main test function."""
     if not check_api_key():
         return
 
-    # 設置環境變數（如果需要自定義模型）
+    console.print(
+        Panel.fit(
+            "[bold]Start Testing ShortTermMemoryMaker[/]",
+            border_style="bold magenta",
+            padding=(1, 4),
+        )
+    )
+
     if not os.getenv("SHORT_MEMORY_MODEL"):
         os.environ["SHORT_MEMORY_MODEL"] = "openai/gpt-4.1-mini"
-        print(f"✓ 設置預設模型: {os.environ['SHORT_MEMORY_MODEL']}")
+        console.print(f"[bold green]✓ Set default model: {os.environ['SHORT_MEMORY_MODEL']}[/]")
 
+    memory_maker = ShortTermMemoryMaker(lang="zh")
     try:
-        # 執行各項測試
-        sync_results = await test_sync_memory()
-        async_result = await test_async_memory()
+        sync_results = await test_sync_memory(memory_maker)
+        if not sync_results:
+            return
+
+        async_result = await test_async_memory(memory_maker)
+        if not async_result:
+            return
+
         english_result = await test_english_version()
+        if not english_result:
+            return
 
-        # 錯誤處理測試單獨包裝
-        try:
-            test_error_handling()
-        except Exception as e:
-            print(f"錯誤處理測試失敗: {e}")
+        test_error_handling()
 
-        print("\n測試完成！")
-        print(f"共生成了 {len(sync_results) + 1 + 1} 個記憶實例")
-
+        console.print(
+            Panel.fit(
+                "[bold green]✓ All tests completed! ShortTermMemoryMaker is working properly.[/]",
+                border_style="bold green",
+                padding=(1, 4),
+            )
+        )
+        print_stats(memory_maker)
     except Exception as e:
-        print(f"\n❌ 測試過程中發生錯誤: {e}")
-        print("請檢查 API key 是否正確，或網路連接是否正常。")
+        console.print(
+            Panel(
+                f"[bold red]Error occurred during tests: {e}[/]",
+                title="Error",
+                border_style="red",
+            )
+        )
+        import traceback
+
+        console.print(Syntax(traceback.format_exc(), "python", theme="monokai"))
 
 
 if __name__ == "__main__":
