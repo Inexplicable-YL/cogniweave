@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, ClassVar, TypedDict, overload
+from typing import Any, ClassVar, TypedDict, overload
 from typing_extensions import override
 
 from langchain_core.prompts.prompt import PromptTemplate
+from langchain_core.prompts.string import PromptTemplateFormat
 from pydantic import Field, model_validator
-
-if TYPE_CHECKING:
-    from langchain_core.prompts.string import PromptTemplateFormat
 
 
 class LongMemoryExtractTemplateDict(TypedDict):
@@ -167,9 +165,21 @@ class LongMemoryTemplateDict(TypedDict):
 class LongMemoryPromptTemplate(PromptTemplate):
     """Generative prompt template for long-term memory output."""
 
-    template: str = Field(default="")
+    model_config = {"extra": "forbid"}  # Ensure JSON schema includes additionalProperties: false
 
+    template: str = Field(default="{updated_memory_json}")
     updated_memory: list[str]
+
+    @model_validator(mode="before")
+    @classmethod
+    def setup_partial_variables(cls, values: dict[str, Any]) -> dict[str, Any]:
+        """Ensure partial_variables is correctly set"""
+        if "updated_memory" in values:
+            memory_json = json.dumps(values["updated_memory"], ensure_ascii=False)
+            values["partial_variables"] = values.get("partial_variables", {}) | {
+                "updated_memory_json": memory_json
+            }
+        return values
 
     @override
     @classmethod
@@ -181,10 +191,17 @@ class LongMemoryPromptTemplate(PromptTemplate):
         template_format: PromptTemplateFormat = "f-string",
         **kwargs: Any,
     ) -> LongMemoryPromptTemplate:
-        # 以 updated_memory 的 JSON 陣列字串作為 template
-        memory_str = template or json.dumps(updated_memory, ensure_ascii=False)
+        # Use template with variables and provide JSON data through partial_variables
+        template_str = template or "{updated_memory_json}"
+        memory_json = json.dumps(updated_memory, ensure_ascii=False)
+
+        # Set partial_variables to provide JSON data
+        kwargs["partial_variables"] = kwargs.get("partial_variables", {}) | {
+            "updated_memory_json": memory_json
+        }
+
         return cls(
-            template=memory_str,
+            template=template_str,
             updated_memory=updated_memory,
             template_format=template_format,
             **kwargs,

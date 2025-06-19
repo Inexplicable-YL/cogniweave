@@ -37,6 +37,7 @@ class LongTermPydanticSummary(
     prompt: MultilingualSystemPromptValue[Literal["zh", "en"]] | None = Field(
         default=LongTermMemoryPromptValue()
     )
+    structured_output: bool = Field(default=False)  # 使用 function calling 避免 schema 問題
 
 
 # JSON chat chain for extraction
@@ -101,7 +102,12 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
         )
         # Invoke JSON extraction and serialize to JSON string
         result = self.extract_chain.invoke(
-            {"input": extract_template.format()}, config=config, **kwargs
+            {
+                "input": extract_template.format(),
+                "current_time": current_time,
+                "current_date": current_date,
+            },
+            config=config, **kwargs
         )
         return json.dumps(result, ensure_ascii=False)
 
@@ -126,7 +132,12 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
         )
         # Invoke JSON extraction asynchronously and serialize to JSON string
         result = await self.extract_chain.ainvoke(
-            {"input": extract_template.format()}, config=config, **kwargs
+            {
+                "input": extract_template.format(),
+                "current_time": current_time,
+                "current_date": current_date,
+            },
+            config=config, **kwargs
         )
         return json.dumps(result, ensure_ascii=False)
 
@@ -152,7 +163,15 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
             current_date=current_date,
             last_update_time=last_update or "",
         )
-        return self.chat_chain.invoke({"input": merge_template.format()}, config=config, **kwargs)
+        return self.chat_chain.invoke(
+            {
+                "input": merge_template.format(),
+                "current_time": current_time,
+                "current_date": current_date,
+                "last_update_time": last_update or "",
+            },
+            config=config, **kwargs
+        )
 
     @override
     async def ainvoke(
@@ -179,5 +198,11 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
             last_update_time=last_update or "",
         )
         return await self.chat_chain.ainvoke(
-            {"input": merge_template.format()}, config=config, **kwargs
+            {
+                "input": merge_template.format(),
+                "current_time": current_time,
+                "current_date": current_date,
+                "last_update_time": last_update or "",
+            },
+            config=config, **kwargs
         )
