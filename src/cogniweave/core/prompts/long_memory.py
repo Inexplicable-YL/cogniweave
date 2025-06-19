@@ -1,21 +1,19 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from typing import Any, ClassVar, TypedDict, overload
 from typing_extensions import override
 
 from langchain_core.prompts.prompt import PromptTemplate
-from langchain_core.prompts.string import PromptTemplateFormat
+from langchain_core.prompts.string import PromptTemplateFormat  # noqa: TC002
 from pydantic import Field, model_validator
 
 
-class LongMemoryExtractTemplateDict(TypedDict):
-    template: str
-    history: str
-    current_time: str
-    current_date: str
-    template_format: PromptTemplateFormat
+def _format_memory(updated_memory: list[str]) -> str:
+    """Format the updated memory into a JSON string."""
+    return (
+        "\n".join(f"  {i}. {memory_item}" for i, memory_item in enumerate(updated_memory, 1)) + "\n"
+    )
 
 
 class LongMemoryExtractPromptTemplate(PromptTemplate):
@@ -29,6 +27,7 @@ class LongMemoryExtractPromptTemplate(PromptTemplate):
         "Current date: {current_date}"
     )
     template: str = Field(default=_template)
+
     history: str
     current_time: str
     current_date: str
@@ -72,16 +71,6 @@ class LongMemoryExtractPromptTemplate(PromptTemplate):
         )
 
 
-class LongMemoryMergeTemplateDict(TypedDict):
-    template: str
-    new_memory: str
-    current_memory: Any
-    current_time: str
-    current_date: str
-    last_update_time: str
-    template_format: PromptTemplateFormat
-
-
 class LongMemoryMergePromptTemplate(PromptTemplate):
     """Template for long-term memory update/merge."""
 
@@ -97,8 +86,9 @@ class LongMemoryMergePromptTemplate(PromptTemplate):
         "Last update time: {last_update_time}"
     )
     template: str = Field(default=_template)
-    new_memory: str
-    current_memory: Any
+
+    new_memory: list[str]
+    current_memory: list[str]
     current_time: str
     current_date: str
     last_update_time: str
@@ -108,14 +98,9 @@ class LongMemoryMergePromptTemplate(PromptTemplate):
     @classmethod
     def preprocess_input(cls, values: dict[str, Any]) -> dict[str, Any]:
         # Format current_memory list or other types into a JSON string if needed
-        cm = values.get("current_memory")
-        if isinstance(cm, list):
-            values["current_memory"] = json.dumps(cm, ensure_ascii=False, indent=2)
-        elif not isinstance(cm, str):
-            values["current_memory"] = str(cm)
         values["partial_variables"] = values.get("partial_variables", {}) | {
-            "new_memory": values["new_memory"],
-            "current_memory": values["current_memory"],
+            "new_memory": _format_memory(values["new_memory"]),
+            "current_memory": _format_memory(values["current_memory"]),
             "current_time": values["current_time"],
             "current_date": values["current_date"],
             "last_update_time": values["last_update_time"],
@@ -128,8 +113,8 @@ class LongMemoryMergePromptTemplate(PromptTemplate):
         cls,
         template: str | None = None,
         *,
-        new_memory: str,
-        current_memory: Any,
+        new_memory: list[str],
+        current_memory: list[str],
         current_time: datetime | str,
         current_date: datetime | str,
         last_update_time: datetime | str,
@@ -165,9 +150,9 @@ class LongMemoryTemplateDict(TypedDict):
 class LongMemoryPromptTemplate(PromptTemplate):
     """Generative prompt template for long-term memory output."""
 
-    model_config = {"extra": "forbid"}  # Ensure JSON schema includes additionalProperties: false
+    _template: ClassVar[str] = "{updated_memory_json}"
+    template: str = Field(default=_template)
 
-    template: str = Field(default="{updated_memory_json}")
     updated_memory: list[str]
 
     @model_validator(mode="before")
@@ -175,7 +160,7 @@ class LongMemoryPromptTemplate(PromptTemplate):
     def setup_partial_variables(cls, values: dict[str, Any]) -> dict[str, Any]:
         """Ensure partial_variables is correctly set"""
         if "updated_memory" in values:
-            memory_json = json.dumps(values["updated_memory"], ensure_ascii=False)
+            memory_json = _format_memory(values["updated_memory"])
             values["partial_variables"] = values.get("partial_variables", {}) | {
                 "updated_memory_json": memory_json
             }
@@ -191,17 +176,9 @@ class LongMemoryPromptTemplate(PromptTemplate):
         template_format: PromptTemplateFormat = "f-string",
         **kwargs: Any,
     ) -> LongMemoryPromptTemplate:
-        # Use template with variables and provide JSON data through partial_variables
-        template_str = template or "{updated_memory_json}"
-        memory_json = json.dumps(updated_memory, ensure_ascii=False)
-
-        # Set partial_variables to provide JSON data
-        kwargs["partial_variables"] = kwargs.get("partial_variables", {}) | {
-            "updated_memory_json": memory_json
-        }
-
+        """Create prompt template from variables."""
         return cls(
-            template=template_str,
+            template=template or cls._template,
             updated_memory=updated_memory,
             template_format=template_format,
             **kwargs,

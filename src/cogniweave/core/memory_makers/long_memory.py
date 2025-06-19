@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from typing import Any, Literal, Self
 from typing_extensions import override
@@ -6,7 +5,7 @@ from typing_extensions import override
 from langchain_core.messages import get_buffer_string
 from langchain_core.runnables import RunnableSerializable
 from langchain_core.runnables.config import RunnableConfig
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from cogniweave.core.prompt_values.long_memory import (
     LongTermMemoryExtractPromptValue,
@@ -17,14 +16,18 @@ from cogniweave.core.prompts.long_memory import (
     LongMemoryMergePromptTemplate,
     LongMemoryPromptTemplate,
 )
-from cogniweave.llms import JsonSingleTurnChat, PydanticSingleTurnChat
+from cogniweave.llms import PydanticSingleTurnChat
 from cogniweave.prompt_values import MultilingualSystemPromptValue
 from cogniweave.utils import get_model_from_env, get_provider_from_env
 
 
-class LongTermPydanticSummary(
-    PydanticSingleTurnChat[Literal["zh", "en"], LongMemoryPromptTemplate]
-):
+class LongTermOutput(BaseModel):
+    """Output structure for long-term memory summary."""
+
+    updated_memory: list[str]
+
+
+class LongTermPydanticSummary(PydanticSingleTurnChat[Literal["zh", "en"], LongTermOutput]):
     """Long-term memory chain that outputs a Pydantic model."""
 
     provider: str = Field(
@@ -37,11 +40,10 @@ class LongTermPydanticSummary(
     prompt: MultilingualSystemPromptValue[Literal["zh", "en"]] | None = Field(
         default=LongTermMemoryPromptValue()
     )
-    structured_output: bool = Field(default=False)  # 使用 function calling 避免 schema 問題
 
 
 # JSON chat chain for extraction
-class LongTermJsonExtract(JsonSingleTurnChat[Literal["zh", "en"]]):
+class LongTermJsonExtract(PydanticSingleTurnChat[Literal["zh", "en"], LongTermOutput]):
     """Long-term memory extraction chain that outputs JSON."""
 
     provider: str = Field(
@@ -88,7 +90,7 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
         current_date: str,
         config: RunnableConfig | None = None,
         **kwargs: Any,
-    ) -> str:
+    ) -> list[str]:
         """Extract new long-term memory items from chat history only, without merging."""
         assert self.extract_chain is not None
 
@@ -97,19 +99,20 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
             raise TypeError(f"Expected a list for {self.history_variable_key}, got {type(history)}")
 
         history_text = get_buffer_string(history, human_prefix="[User]", ai_prefix="[Assistant]")
+
+        time_kwargs = {
+            "current_time": current_time,
+            "current_date": current_date,
+        }
         extract_template = LongMemoryExtractPromptTemplate.from_template(
-            history=history_text, current_time=current_time, current_date=current_date
+            history=history_text, **time_kwargs, template_format="f-string"
         )
-        # Invoke JSON extraction and serialize to JSON string
         result = self.extract_chain.invoke(
-            {
-                "input": extract_template.format(),
-                "current_time": current_time,
-                "current_date": current_date,
-            },
-            config=config, **kwargs
+            {"input": extract_template.format(), **time_kwargs},
+            config=config,
+            **kwargs,
         )
-        return json.dumps(result, ensure_ascii=False)
+        return result.updated_memory
 
     async def _a_extract(
         self,
@@ -118,7 +121,7 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
         current_date: str,
         config: RunnableConfig | None = None,
         **kwargs: Any,
-    ) -> str:
+    ) -> list[str]:
         """Asynchronously extract new long-term memory items from chat history only, without merging."""
         assert self.extract_chain is not None
 
@@ -127,19 +130,20 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
             raise TypeError(f"Expected a list for {self.history_variable_key}, got {type(history)}")
 
         history_text = get_buffer_string(history, human_prefix="[User]", ai_prefix="[Assistant]")
+
+        time_kwargs = {
+            "current_time": current_time,
+            "current_date": current_date,
+        }
         extract_template = LongMemoryExtractPromptTemplate.from_template(
-            history=history_text, current_time=current_time, current_date=current_date
+            history=history_text, **time_kwargs, template_format="f-string"
         )
-        # Invoke JSON extraction asynchronously and serialize to JSON string
         result = await self.extract_chain.ainvoke(
-            {
-                "input": extract_template.format(),
-                "current_time": current_time,
-                "current_date": current_date,
-            },
-            config=config, **kwargs
+            {"input": extract_template.format(), **time_kwargs},
+            config=config,
+            **kwargs,
         )
-        return json.dumps(result, ensure_ascii=False)
+        return result.updated_memory
 
     @override
     def invoke(
@@ -156,21 +160,20 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
         current_memory = input.get(self.current_memory_variable_key, [])
         last_update = input.get(self.last_update_time_variable_key)
 
+        time_kwargs = {
+            "current_time": current_time,
+            "current_date": current_date,
+            "last_update_time": last_update or "",
+        }
         merge_template = LongMemoryMergePromptTemplate.from_template(
-            new_memory=new_items_str,
-            current_memory=current_memory,
-            current_time=current_time,
-            current_date=current_date,
-            last_update_time=last_update or "",
+            new_memory=new_items_str, current_memory=current_memory, **time_kwargs
         )
-        return self.chat_chain.invoke(
-            {
-                "input": merge_template.format(),
-                "current_time": current_time,
-                "current_date": current_date,
-                "last_update_time": last_update or "",
-            },
-            config=config, **kwargs
+        result = self.chat_chain.invoke(
+            {"input": merge_template.format(), **time_kwargs}, config=config, **kwargs
+        )
+
+        return LongMemoryPromptTemplate.from_template(
+            updated_memory=result.updated_memory,
         )
 
     @override
@@ -190,19 +193,18 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
         current_memory = input.get(self.current_memory_variable_key, [])
         last_update = input.get(self.last_update_time_variable_key)
 
+        time_kwargs = {
+            "current_time": current_time,
+            "current_date": current_date,
+            "last_update_time": last_update or "",
+        }
         merge_template = LongMemoryMergePromptTemplate.from_template(
-            new_memory=new_items_str,
-            current_memory=current_memory,
-            current_time=current_time,
-            current_date=current_date,
-            last_update_time=last_update or "",
+            new_memory=new_items_str, current_memory=current_memory, **time_kwargs
         )
-        return await self.chat_chain.ainvoke(
-            {
-                "input": merge_template.format(),
-                "current_time": current_time,
-                "current_date": current_date,
-                "last_update_time": last_update or "",
-            },
-            config=config, **kwargs
+        result = await self.chat_chain.ainvoke(
+            {"input": merge_template.format(), **time_kwargs}, config=config, **kwargs
+        )
+
+        return LongMemoryPromptTemplate.from_template(
+            updated_memory=result.updated_memory,
         )
