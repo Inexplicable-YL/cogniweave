@@ -98,9 +98,13 @@ def check_api_key() -> bool:
     return True
 
 
-async def test_sync_memory(memory_maker: ShortTermMemoryMaker) -> tuple[ShortMemoryPromptTemplate, ShortMemoryPromptTemplate] | None:
+async def test_sync_memory(
+    memory_maker: ShortTermMemoryMaker,
+) -> tuple[ShortMemoryPromptTemplate, ShortMemoryPromptTemplate] | None:
     """Test synchronous short-term memory generation."""
-    console.print(Panel("Step 1: Test synchronous memory", style="bold green", border_style="green"))
+    console.print(
+        Panel("Step 1: Test synchronous memory", style="bold green", border_style="green")
+    )
     try:
         conv1 = create_test_conversation()
         print_history(conv1, "Conversation 1: React Learning")
@@ -129,7 +133,9 @@ async def test_sync_memory(memory_maker: ShortTermMemoryMaker) -> tuple[ShortMem
 
 async def test_async_memory(memory_maker: ShortTermMemoryMaker) -> ShortMemoryPromptTemplate | None:
     """Test asynchronous short-term memory generation."""
-    console.print(Panel("Step 2: Test asynchronous memory", style="bold green", border_style="green"))
+    console.print(
+        Panel("Step 2: Test asynchronous memory", style="bold green", border_style="green")
+    )
     try:
         conv = create_test_conversation()
         print_history(conv, "Async Conversation")
@@ -215,11 +221,11 @@ def test_error_handling() -> None:
             "timestamp": datetime.now().timestamp(),
         }
         updater.invoke(invalid_input)
-        console.print("❌ Expected an error but none was raised")
+        console.print("x Expected an error but none was raised")
     except TypeError as e:
         console.print(f"[bold green]✓ Successfully caught type error: {e}[/]")
     except Exception as e:
-        console.print(f"[bold red]❌ Caught unexpected error type: {type(e).__name__}: {e}[/]")
+        console.print(f"[bold red]x Caught unexpected error type: {type(e).__name__}: {e}[/]")
 
     try:
         missing_field = {
@@ -228,19 +234,17 @@ def test_error_handling() -> None:
             "timestamp": datetime.now().timestamp(),
         }
         updater.invoke(missing_field)
-        console.print("❌ Expected an error but none was raised")
+        console.print("x Expected an error but none was raised")
     except TypeError as e:
         console.print(f"[bold green]✓ Successfully caught missing field error: {e}[/]")
     except Exception as e:
-        console.print(f"[bold red]❌ Caught unexpected error type: {type(e).__name__}: {e}[/]")
+        console.print(f"[bold red]x Caught unexpected error type: {type(e).__name__}: {e}[/]")
 
     console.print("Error handling tests completed")
 
 
 async def main() -> None:
     """Main test function."""
-    if not check_api_key():
-        return
 
     console.print(
         Panel.fit(
@@ -249,6 +253,9 @@ async def main() -> None:
             padding=(1, 4),
         )
     )
+
+    if not check_api_key():
+        return
 
     if not os.getenv("SHORT_MEMORY_MODEL"):
         os.environ["SHORT_MEMORY_MODEL"] = "openai/gpt-4.1-mini"
