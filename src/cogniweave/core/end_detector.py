@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Any, Literal, Self, cast
 from typing_extensions import override
 
-from langchain_core.messages import get_buffer_string
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableSerializable
 from pydantic import BaseModel, Field, model_validator
 
@@ -45,8 +45,8 @@ class ConversationEndDetector(RunnableSerializable[dict[str, Any], bool]):
     messages_variable_key: str = Field(default="messages")
 
     @staticmethod
-    def _serialize_messages(messages: list[Any]) -> str:
-        return get_buffer_string(messages, human_prefix="[User]", ai_prefix="[Assistant]")
+    def _serialize_messages(messages: list[HumanMessage]) -> str:
+        return "\n".join(f'* "{m.content}"' for m in messages)
 
     @model_validator(mode="after")
     def _build_chain_if_needed(self) -> "Self":
@@ -60,14 +60,15 @@ class ConversationEndDetector(RunnableSerializable[dict[str, Any], bool]):
         config: "RunnableConfig | None" = None,
         **kwargs: Any,
     ) -> bool:
-        messages = cast("list[Any]", input.get(self.messages_variable_key, []))
+        assert self.classifier is not None
+
+        messages = cast("list[HumanMessage]", input.get(self.messages_variable_key, []))
         if not isinstance(messages, list):
             raise TypeError(
                 f"Expected list for '{self.messages_variable_key}', got {type(messages)}",
             )
 
         serialized = self._serialize_messages(messages)
-        assert self.classifier is not None, "Inner classifier not initialized"
         return self.classifier.invoke({"input": serialized}, config=config, **kwargs).end
 
     @override
@@ -77,12 +78,13 @@ class ConversationEndDetector(RunnableSerializable[dict[str, Any], bool]):
         config: "RunnableConfig | None" = None,
         **kwargs: Any,
     ) -> bool:
-        messages = cast("list[Any]", input.get(self.messages_variable_key, []))
+        assert self.classifier is not None
+
+        messages = cast("list[HumanMessage]", input.get(self.messages_variable_key, []))
         if not isinstance(messages, list):
             raise TypeError(
                 f"Expected list for '{self.messages_variable_key}', got {type(messages)}",
             )
 
         serialized = self._serialize_messages(messages)
-        assert self.classifier is not None, "Inner classifier not initialized"
         return (await self.classifier.ainvoke({"input": serialized}, config=config, **kwargs)).end

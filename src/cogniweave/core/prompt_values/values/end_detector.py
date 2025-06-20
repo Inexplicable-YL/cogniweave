@@ -1,37 +1,63 @@
 END_DETECTOR_PROMPT_ZH = """
-你是一個「訊息語義完整性偵測器」。
-輸入將會是使用者最新的訊息或訊息片段。
-請判斷輸入的訊息（或訊息列表）是否已經提供了完備的內容，或者完成了對於一個觀點、話題的敘述，無需進一步回覆或補充。
-例如使用者已明確給出完整的答案、已經清晰地提供所需全部內容或甚至已明確表示無需後續回覆。
-如果訊息內容完備，無需額外回覆，請輸出：
-{{"end": true}}
-若訊息內容尚有缺失、不明確，或需要進一步的補充資訊，則請輸出：
-{{"end": false}}
+你是一个“消息语义完整性检测器”。
+你的任务是判断输入的“消息块”内容是否已经完整表达了观点或话题，无需进一步补充或回复。
 
-關於內容完備的例子如下：
+说明：
+- “消息块”由一个或多个句子（字符串）组成，整体表达一个意思。
+- 如果消息块已经明确、清晰地表达了观点、事实或需求，无需补充，请输出：
+  {{"end": true}}
+- 如果消息块内容残缺、模糊，或像是话还没说完、需要继续补充，请输出：
+  {{"end": false}}
+- 仅输出上方 JSON，不要输出其它文字。
 
-- "我第一次聽拉威爾的時候就覺得還挺好聽的"
-- "下班之後我打算去吃火鍋了"
-- "他雖然壞事做盡，但這樣还算有点人性"
-- "這個遊戲還真挺好玩的"
+判断标准举例：
 
-請僅輸出上述 JSON，不要添加其他文字。
+这是一个**完整**的消息块（输出{{"end": true}}）：
+```
+
+* "我跟你说"
+* "我发现初音未来的歌真好听"
+
+```
+
+这是一个**不完整**的消息块（输出{{"end": false}}）：
+```
+
+* "我跟你说"
+
+```
+
+请严格按上述要求判断，并仅输出对应的 JSON 结果。
 """
 
 END_DETECTOR_PROMPT_EN = """
 You are a "message completeness detector."
-The input will be the user's latest message or a snippet of messages.
-Please determine whether the input message (or list of messages) provides sufficiently complete information or completes a point/topic so that no further reply or clarification is needed.
-If the information is complete and no additional response is required, output:
-{"end": true}
-If the information is incomplete, unclear, or requires further details, output:
-{"end": false}
+Your task is to determine whether the provided "message block" has fully expressed a point or topic, and whether no further information or response is needed.
 
-Examples of complete messages include:
-- "When I first listened to Ravel, I thought it sounded pretty good."
-- "After work, I plan to go have Pho."
-- "Although he's done many bad things, there's still some humanity in him."
-- "This game is not bad at all."
+Instructions:
+- A "message block" consists of one or more sentences (strings) that together express a complete idea.
+- If the message block clearly and explicitly conveys a viewpoint, fact, or need, and nothing more needs to be added, output:
+  {"end": true}
+- If the message block is incomplete, vague, or seems unfinished—as if more should be said—output:
+  {"end": false}
+- Only output the JSON above. Do not add any other text.
 
-Only output the above JSON. Do not add any other text.
-""" 
+Examples for reference:
+
+A **complete** message block (output {"end": true}):
+```
+
+* "Let me tell you"
+* "I found that Hatsune Miku's songs are really good"
+
+```
+
+An **incomplete** message block (output {"end": false}):
+```
+
+* "Let me tell you"
+
+```
+
+Strictly follow the requirements above and only output the corresponding JSON result.
+"""

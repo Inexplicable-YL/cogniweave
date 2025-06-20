@@ -19,7 +19,7 @@ def test_end_detector_should_detect_end() -> None:
     """Use explicit end message, expect to return True."""
     detector = ConversationEndDetector()
     # Explicit end message
-    messages = [HumanMessage(content="好的，謝謝你的幫助，再見！")]
+    messages = [HumanMessage(content="今天领导大赦我们"), HumanMessage(content="今天下午不用上班，可以好好休息一下")]
 
     result = detector.invoke({"messages": messages})
     assert result is True, (
@@ -32,7 +32,7 @@ def test_end_detector_should_not_detect_end() -> None:
     """Use normal question message, expect to return False."""
     detector = ConversationEndDetector()
     # Continue conversation
-    messages = [HumanMessage(content="你可以介紹一下巴黎有哪些必去的景點嗎？")]
+    messages = [HumanMessage(content="我今天遇到一件很奇怪的事情"), HumanMessage(content="你猜怎么着")]
 
     result = detector.invoke({"messages": messages})
     assert result is False, (
