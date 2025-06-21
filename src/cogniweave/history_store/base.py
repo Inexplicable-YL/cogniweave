@@ -604,6 +604,37 @@ class BaseHistoryStore(BaseModel):
             for rec in result
         ]
 
+    def get_user_attributes(
+        self, session_id: str, *, types: list[str] | None = None
+    ) -> list[UserAttributeData]:
+        """Get user attributes, optionally filtered by type."""
+
+        with self._session_local() as session:
+            user = session.query(User).filter_by(name=session_id).first()
+            if not user:
+                return []
+
+            attrs = sorted(user.attributes, key=lambda a: a.id)
+            if types is not None:
+                attrs = [attr for attr in attrs if attr.type in types]
+            return [UserAttributeData(type=attr.type, value=attr.value) for attr in attrs]
+
+    async def aget_user_attributes(
+        self, session_id: str, *, types: list[str] | None = None
+    ) -> list[UserAttributeData]:
+        """Async version of :meth:`get_user_attributes`."""
+
+        async with self._async_session_local() as session:
+            result = await session.execute(select(User).filter_by(name=session_id))
+            user = result.scalar_one_or_none()
+            if not user:
+                return []
+
+            attrs = sorted(user.attributes, key=lambda a: a.id)
+            if types is not None:
+                attrs = [attr for attr in attrs if attr.type in types]
+            return [UserAttributeData(type=attr.type, value=attr.value) for attr in attrs]
+
     def get_block_histories_with_timestamps(
         self, block_ids: list[str]
     ) -> list[tuple[BaseMessage, float]]:

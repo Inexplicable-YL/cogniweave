@@ -186,6 +186,16 @@ def test_user_attributes_operations(tmp_path: Path) -> None:
         attrs = {a.type: a.value for a in user.attributes}
         assert attrs == {"color": "red", "role": "admin"}
 
+    # Test retrieval helpers
+    result = store.get_user_attributes("u")
+    assert {a["type"]: a["value"] for a in result} == {
+        "color": "red",
+        "role": "admin",
+    }
+    filtered = store.get_user_attributes("u", types=["role"])
+    assert len(filtered) == 1
+    assert filtered[0]["type"] == "role"
+
 
 async def test_async_user_attributes_operations(tmp_path: Path) -> None:
     store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/user_attrs_async.sqlite")
@@ -205,6 +215,15 @@ async def test_async_user_attributes_operations(tmp_path: Path) -> None:
         attrs_db = result_attrs.scalars().all()
         attrs = {a.type: a.value for a in attrs_db}
         assert attrs == {"color": "red", "role": "admin"}
+
+    result = await store.aget_user_attributes("u")
+    assert {a["type"]: a["value"] for a in result} == {
+        "color": "red",
+        "role": "admin",
+    }
+    filtered = await store.aget_user_attributes("u", types=["color"])
+    assert len(filtered) == 1
+    assert filtered[0]["type"] == "color"
 
 
 def test_history_utilities(tmp_path: Path) -> None:

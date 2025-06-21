@@ -10,6 +10,7 @@ from cogniweave.history_store import (
 )
 
 _SHORT_MEMORY_KEY: Literal["_short_memory"] = "_short_memory"
+_LONG_MEMORY_KEY: Literal["_long_memory"] = "_long_memory"
 
 
 class HistoryStore(BaseHistoryStoreWithCache):
@@ -142,7 +143,7 @@ class HistoryStore(BaseHistoryStoreWithCache):
         long_memory_data = long_memory.to_template_dict()
 
         self.add_user_attributes(
-            [UserAttributeData(type="long_memory", value=long_memory_data)],
+            [UserAttributeData(type=_LONG_MEMORY_KEY, value=long_memory_data)],
             session_id=session_id,
         )
 
@@ -161,6 +162,34 @@ class HistoryStore(BaseHistoryStoreWithCache):
         long_memory_data = long_memory.to_template_dict()
 
         await self.aadd_user_attributes(
-            [UserAttributeData(type="long_memory", value=long_memory_data)],
+            [UserAttributeData(type=_LONG_MEMORY_KEY, value=long_memory_data)],
             session_id=session_id,
         )
+
+    def get_long_memory(self, session_id: str) -> LongMemoryPromptTemplate | None:
+        """Get long memory data for a specific block.
+
+        Args:
+            session_id: session/user ID.
+
+        Return:
+            LongMemoryPromptTemplate | None: Long memory data if found, None otherwise.
+        """
+        attributes = self.get_user_attributes(session_id, types=[_LONG_MEMORY_KEY])
+        if attributes:
+            return LongMemoryPromptTemplate.load(attributes[0].get("value"))
+        return None
+
+    async def aget_long_memory(self, session_id: str) -> LongMemoryPromptTemplate | None:
+        """Async get long memory data for a specific block.
+
+        Args:
+            session_id: session/user ID.
+
+        Return:
+            LongMemoryPromptTemplate | None: Long memory data if found, None otherwise.
+        """
+        attributes = await self.aget_user_attributes(session_id, types=[_LONG_MEMORY_KEY])
+        if attributes:
+            return LongMemoryPromptTemplate.load(attributes[0].get("value"))
+        return None
