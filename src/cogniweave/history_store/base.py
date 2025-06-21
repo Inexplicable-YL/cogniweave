@@ -16,6 +16,7 @@ from cogniweave.history_store.models import (
     ChatBlockAttribute,
     ChatMessage,
     User,
+    UserAttribute,
 )
 
 if TYPE_CHECKING:
@@ -31,6 +32,13 @@ class BlockAttributeData(TypedDict):
         type: The type/name of the attribute.
         value: The attribute's value (optional).
     """
+
+    type: str
+    value: Any
+
+
+class UserAttributeData(TypedDict):
+    """Structure of a user attribute."""
 
     type: str
     value: Any
@@ -351,6 +359,75 @@ class BaseHistoryStore(BaseModel):
                 ]
 
                 session.add_all(attr_recs)
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    def add_user_attributes(
+        self,
+        attributes: list[UserAttributeData],
+        *,
+        session_id: str,
+    ) -> None:
+        """Persist user-level attributes, replacing existing ones of the same type."""
+
+        if not attributes:
+            return
+
+        with self._session_local() as session:
+            try:
+                user = self._get_or_create_user(session, session_id)
+                for attr in attributes:
+                    rec = (
+                        session.query(UserAttribute)
+                        .filter_by(user_id=user.id, type=attr["type"])
+                        .first()
+                    )
+                    if rec is None:
+                        rec = UserAttribute(
+                            user_id=user.id,
+                            type=attr["type"],
+                            value=attr.get("value"),
+                        )
+                        session.add(rec)
+                    else:
+                        rec.value = attr.get("value")
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+
+    async def aadd_user_attributes(
+        self,
+        attributes: list[UserAttributeData],
+        *,
+        session_id: str,
+    ) -> None:
+        """Async version of :meth:`add_user_attributes`."""
+
+        if not attributes:
+            return
+
+        async with self._async_session_local() as session:
+            try:
+                user = await self._a_get_or_create_user(session, session_id)
+                for attr in attributes:
+                    result = await session.execute(
+                        select(UserAttribute).filter_by(
+                            user_id=user.id, type=attr["type"]
+                        )
+                    )
+                    rec = result.scalar_one_or_none()
+                    if rec is None:
+                        rec = UserAttribute(
+                            user_id=user.id,
+                            type=attr["type"],
+                            value=attr.get("value"),
+                        )
+                        session.add(rec)
+                    else:
+                        rec.value = attr.get("value")
                 await session.commit()
             except Exception:
                 await session.rollback()

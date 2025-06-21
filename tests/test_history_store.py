@@ -9,6 +9,7 @@ from cogniweave.history_store import (
     ChatBlockAttribute,
     ChatMessage,
     User,
+    UserAttribute,
 )
 
 
@@ -165,6 +166,45 @@ async def test_async_block_attributes_operations(tmp_path: Path) -> None:
     attrs = await store.aget_block_attributes("attr")
     assert len(attrs) == len(test_attrs)
     assert {a["type"] for a in attrs} == {a["type"] for a in test_attrs}
+
+
+def test_user_attributes_operations(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/user_attrs.sqlite")
+
+    store.add_user_attributes(
+        [{"type": "color", "value": "blue"}],
+        session_id="u",
+    )
+    store.add_user_attributes(
+        [{"type": "color", "value": "red"}, {"type": "role", "value": "admin"}],
+        session_id="u",
+    )
+
+    with store._session_local() as session:
+        user = session.query(User).filter_by(name="u").first()
+        assert user is not None
+        attrs = {a.type: a.value for a in user.attributes}
+        assert attrs == {"color": "red", "role": "admin"}
+
+
+async def test_async_user_attributes_operations(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/user_attrs_async.sqlite")
+
+    await store.aadd_user_attributes(
+        [{"type": "color", "value": "blue"}],
+        session_id="u",
+    )
+    await store.aadd_user_attributes(
+        [{"type": "color", "value": "red"}, {"type": "role", "value": "admin"}],
+        session_id="u",
+    )
+
+    async with store._async_session_local() as session:
+        await session.execute(select(User))  # ensure user exists
+        result_attrs = await session.execute(select(UserAttribute))
+        attrs_db = result_attrs.scalars().all()
+        attrs = {a.type: a.value for a in attrs_db}
+        assert attrs == {"color": "red", "role": "admin"}
 
 
 def test_history_utilities(tmp_path: Path) -> None:

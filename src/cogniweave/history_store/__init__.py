@@ -11,6 +11,7 @@ from .models import (
     ChatBlockAttribute,
     ChatMessage,
     User,
+    UserAttribute,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "ChatBlockAttribute",
     "ChatMessage",
     "User",
+    "UserAttribute",
 ]
