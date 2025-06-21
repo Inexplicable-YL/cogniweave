@@ -260,7 +260,7 @@ class BaseHistoryStore(BaseModel):
                 await session.rollback()
                 raise
 
-    def add_attributes(
+    def add_block_attributes(
         self,
         attributes: list[BlockAttributeData],
         *,
@@ -307,7 +307,7 @@ class BaseHistoryStore(BaseModel):
                 session.rollback()
                 raise
 
-    async def aadd_attributes(
+    async def aadd_block_attributes(
         self,
         attributes: list[BlockAttributeData],
         *,

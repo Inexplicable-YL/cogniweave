@@ -96,7 +96,7 @@ def test_block_attributes_operations(tmp_path: Path) -> None:
         {"type": "tag", "value": ["important"]},
     ]
     for attr in test_attrs:
-        store.add_attributes(
+        store.add_block_attributes(
             [attr],  # type: ignore
             block_id="attr",
             block_ts=1.0,
@@ -141,7 +141,7 @@ async def test_async_block_attributes_operations(tmp_path: Path) -> None:
         {"type": "tag", "value": ["important"]},
     ]
     for attr in test_attrs:
-        await store.aadd_attributes(
+        await store.aadd_block_attributes(
             [attr],  # type: ignore
             block_id="attr",
             block_ts=1.0,
@@ -185,12 +185,12 @@ def test_history_utilities(tmp_path: Path) -> None:
         block_id="b1",
         block_ts=1.0,
     )
-    store.add_attributes(
+    store.add_block_attributes(
         [{"type": "summary", "value": "s"}],
         block_id="b1",
         block_ts=1.0,
     )
-    store.add_attributes(
+    store.add_block_attributes(
         [{"type": "tag", "value": ["t"]}],
         block_id="b1",
         block_ts=1.0,
@@ -228,7 +228,7 @@ async def test_async_history_utilities(tmp_path: Path) -> None:
         block_id="b1",
         block_ts=1.0,
     )
-    await store.aadd_attributes(
+    await store.aadd_block_attributes(
         [{"type": "summary", "value": "s"}],
         block_id="b1",
         block_ts=1.0,

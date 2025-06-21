@@ -54,7 +54,7 @@ class HistoryStore(BaseHistoryStoreWithCache):
         """
         short_memory_data = short_memory.to_template_dict()
 
-        self.add_attributes(
+        self.add_block_attributes(
             [BlockAttributeData(type=_SHORT_MEMORY_KEY, value=short_memory_data)],
             block_id=block_id,
             block_ts=block_ts,
@@ -84,7 +84,7 @@ class HistoryStore(BaseHistoryStoreWithCache):
             None: Messages and attributes are persisted to the database."""
         short_memory_data = short_memory.to_template_dict()
 
-        await self.aadd_attributes(
+        await self.aadd_block_attributes(
             [BlockAttributeData(type=_SHORT_MEMORY_KEY, value=short_memory_data)],
             block_id=block_id,
             block_ts=block_ts,
