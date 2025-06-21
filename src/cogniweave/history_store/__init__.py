@@ -1,6 +1,7 @@
 from .base import (
     BaseHistoryStore,
     BlockAttributeData,
+    UserAttributeData,
 )
 from .cache import (
     BaseHistoryStoreWithCache,
@@ -24,4 +25,5 @@ __all__ = [
     "ChatMessage",
     "User",
     "UserAttribute",
+    "UserAttributeData",
 ]

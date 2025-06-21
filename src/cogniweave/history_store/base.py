@@ -414,9 +414,7 @@ class BaseHistoryStore(BaseModel):
                 user = await self._a_get_or_create_user(session, session_id)
                 for attr in attributes:
                     result = await session.execute(
-                        select(UserAttribute).filter_by(
-                            user_id=user.id, type=attr["type"]
-                        )
+                        select(UserAttribute).filter_by(user_id=user.id, type=attr["type"])
                     )
                     rec = result.scalar_one_or_none()
                     if rec is None:

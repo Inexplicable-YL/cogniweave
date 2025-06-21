@@ -38,6 +38,28 @@ class User(Base):
         return f"<User(id={self.id}, name={self.name!r})>"
 
 
+class UserAttribute(Base):
+    """Auxiliary data for a User."""
+
+    __tablename__ = "user_attributes"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    value: Mapped[Any] = mapped_column(JSON, nullable=False)
+
+    user: Mapped[User] = relationship("User", back_populates="attributes", lazy="joined")
+
+    __table_args__ = (Index("idx_user_attributes_user_type", "user_id", "type"),)
+
+    @override
+    def __repr__(self) -> str:
+        return f"<UserAttribute(id={self.id}, user_id={self.user_id}, type={self.type!r})>"
+
+
 class ChatBlock(Base):
     """Represents a contiguous block of chat messages for a user."""
 
@@ -123,25 +145,3 @@ class ChatBlockAttribute(Base):
     @override
     def __repr__(self) -> str:
         return f"<ChatBlockAttribute(id={self.id}, block_id={self.block_id}, type={self.type!r})>"
-
-
-class UserAttribute(Base):
-    """Auxiliary data for a User."""
-
-    __tablename__ = "user_attributes"
-
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    type: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    value: Mapped[Any] = mapped_column(JSON, nullable=False)
-
-    user: Mapped[User] = relationship("User", back_populates="attributes", lazy="joined")
-
-    __table_args__ = (Index("idx_user_attributes_user_type", "user_id", "type"),)
-
-    @override
-    def __repr__(self) -> str:
-        return f"<UserAttribute(id={self.id}, user_id={self.user_id}, type={self.type!r})>"

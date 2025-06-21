@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from cogniweave.core.prompts import ShortMemoryPromptTemplate
-from cogniweave.history_store import BaseHistoryStoreWithCache, BlockAttributeData
+from cogniweave.core.prompts import LongMemoryPromptTemplate, ShortMemoryPromptTemplate
+from cogniweave.history_store import (
+    BaseHistoryStoreWithCache,
+    BlockAttributeData,
+    UserAttributeData,
+)
 
 _SHORT_MEMORY_KEY: Literal["_short_memory"] = "_short_memory"
 
@@ -124,3 +128,39 @@ class HistoryStore(BaseHistoryStoreWithCache):
         if attributes:
             return ShortMemoryPromptTemplate.load(attributes[0].get("value"))
         return None
+
+    def add_long_memory(self, long_memory: LongMemoryPromptTemplate, *, session_id: str) -> None:
+        """Add long memory data for a specific block.
+
+        Args:
+            long_memory: Long memory prompt template instance.
+            session_id: session/user ID.
+
+        Return:
+            None: Messages and attributes are persisted to the database.
+        """
+        long_memory_data = long_memory.to_template_dict()
+
+        self.add_user_attributes(
+            [UserAttributeData(type="long_memory", value=long_memory_data)],
+            session_id=session_id,
+        )
+
+    async def aadd_long_memory(
+        self, long_memory: LongMemoryPromptTemplate, *, session_id: str
+    ) -> None:
+        """Async add long memory data for a specific block.
+
+        Args:
+            long_memory: Long memory prompt template instance.
+            session_id: session/user ID.
+
+        Return:
+            None: Messages and attributes are persisted to the database.
+        """
+        long_memory_data = long_memory.to_template_dict()
+
+        await self.aadd_user_attributes(
+            [UserAttributeData(type="long_memory", value=long_memory_data)],
+            session_id=session_id,
+        )
