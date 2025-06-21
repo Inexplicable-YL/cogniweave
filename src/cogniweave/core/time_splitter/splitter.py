@@ -1,19 +1,15 @@
-from typing import Any, TypedDict
+from typing import Any
 from typing_extensions import override
 
-from langchain_core.runnables import RunnableSerializable
 from langchain_core.runnables.config import RunnableConfig
 from pydantic import Field
+
+from cogniweave.time_splitter import BaseTimeSplitter
 
 from .manager import ConditionDensityManager, DensityStrategy
 
 
-class SplitterOutput(TypedDict):
-    context_id: str
-    timestamp: float
-
-
-class ContextTimeSplitter(RunnableSerializable[dict[str, Any], SplitterOutput]):
+class TimeSplitter(BaseTimeSplitter):
     manager: ConditionDensityManager
     id_timestamps: dict[str, tuple[str, float]] = Field(default_factory=dict)
 
@@ -42,7 +38,7 @@ class ContextTimeSplitter(RunnableSerializable[dict[str, Any], SplitterOutput]):
     @override
     def invoke(
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
-    ) -> SplitterOutput:
+    ) -> tuple[str, float]:
         """Get the context id and timestamp.
 
         Args:
@@ -50,7 +46,7 @@ class ContextTimeSplitter(RunnableSerializable[dict[str, Any], SplitterOutput]):
             config (RunnableConfig | None, optional): Config data. Must contain a "configurable" key, with a "session_id" key.
 
         Returns:
-            SplitterOutput: Output data.
+            tuple[str, float]: Output data.
         """
         if "timestamp" not in input or not isinstance(input["timestamp"], float | int):
             raise ValueError("timestamp is required and must be a float or int object.")
@@ -67,12 +63,12 @@ class ContextTimeSplitter(RunnableSerializable[dict[str, Any], SplitterOutput]):
         ) or session_id not in self.id_timestamps:
             self.id_timestamps[session_id] = (context_id, input["timestamp"])
 
-        return SplitterOutput(context_id=context_id, timestamp=self.id_timestamps[session_id][1])
+        return (context_id, self.id_timestamps[session_id][1])
 
     @override
     async def ainvoke(
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
-    ) -> SplitterOutput:
+    ) -> tuple[str, float]:
         """Get the context id and timestamp.
 
         Args:
@@ -80,7 +76,7 @@ class ContextTimeSplitter(RunnableSerializable[dict[str, Any], SplitterOutput]):
             config (RunnableConfig | None, optional): Config data. Must contain a "configurable" key, with a "session_id" key.
 
         Returns:
-            SplitterOutput: Output data.
+            tuple[str, float]: Output data.
         """
         if "timestamp" not in input or not isinstance(input["timestamp"], float | int):
             raise ValueError("timestamp is required and must be a float or int object.")
@@ -97,4 +93,4 @@ class ContextTimeSplitter(RunnableSerializable[dict[str, Any], SplitterOutput]):
         ) or session_id not in self.id_timestamps:
             self.id_timestamps[session_id] = (context_id, input["timestamp"])
 
-        return SplitterOutput(context_id=context_id, timestamp=self.id_timestamps[session_id][1])
+        return (context_id, self.id_timestamps[session_id][1])

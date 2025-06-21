@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from cogniweave.historystore.models import (
+from cogniweave.history_store.models import (
     Base,
     ChatBlock,
     ChatBlockAttribute,
@@ -667,18 +667,18 @@ class BaseHistoryStore(BaseModel):
         if limit is not None and limit <= 0:
             return []
 
+        start_date_time = get_datetime_from_timestamp(start_time)
+        end_date_time = get_datetime_from_timestamp(end_time)
         with self._session_local() as session:
             user = session.query(User).filter_by(name=session_id).first()
             if not user:
                 return []
 
             stmt = session.query(ChatBlock).filter_by(session_id=user.id)
-            if start_time is not None:
-                stmt = stmt.filter(
-                    ChatBlock.timestamp >= datetime.fromtimestamp(start_time, tz=UTC)
-                )
-            if end_time is not None:
-                stmt = stmt.filter(ChatBlock.timestamp <= datetime.fromtimestamp(end_time, tz=UTC))
+            if start_date_time is not None:
+                stmt = stmt.filter(ChatBlock.timestamp >= start_date_time)
+            if end_date_time is not None:
+                stmt = stmt.filter(ChatBlock.timestamp <= end_date_time)
             if limit is not None:
                 if kwargs.get("from_first", False):
                     # if from_first is True, order by ascending timestamp
@@ -722,6 +722,8 @@ class BaseHistoryStore(BaseModel):
         if limit is not None and limit <= 0:
             return []
 
+        start_date_time = get_datetime_from_timestamp(start_time)
+        end_date_time = get_datetime_from_timestamp(end_time)
         async with self._async_session_local() as session:
             result = await session.execute(select(User).filter_by(name=session_id))
             user = result.scalar_one_or_none()
@@ -729,12 +731,10 @@ class BaseHistoryStore(BaseModel):
                 return []
 
             stmt = select(ChatBlock).filter_by(session_id=user.id)
-            if start_time is not None:
-                stmt = stmt.filter(
-                    ChatBlock.timestamp >= datetime.fromtimestamp(start_time, tz=UTC)
-                )
-            if end_time is not None:
-                stmt = stmt.filter(ChatBlock.timestamp <= datetime.fromtimestamp(end_time, tz=UTC))
+            if start_date_time is not None:
+                stmt = stmt.filter(ChatBlock.timestamp >= start_date_time)
+            if end_date_time is not None:
+                stmt = stmt.filter(ChatBlock.timestamp <= end_date_time)
             if limit is not None:
                 if kwargs.get("from_first", False):
                     # if from_first is True, order by ascending timestamp
@@ -860,12 +860,12 @@ class BaseHistoryStore(BaseModel):
                 block_ids,
                 limit=limit,
                 criteria=(
-                    [ChatMessage.timestamp >= datetime.fromtimestamp(start_time, tz=UTC)]
+                    [ChatMessage.timestamp >= get_datetime_from_timestamp(start_time)]
                     if start_time
                     else []
                 )
                 + (
-                    [ChatMessage.timestamp <= datetime.fromtimestamp(end_time, tz=UTC)]
+                    [ChatMessage.timestamp <= get_datetime_from_timestamp(end_time)]
                     if end_time
                     else []
                 ),
@@ -922,12 +922,12 @@ class BaseHistoryStore(BaseModel):
                 block_ids,
                 limit=limit,
                 criteria=(
-                    [ChatMessage.timestamp >= datetime.fromtimestamp(start_time, tz=UTC)]
+                    [ChatMessage.timestamp >= get_datetime_from_timestamp(start_time)]
                     if start_time
                     else []
                 )
                 + (
-                    [ChatMessage.timestamp <= datetime.fromtimestamp(end_time, tz=UTC)]
+                    [ChatMessage.timestamp <= get_datetime_from_timestamp(end_time)]
                     if end_time
                     else []
                 ),
@@ -987,3 +987,18 @@ class BaseHistoryStore(BaseModel):
             session_id, start_time=start_time, end_time=end_time, limit=limit, **kwargs
         )
         return [msg for msg, _ in pairs]
+
+
+def get_datetime_from_timestamp(timestamp: float | None) -> datetime | None:
+    try:
+        if timestamp is None:
+            return None
+        if not isinstance(timestamp, (int, float)):
+            return None
+        if timestamp >= float("inf"):
+            return datetime.max.replace(tzinfo=UTC)
+        if timestamp <= 0:
+            return datetime.min.replace(tzinfo=UTC)
+        return datetime.fromtimestamp(timestamp, tz=UTC)
+    except Exception:
+        return None

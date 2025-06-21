@@ -1,15 +1,34 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from cogniweave.core.prompts import ShortMemoryPromptTemplate
-from cogniweave.historystore import BaseHistoryStoreWithCache, BlockAttributeData
+from cogniweave.history_store import BaseHistoryStoreWithCache, BlockAttributeData
 
 _SHORT_MEMORY_KEY: Literal["_short_memory"] = "_short_memory"
 
 
 class HistoryStore(BaseHistoryStoreWithCache):
     """History store with short memory convenience methods."""
+
+    def __init__(
+        self,
+        *,
+        db_url: str | None = None,
+        echo: bool = False,
+        max_cache_blocks: int = 20,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize the history store with caching capabilities.
+
+        Args:
+            db_url (str | None): Database URL for the history store.
+            echo (bool): Whether to echo SQL statements.
+            max_cache_blocks (int): Maximum number of blocks to cache per session.
+            **kwargs: Additional keyword arguments for compatibility with subclasses.
+        """
+        super().__init__(db_url=db_url, echo=echo, max_cache_blocks=max_cache_blocks, **kwargs)
 
     def add_short_memory(
         self,

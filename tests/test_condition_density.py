@@ -2,8 +2,8 @@ import pathlib
 import sys
 from typing import Any
 
-from cogniweave.core.timesplit import ContextTimeSplitter
-from cogniweave.core.timesplit.splitter import SplitterOutput
+from cogniweave.core.time_splitter import TimeSplitter
+from cogniweave.core.time_splitter.splitter import SplitterOutput
 
 sys.path.append(str(pathlib.Path(__file__).parent))
 
@@ -20,7 +20,7 @@ def _format_output(output: SplitterOutput) -> tuple[str, float]:
 
 
 def test_segment_switch_after_gap() -> None:
-    manager = ContextTimeSplitter()
+    manager = TimeSplitter()
     t0 = 1000.0
     seg1 = _format_output(manager.invoke(**_format_input("user1", current_time=t0)))
     seg2 = _format_output(manager.invoke(**_format_input("user1", current_time=t0 + 15)))
@@ -35,7 +35,7 @@ def test_segment_switch_after_gap() -> None:
 
 
 def test_sessions_are_independent() -> None:
-    manager = ContextTimeSplitter()
+    manager = TimeSplitter()
     base = 2000.0
 
     seg_a1 = _format_output(manager.invoke(**_format_input("A", current_time=base)))
@@ -70,7 +70,7 @@ def test_sessions_are_independent() -> None:
 
 
 async def test_segment_switch_after_gap_async() -> None:
-    manager = ContextTimeSplitter()
+    manager = TimeSplitter()
     t0 = 1000.0
     seg1 = _format_output(await manager.ainvoke(**_format_input("user1", current_time=t0)))
     seg2 = _format_output(await manager.ainvoke(**_format_input("user1", current_time=t0 + 15)))
@@ -85,7 +85,7 @@ async def test_segment_switch_after_gap_async() -> None:
 
 
 async def test_sessions_are_independent_async() -> None:
-    manager = ContextTimeSplitter()
+    manager = TimeSplitter()
     base = 2000.0
 
     seg_a1 = _format_output(await manager.ainvoke(**_format_input("A", current_time=base)))
