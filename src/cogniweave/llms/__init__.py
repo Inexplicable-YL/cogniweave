@@ -3,6 +3,7 @@ from .base import (
     OpenAIEmbeddings,
 )
 from .chat import (
+    AgentBase,
     JsonSingleTurnChat,
     PydanticSingleTurnChat,
     SingleTurnChatBase,
@@ -10,6 +11,7 @@ from .chat import (
 )
 
 __all__ = [
+    "AgentBase",
     "ChatOpenAI",
     "JsonSingleTurnChat",
     "OpenAIEmbeddings",

@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import inspect
 import pickle
+import time
+import uuid
 from collections.abc import Sequence
 from types import GenericAlias
 from typing import (
@@ -21,7 +23,7 @@ from langchain_core.runnables.utils import (
     get_unique_config_specs,
 )
 from langchain_core.utils.pydantic import create_model_v2
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 
 from cogniweave.history_store import BaseHistoryStore  # noqa: TC001
 from cogniweave.time_splitter import BaseTimeSplitter  # noqa: TC001
@@ -48,6 +50,10 @@ class RunnableWithHistory(RunnableBindingBase):
     output_messages_key: str | None = None
     history_messages_key: str | None = None
     history_factory_config: Sequence[ConfigurableFieldSpec]
+
+    _input_messages_cache: dict[str, list[tuple[BaseMessage, float]]] = PrivateAttr(
+        default_factory=dict
+    )
 
     def __init__(
         self,
@@ -229,9 +235,10 @@ class RunnableWithHistory(RunnableBindingBase):
 
     def _get_input_messages(
         self,
-        input_val: MessageLikeWithTimeType,
+        input_val: MessageLikeType | MessageLikeWithTimeType,
     ) -> list[tuple[BaseMessage, float]]:
         # If dictionary, try to pluck the single key representing messages
+        result: list[tuple[BaseMessage, float]] = []
         if isinstance(input_val, dict):
             if self.input_messages_key:
                 key = self.input_messages_key
@@ -240,16 +247,31 @@ class RunnableWithHistory(RunnableBindingBase):
             else:
                 key = "input"
             input_val = input_val[key]
-        return self._get_messages_with_timestamps(input_val)  # type: ignore
+        if isinstance(input_val, str):
+            from langchain_core.messages import HumanMessage
+
+            result = [(HumanMessage(content=input_val), time.time())]
+        # If value is a single message, convert to a list
+        if isinstance(input_val, BaseMessage):
+            result = [(input_val, time.time())]
+        if isinstance(input_val, (list, tuple)):
+            if len(input_val) == 0:
+                return []
+            if any(isinstance(item, BaseMessage) for item in input_val):
+                result = [(item, time.time()) for item in input_val]  # type: ignore
+            else:
+                return self._get_messages_with_timestamps(input_val)  # type: ignore
+        if result:
+            return sorted(result, key=lambda x: x[1])
+        msg = (
+            f"Expected str, BaseMessage, list[BaseMessage], or tuple[BaseMessage]. Got {input_val}."
+        )
+        raise ValueError(msg)
 
     def _get_output_messages(
         self,
         output_val: MessageLikeType | MessageLikeWithTimeType,
     ) -> list[tuple[BaseMessage, float]]:
-        import time
-
-        from langchain_core.messages import BaseMessage
-
         result: list[tuple[BaseMessage, float]] = []
         # If dictionary, try to pluck the single key representing messages
         if isinstance(output_val, dict):
@@ -274,10 +296,12 @@ class RunnableWithHistory(RunnableBindingBase):
         if isinstance(output_val, BaseMessage):
             result = [(output_val, time.time())]
         if isinstance(output_val, (list, tuple)):
+            if len(output_val) == 0:
+                return []
             if any(isinstance(item, BaseMessage) for item in output_val):
                 result = [(item, time.time()) for item in output_val]  # type: ignore
             else:
-                result = self._get_messages_with_timestamps(output_val)  # type: ignore
+                return self._get_messages_with_timestamps(output_val)  # type: ignore
         if result:
             return sorted(result, key=lambda x: x[1])
         msg = (
@@ -286,11 +310,10 @@ class RunnableWithHistory(RunnableBindingBase):
         )
         raise ValueError(msg)
 
-    def _enter_history(self, value: Any, config: RunnableConfig) -> list[tuple[BaseMessage, float]]:
-        session_id: str = config["configurable"]["session_id"]  # type: ignore
-        messages = self.history_store.get_session_history_with_timestamps(
-            session_id, limit=self.history_limit
-        )
+    def _enter_history(self, value: Any, config: RunnableConfig) -> list[BaseMessage]:
+        session_id: str = config["configurable"]["_unique_session_id"]  # type: ignore
+        cache_id: str = config["configurable"]["_input_messages_cache_id"]  # type: ignore
+        messages = self.history_store.get_session_history(session_id, limit=self.history_limit)
 
         input_val = value if not self.input_messages_key else value[self.input_messages_key]
         input_messages = self._get_input_messages(input_val)
@@ -299,17 +322,19 @@ class RunnableWithHistory(RunnableBindingBase):
                 "We currently do not support the input of multiple messages to avoid unpredictable results. "
                 "Please ensure that the input is a single message."
             )
+        self._input_messages_cache[cache_id] = input_messages
 
         if not self.history_messages_key:
             # return all messages
-            messages += [input_messages[0]]
+            messages += [input_messages[0][0]]
         return messages
 
     async def _aenter_history(
         self, value: dict[str, Any], config: RunnableConfig
-    ) -> list[tuple[BaseMessage, float]]:
-        session_id: str = config["configurable"]["session_id"]  # type: ignore
-        messages = await self.history_store.aget_session_history_with_timestamps(
+    ) -> list[BaseMessage]:
+        session_id: str = config["configurable"]["_unique_session_id"]  # type: ignore
+        cache_id: str = config["configurable"]["_input_messages_cache_id"]  # type: ignore
+        messages = await self.history_store.aget_session_history(
             session_id, limit=self.history_limit
         )
 
@@ -320,24 +345,19 @@ class RunnableWithHistory(RunnableBindingBase):
                 "We currently do not support the input of multiple messages to avoid unpredictable results. "
                 "Please ensure that the input is a single message."
             )
+        self._input_messages_cache[cache_id] = input_messages
 
         if not self.history_messages_key:
             # return all messages
-            messages += [input_messages[0]]
+            messages += [input_messages[0][0]]
         return messages
 
     def _exit_history(self, run: Run, config: RunnableConfig) -> None:
-        session_id: str = config["configurable"]["session_id"]  # type: ignore
+        session_id: str = config["configurable"]["_unique_session_id"]  # type: ignore
+        cache_id: str = config["configurable"]["_input_messages_cache_id"]  # type: ignore
 
         # Get the input messages
-        inputs = load(run.inputs)
-        input_messages = self._get_input_messages(inputs)
-
-        # If historic messages were prepended to the input messages, remove them to
-        # avoid adding duplicate messages to history.
-        if not self.history_messages_key:
-            historic_messages = self.history_store.get_session_history_with_timestamps(session_id)
-            input_messages = input_messages[len(historic_messages) :]
+        input_messages = self._input_messages_cache.pop(cache_id)
 
         assert len(input_messages) == 1
         block_id, block_ts = self.time_splitter.invoke(
@@ -356,18 +376,11 @@ class RunnableWithHistory(RunnableBindingBase):
         )
 
     async def _aexit_history(self, run: Run, config: RunnableConfig) -> None:
-        session_id: str = config["configurable"]["session_id"]  # type: ignore
+        session_id: str = config["configurable"]["_unique_session_id"]  # type: ignore
+        cache_id: str = config["configurable"]["_input_messages_cache_id"]  # type: ignore
 
         # Get the input messages
-        inputs = load(run.inputs)
-        input_messages = self._get_input_messages(inputs)
-        # If historic messages were prepended to the input messages, remove them to
-        # avoid adding duplicate messages to history.
-        if not self.history_messages_key:
-            historic_messages = await self.history_store.aget_session_history_with_timestamps(
-                session_id
-            )
-            input_messages = input_messages[len(historic_messages) :]
+        input_messages = self._input_messages_cache.pop(cache_id)
 
         assert len(input_messages) == 1
         block_id, block_ts = self.time_splitter.invoke(
@@ -408,11 +421,12 @@ class RunnableWithHistory(RunnableBindingBase):
 
         session_id: str = ""
         if len(expected_keys) == 1:
-            session_id = str(configurable.pop(expected_keys[0]))
+            session_id = str(configurable[expected_keys[0]])
         else:
             # otherwise verify that names of keys patch and invoke by named arguments
             session_id = hashlib.sha256(
-                pickle.dumps(tuple(sorted(configurable.pop(key) for key in expected_keys)))
+                pickle.dumps(tuple(sorted(configurable[key] for key in expected_keys)))
             ).hexdigest()
-        config["configurable"]["session_id"] = session_id  # type: ignore
+        config["configurable"]["_unique_session_id"] = session_id  # type: ignore
+        config["configurable"]["_input_messages_cache_id"] = uuid.uuid1().hex  # type: ignore
         return config

@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Any, Literal, Self, cast
 from typing_extensions import override
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import BaseMessage, get_buffer_string
 from langchain_core.runnables import RunnableSerializable
 from pydantic import BaseModel, Field, model_validator
 
@@ -36,7 +36,7 @@ class ConversationEndClassifier(PydanticSingleTurnChat[Literal["zh", "en"], Conv
     )
 
 
-class ConversationEndDetector(RunnableSerializable[dict[str, Any], bool]):
+class EndDetector(RunnableSerializable[dict[str, Any], bool]):
     """Conversation end detector."""
 
     lang: Literal["zh", "en"] = Field(default="zh")
@@ -45,8 +45,8 @@ class ConversationEndDetector(RunnableSerializable[dict[str, Any], bool]):
     messages_variable_key: str = Field(default="messages")
 
     @staticmethod
-    def _serialize_messages(messages: list[HumanMessage]) -> str:
-        return "\n".join(f'* "{m.content}"' for m in messages)
+    def _serialize_messages(messages: list[BaseMessage]) -> str:
+        return get_buffer_string(messages, human_prefix="* [User]", ai_prefix="* [Assistant]")
 
     @model_validator(mode="after")
     def _build_chain_if_needed(self) -> "Self":
@@ -62,7 +62,7 @@ class ConversationEndDetector(RunnableSerializable[dict[str, Any], bool]):
     ) -> bool:
         assert self.classifier is not None
 
-        messages = cast("list[HumanMessage]", input.get(self.messages_variable_key, []))
+        messages = cast("list[BaseMessage]", input.get(self.messages_variable_key, []))
         if not isinstance(messages, list):
             raise TypeError(
                 f"Expected list for '{self.messages_variable_key}', got {type(messages)}",
@@ -80,7 +80,7 @@ class ConversationEndDetector(RunnableSerializable[dict[str, Any], bool]):
     ) -> bool:
         assert self.classifier is not None
 
-        messages = cast("list[HumanMessage]", input.get(self.messages_variable_key, []))
+        messages = cast("list[BaseMessage]", input.get(self.messages_variable_key, []))
         if not isinstance(messages, list):
             raise TypeError(
                 f"Expected list for '{self.messages_variable_key}', got {type(messages)}",

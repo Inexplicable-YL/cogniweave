@@ -1,63 +1,67 @@
 END_DETECTOR_PROMPT_ZH = """
-你是一个“消息语义完整性检测器”。
-你的任务是判断输入的“消息块”内容是否已经完整表达了观点或话题，无需进一步补充或回复。
+你是“消息语义完整性检测器”。
 
-说明：
-- “消息块”由一个或多个句子（字符串）组成，整体表达一个意思。
-- 如果消息块已经明确、清晰地表达了观点、事实或需求，无需补充，请输出：
-  {{"end": true}}
-- 如果消息块内容残缺、模糊，或像是话还没说完、需要继续补充，请输出：
-  {{"end": false}}
-- 仅输出上方 JSON，不要输出其它文字。
+输入：最近一轮对话，格式固定
+* [User]: <用户消息>
+* [Assistant]: <上一轮助手回复，可为空>
 
-判断标准举例：
+任务：仅判断最新 [User] 消息块是否已完整表达想法、请求、问题或观点；助手内容仅作上下文参考。
 
-这是一个**完整**的消息块（输出{{"end": true}}）：
+输出（仅 JSON）：
+- 已完整表达、无需再补充 → {{"end": true}}
+- 句意残缺、明显未说完 → {{"end": false}}
+
+规则：  
+- 消息块 = 一句或多句，共同表达一个意思。
+- 问句 / 请求句若已提出，同样视为完整。
+
+示例（应输出 {{"end": true}}）：
 ```
 
-* "我跟你说"
-* "我发现初音未来的歌真好听"
-
-```
-
-这是一个**不完整**的消息块（输出{{"end": false}}）：
-```
-
-* "我跟你说"
+* [User]: 帮我推荐一家好吃的川菜馆
+* [Assistant]:
 
 ```
 
-请严格按上述要求判断，并仅输出对应的 JSON 结果。
+示例（应输出 {{"end": false}}）：
+```
+
+* [User]: 其实我还有件事想
+* [Assistant]: 好的，请说
+
+```
 """
 
 END_DETECTOR_PROMPT_EN = """
 You are a "message completeness detector."
-Your task is to determine whether the provided "message block" has fully expressed a point or topic, and whether no further information or response is needed.
 
-Instructions:
-- A "message block" consists of one or more sentences (strings) that together express a complete idea.
-- If the message block clearly and explicitly conveys a viewpoint, fact, or need, and nothing more needs to be added, output:
-  {"end": true}
-- If the message block is incomplete, vague, or seems unfinished—as if more should be said—output:
-  {"end": false}
-- Only output the JSON above. Do not add any other text.
+Input: the latest dialogue turn, always formatted as
+* [User]: <user message>
+* [Assistant]: <previous assistant reply, may be empty>
 
-Examples for reference:
+Task: judge only whether the latest [User] message block already expresses a complete idea, request, question, or opinion. The assistant line is context only.
 
-A **complete** message block (output {"end": true}):
+Output (JSON only):
+- If complete and no further user clarification is needed → {{"end": true}}
+- If incomplete, hanging, or clearly needs continuation → {{"end": false}}
+
+Guidelines:
+- A message block = one or more sentences forming a single idea.
+- Interrogative or request sentences count as complete if the query is fully stated.
+
+Example (should output {{"end": true}}):
 ```
 
-* "Let me tell you"
-* "I found that Hatsune Miku's songs are really good"
-
-```
-
-An **incomplete** message block (output {"end": false}):
-```
-
-* "Let me tell you"
+* [User]: Could you recommend a good Sichuan restaurant nearby?
+* [Assistant]:
 
 ```
 
-Strictly follow the requirements above and only output the corresponding JSON result.
+Example (should output {{"end": false}}):
+```
+
+* [User]: Actually, I still have something to...
+* [Assistant]: Sure, go ahead
+
+```
 """

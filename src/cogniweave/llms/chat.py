@@ -21,7 +21,7 @@ from langchain_core.prompts.chat import (
 )
 from langchain_core.runnables import RunnableSerializable
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.tools import Tool
+from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI as BaseChatOpenAI
 from pydantic import BaseModel, Field, model_validator
 
@@ -218,7 +218,7 @@ class AgentBase(RunnableSerializable[dict[str, Any], dict[str, Any]], Generic[Su
     contexts: list[MessageLikeRepresentation] = Field(default_factory=list)
 
     # External tools used by the agent
-    tools: list[Tool] = Field(default_factory=list)
+    tools: list[BaseTool] = Field(default_factory=list)
 
     # Internally built chain (AgentExecutor)
     chain: RunnableSerializable[dict[str, Any], dict[str, Any]] | None = None
