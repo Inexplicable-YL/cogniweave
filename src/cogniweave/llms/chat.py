@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator, Iterator
 from typing import (
     Any,
     Generic,
@@ -117,6 +118,21 @@ class SingleTurnChatBase(
         """Asynchronous call to the single-turn chat model."""
         assert self.chain is not None
         return await self.chain.ainvoke(input, config=config, **kwargs)
+
+    @override
+    def stream(
+        self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
+    ) -> Iterator[Output]:
+        assert self.chain is not None
+        yield from self.chain.stream(input, config=config, **kwargs)
+
+    @override
+    async def astream(
+        self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
+    ) -> AsyncIterator[Output]:
+        assert self.chain is not None
+        async for chunk in self.chain.astream(input, config=config, **kwargs):
+            yield chunk
 
 
 class StringSingleTurnChat(SingleTurnChatBase[SupportLangType, str], Generic[SupportLangType]):
@@ -238,6 +254,7 @@ class AgentBase(RunnableSerializable[dict[str, Any], dict[str, Any]], Generic[Su
                 provider=self.provider,
                 model=self.model_name,
                 temperature=self.temperature,
+                streaming=True,
                 **self.client_params,
             )
             # build prompt template (with multilingual system prompt)
@@ -275,3 +292,18 @@ class AgentBase(RunnableSerializable[dict[str, Any], dict[str, Any]], Generic[Su
         """Asynchronously invoke the agent."""
         assert self.chain is not None
         return await self.chain.ainvoke(input, config=config, **kwargs)
+
+    @override
+    def stream(
+        self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
+    ) -> Iterator[dict[str, Any]]:
+        assert self.chain is not None
+        yield from self.chain.stream(input, config=config, **kwargs)
+
+    @override
+    async def astream(
+        self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
+    ) -> AsyncIterator[dict[str, Any]]:
+        assert self.chain is not None
+        async for chunk in self.chain.astream(input, config=config, **kwargs):
+            yield chunk

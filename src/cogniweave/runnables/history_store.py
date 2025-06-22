@@ -41,7 +41,7 @@ MessageLikeWithTimeType = (
 )
 
 
-class RunnableWithHistory(RunnableBindingBase):
+class RunnableWithHistoryStore(RunnableBindingBase):
     history_store: BaseHistoryStore
     time_splitter: BaseTimeSplitter
 

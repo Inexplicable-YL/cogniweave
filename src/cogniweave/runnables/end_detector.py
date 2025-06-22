@@ -8,9 +8,10 @@ from typing import TYPE_CHECKING, Any
 from typing_extensions import override
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.runnables import RunnableBranch, RunnableLambda
 from langchain_core.runnables.base import Runnable, RunnableBindingBase
 from langchain_core.utils.pydantic import create_model_v2
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 
 from cogniweave.core.end_detector import EndDetector  # noqa: TC001
 
@@ -31,7 +32,7 @@ class RunnableWithEndDetector(RunnableBindingBase):
 
     input_messages_key: str | None = None
     history_messages_key: str | None = None
-    default: MessageLikeType | MessageLikeWithTimeType
+    _default: MessageLikeType | MessageLikeWithTimeType = PrivateAttr()
 
     def __init__(
         self,
@@ -43,14 +44,19 @@ class RunnableWithEndDetector(RunnableBindingBase):
         history_messages_key: str | None = None,
         **kwargs: Any,
     ) -> None:
+        lambda_end_detector = RunnableLambda(self._end_detect, self._a_end_detect)
+        bound = RunnableBranch(
+            (lambda_end_detector, runnable),
+            lambda _: default,
+        )
         super().__init__(
-            bound=runnable,
+            bound=bound,
             end_detector=end_detector,
             input_messages_key=input_messages_key,
             history_messages_key=history_messages_key,
-            default=default,
             **kwargs,
         )
+        self._default = default
 
     @override
     def get_input_schema(self, config: RunnableConfig | None = None) -> type[BaseModel]:
@@ -202,26 +208,16 @@ class RunnableWithEndDetector(RunnableBindingBase):
         seq = users_tail if not users_prev else users_tail + ai_block + users_prev
         return seq[::-1]
 
-    @override
-    def invoke(
+    def _end_detect(
         self,
         input: dict[str, Any],
-        config: RunnableConfig | None = None,
-        **kwargs: Any | None,
-    ) -> MessageLikeType | MessageLikeWithTimeType:
+    ) -> bool:
         user_messages = self._get_user_messages(input)
-        if self.end_detector.invoke({"messages": user_messages}, config=config, **kwargs):
-            return super().invoke(input, config, **kwargs)
-        return self.default
+        return self.end_detector.invoke({"messages": user_messages})
 
-    @override
-    async def ainvoke(
+    async def _a_end_detect(
         self,
         input: dict[str, Any],
-        config: RunnableConfig | None = None,
-        **kwargs: Any | None,
-    ) -> MessageLikeType | MessageLikeWithTimeType:
+    ) -> bool:
         user_messages = self._get_user_messages(input)
-        if await self.end_detector.ainvoke({"messages": user_messages}, config=config, **kwargs):
-            return await super().ainvoke(input, config, **kwargs)
-        return self.default
+        return await self.end_detector.ainvoke({"messages": user_messages})

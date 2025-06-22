@@ -7,7 +7,7 @@ from test_runnable import RunnableForTest
 
 from cogniweave.core.time_splitter import TimeSplitter
 from cogniweave.history_store import BaseHistoryStore as HistoryStore
-from cogniweave.runnables.history import RunnableWithHistory
+from cogniweave.runnables.history_store import RunnableWithHistoryStore
 
 sleep_time = 0.1
 
@@ -18,7 +18,7 @@ def _get_input(i: int) -> Any:
 
 def test_runnable_history(tmp_path: Path) -> None:
     test_runnable = RunnableForTest(sleep_time=sleep_time)
-    test_runnable_with_history = RunnableWithHistory(
+    test_runnable_with_history = RunnableWithHistoryStore(
         test_runnable,
         history_store=HistoryStore(db_url=f"sqlite:///{tmp_path}/test.sqlite"),
         time_splitter=TimeSplitter(),
@@ -39,7 +39,7 @@ def test_runnable_history(tmp_path: Path) -> None:
 
 async def test_runnable_history_async(tmp_path: Path) -> None:
     test_runnable = RunnableForTest(sleep_time=sleep_time)
-    test_runnable_with_history = RunnableWithHistory(
+    test_runnable_with_history = RunnableWithHistoryStore(
         test_runnable,
         history_store=HistoryStore(db_url=f"sqlite:///{tmp_path}/test.sqlite"),
         time_splitter=TimeSplitter(),
@@ -60,7 +60,7 @@ async def test_runnable_history_async(tmp_path: Path) -> None:
 
 def test_runnable_history_with_history_key(tmp_path: Path) -> None:
     test_runnable = RunnableForTest(sleep_time=sleep_time)
-    test_runnable_with_history = RunnableWithHistory(
+    test_runnable_with_history = RunnableWithHistoryStore(
         test_runnable,
         history_store=HistoryStore(db_url=f"sqlite:///{tmp_path}/test.sqlite"),
         time_splitter=TimeSplitter(),
@@ -83,7 +83,7 @@ def test_runnable_history_with_history_key(tmp_path: Path) -> None:
 
 async def test_runnable_history_with_history_key_async(tmp_path: Path) -> None:
     test_runnable = RunnableForTest(sleep_time=sleep_time)
-    test_runnable_with_history = RunnableWithHistory(
+    test_runnable_with_history = RunnableWithHistoryStore(
         test_runnable,
         history_store=HistoryStore(db_url=f"sqlite:///{tmp_path}/test.sqlite"),
         time_splitter=TimeSplitter(),
