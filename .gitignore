@@ -176,3 +176,5 @@ cython_debug/
 
 # ToDoList
 tdl.txt
+*.sqlite
+*.db

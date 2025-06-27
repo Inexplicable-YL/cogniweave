@@ -1,37 +1,37 @@
+import shutil
+import sys
+import textwrap
 import warnings
 from collections.abc import Iterator
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import MessagesPlaceholder
-from langchain_core.tools import tool
+from rich.align import Align
 from rich.console import Console
+from rich.live import Live
 from rich.markdown import Markdown
-from rich.prompt import Prompt
+from rich.panel import Panel
 
 from cogniweave.core.end_detector import EndDetector
 from cogniweave.core.time_splitter import TimeSplitter
 from cogniweave.history_store import BaseHistoryStore as HistoryStore
-from cogniweave.llms import AgentBase
+from cogniweave.llms import StringSingleTurnChat
 from cogniweave.runnables.end_detector import RunnableWithEndDetector
 from cogniweave.runnables.history_store import RunnableWithHistoryStore
 
 warnings.filterwarnings("ignore")
 
 
-@tool(description="get datetime")
-def get_datetime() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+db_path = Path("test1.sqlite")
+history_store = HistoryStore(db_url=f"sqlite:///{db_path}")
 
-
-db_path = Path("test.sqlite")
-
-agent = AgentBase(
+agent = StringSingleTurnChat(
     lang="zh",
-    model="gpt-4.1-mini",
+    provider="deepseek",
+    model="deepseek-chat",
     contexts=[MessagesPlaceholder(variable_name="history", optional=True)],
-    tools=[get_datetime],
 )
 runnable_with_end_detector = RunnableWithEndDetector(
     agent,
@@ -41,32 +41,77 @@ runnable_with_end_detector = RunnableWithEndDetector(
 )
 runnable_with_history = RunnableWithHistoryStore(
     runnable_with_end_detector,
-    history_store=HistoryStore(db_url=f"sqlite:///{db_path}"),
+    history_store=history_store,
     time_splitter=TimeSplitter(),
     input_messages_key="input",
     history_messages_key="history",
 )
+
+
 console = Console()
 
 
+def get_input(prompt: str = "> ") -> str | None:
+    console.print(f"{prompt}", style="bold blink bright_cyan", end="")
+    try:
+        input_msg = input()
+    except (KeyboardInterrupt, EOFError):
+        sys.stdout.write("\033[K")
+        return None
+
+    if input_msg.strip().lower() == "exit":
+        return None
+
+    # 计算总显示行数（包括 prompt + 内容，自动换行考虑）
+    term_width = shutil.get_terminal_size().columns
+    wrapped_lines = textwrap.wrap(prompt + input_msg, width=term_width)
+    num_lines = len(wrapped_lines)
+
+    # 回退光标
+    sys.stdout.write("\033[F" * num_lines)
+
+    return input_msg
+
+
+def print_input(input_val: str) -> None:
+    user_bubble = Panel(input_val, style="bold #63bbd0", expand=False)
+    console.print(Align.right(user_bubble))
+
+
+def print_output(output_val: str) -> None:
+    assistant_bubble = Panel(Markdown(output_val), style="#83cbac", expand=False)
+    console.print(Align.left(assistant_bubble))
+
+
+nearly_history = history_store.get_session_history("foo", limit=10)
+for hist in nearly_history:
+    if isinstance(hist, HumanMessage):
+        print_input(str(hist.content))
+    elif isinstance(hist, AIMessage):
+        print_output(str(hist.content))
+
 while True:
-    input_msg = Prompt.ask("[bold cyan]Input[/bold cyan]")
-    if input_msg.lower() == "exit":
+    input_msg = get_input()
+
+    if not input_msg:
         break
+
+    print_input(input_msg)
+
     chunks: Iterator[dict[str, Any]] = runnable_with_history.stream(
         {"input": input_msg},
         config={"configurable": {"session_id": "foo"}},
     )
 
-    next_conversation = False
-    for chunk in chunks:
-        text: str = chunk if isinstance(chunk, str) else chunk.get("output", "")
-        if text:
-            if not next_conversation:
-                console.print("[bold green]Output[/bold green]: ", end="", style="bright_white")
-                next_conversation = True
-            console.print(Markdown(text), end="", soft_wrap=True, highlight=False)
+    text_buffer = ""
 
-    if next_conversation:
-        console.print()
-        console.print("[dim]────────────────────────────[/dim]")
+    with Live("", console=console, refresh_per_second=8, transient=True) as live:
+        for chunk in chunks:
+            text = chunk if isinstance(chunk, str) else chunk.get("output", "")
+            if text:
+                text_buffer += text
+                assistant_bubble = Panel(Markdown(text_buffer), style="#83cbac", expand=False)
+                live.update(Align.left(assistant_bubble))
+
+    if text_buffer:
+        print_output(text_buffer)
