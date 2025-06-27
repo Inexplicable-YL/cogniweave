@@ -8,7 +8,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
-from cogniweave.core.memory_makers.long_memory import LongTermMemoryMaker
+from cogniweave.core.memory_maker.long_memory import LongTermMemoryMaker
 from cogniweave.core.prompts.long_memory import LongMemoryPromptTemplate, _format_memory
 
 console = Console()
