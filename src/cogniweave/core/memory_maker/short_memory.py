@@ -64,6 +64,7 @@ class ShortTermMemoryMaker(RunnableSerializable[dict[str, Any], ShortMemoryPromp
 
     name_variable_key: str = Field(default="name")
     history_variable_key: str = Field(default="history")
+    timestamp_variable_key: str = Field(default="timestamp")
 
     @model_validator(mode="after")
     def build_chain_if_needed(self) -> Self:
@@ -81,7 +82,7 @@ class ShortTermMemoryMaker(RunnableSerializable[dict[str, Any], ShortMemoryPromp
         **kwargs: Any,
     ) -> str:
         """Format the message for the model."""
-        name = kwargs.get(self.name_variable_key)
+        name = kwargs.get(self.name_variable_key, "")
         if not isinstance(name, str):
             raise TypeError(f"Expected a string for {self.name_variable_key}, got {type(name)}")
         history = kwargs.get(self.history_variable_key)
@@ -89,20 +90,47 @@ class ShortTermMemoryMaker(RunnableSerializable[dict[str, Any], ShortMemoryPromp
             raise TypeError(f"Expected a list for {self.history_variable_key}, got {type(history)}")
         return (
             f"<UserName>{name}</UserName>\n"
+            if name
+            else ""
             f"<ChatHistory>\n{get_buffer_string(history, human_prefix='[User]', ai_prefix='[Assistant]')}\n</ChatHistory>"
         )
+
+    def _get_current_datetime(self, input: dict[str, Any]) -> datetime:
+        """Get the current timestamp in the format: YYYY-MM-DD HH:MM"""
+        if timestamp := input.get(self.timestamp_variable_key, None):
+            return datetime.fromtimestamp(cast("float", timestamp))
+        return datetime.now()
 
     @override
     def invoke(
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
     ) -> ShortMemoryPromptTemplate:
-        """Get the short-term memory from the model."""
+        """Get the short-term memory from the model.
+
+        Args:
+            input: Dictionary containing:
+                - name: (str) Optional name of the user
+                - history: (list[BaseMessage]) List of chat message history
+                - timestamp: (float) Unix timestamp of the conversation
+            config: Optional RunnableConfig for the chain execution
+            **kwargs: Additional arguments to pass to the chain
+
+        Returns:
+            ShortMemoryPromptTemplate containing:
+                - timestamp: datetime of the conversation
+                - chat_summary: str summary of the conversation
+                - topic_tags: list[str] of relevant tags
+
+        Raises:
+            TypeError: If input[name] is not str or input[history] is not list
+            ValueError: If chat summary or topic tags result is None
+        """
         assert self.memory_chain is not None
         assert self.tags_chain is not None
 
         message = self._format_message(**input)
         return ShortMemoryPromptTemplate.from_template(
-            timestamp=datetime.fromtimestamp(cast("int | float", input.get("timestamp"))),
+            timestamp=self._get_current_datetime(input),
             chat_summary=self.memory_chain.invoke({"input": message}, config=config, **kwargs),
             topic_tags=self.tags_chain.invoke({"input": message}, config=config, **kwargs).tags,
         )
@@ -111,7 +139,26 @@ class ShortTermMemoryMaker(RunnableSerializable[dict[str, Any], ShortMemoryPromp
     async def ainvoke(
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
     ) -> ShortMemoryPromptTemplate:
-        """Asynchronously get the short-term memory from the model."""
+        """Asynchronously get the short-term memory from the model.
+
+        Args:
+            input: Dictionary containing:
+                - name: (str) Optional name of the user
+                - history: (list[BaseMessage]) List of chat message history
+                - timestamp: (float) Unix timestamp of the conversation
+            config: Optional RunnableConfig for the chain execution
+            **kwargs: Additional arguments to pass to the chain
+
+        Returns:
+            ShortMemoryPromptTemplate containing:
+                - timestamp: datetime of the conversation
+                - chat_summary: str summary of the conversation
+                - topic_tags: list[str] of relevant tags
+
+        Raises:
+            TypeError: If input[name] is not str or input[history] is not list
+            ValueError: If chat summary or topic tags result is None
+        """
         message = self._format_message(**input)
 
         chat_summary_result: str | None = None
@@ -141,7 +188,7 @@ class ShortTermMemoryMaker(RunnableSerializable[dict[str, Any], ShortMemoryPromp
             raise ValueError("Topic tags result is None, please check the model configuration.")
 
         return ShortMemoryPromptTemplate.from_template(
-            timestamp=datetime.fromtimestamp(cast("int | float", input.get("timestamp"))),
+            timestamp=self._get_current_datetime(input),
             chat_summary=chat_summary_result,
             topic_tags=topic_tags_result,
         )

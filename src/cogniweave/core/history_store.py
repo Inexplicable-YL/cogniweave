@@ -9,6 +9,7 @@ from cogniweave.history_store import (
     UserAttributeData,
 )
 
+_USER_NAME_KEY: Literal["_user_name"] = "_user_name"
 _SHORT_MEMORY_KEY: Literal["_short_memory"] = "_short_memory"
 _LONG_MEMORY_KEY: Literal["_long_memory"] = "_long_memory"
 
@@ -34,6 +35,62 @@ class HistoryStore(BaseHistoryStoreWithCache):
             **kwargs: Additional keyword arguments for compatibility with subclasses.
         """
         super().__init__(db_url=db_url, echo=echo, max_cache_blocks=max_cache_blocks, **kwargs)
+
+    def add_user_name(self, user_name: str, *, session_id: str) -> None:
+        """Add user name to the history store.
+
+        Args:
+            user_name: User name to be stored.
+            session_id: Optional session/user ID. Uses user_name if not provided.
+
+        Return:
+            None: User name is persisted to the database.
+        """
+        self.add_user_attributes(
+            [UserAttributeData(type=_USER_NAME_KEY, value=user_name)], session_id=session_id
+        )
+
+    async def aadd_user_name(self, user_name: str, *, session_id: str) -> None:
+        """Async add user name to the history store.
+
+        Args:
+            user_name: User name to be stored.
+            session_id: Optional session/user ID. Uses user_name if not provided.
+
+        Return:
+            None: User name is persisted to the database.
+        """
+        await self.aadd_user_attributes(
+            [UserAttributeData(type=_USER_NAME_KEY, value=user_name)], session_id=session_id
+        )
+
+    def get_user_name(self, session_id: str) -> str | None:
+        """Get user name from the history store.
+
+        Args:
+            session_id: Optional session/user ID.
+
+        Return:
+            str | None: User name if found, None otherwise.
+        """
+        attributes = self.get_user_attributes(session_id, types=[_USER_NAME_KEY])
+        if attributes:
+            return attributes[0].get("value")
+        return None
+
+    async def aget_user_name(self, session_id: str) -> str | None:
+        """Async get user name from the history store.
+
+        Args:
+            session_id: Optional session/user ID.
+
+        Return:
+            str | None: User name if found, None otherwise.
+        """
+        attributes = await self.aget_user_attributes(session_id, types=[_USER_NAME_KEY])
+        if attributes:
+            return attributes[0].get("value")
+        return None
 
     def add_short_memory(
         self,

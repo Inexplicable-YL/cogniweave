@@ -143,26 +143,30 @@ class LongMemoryMergePromptTemplate(PromptTemplate):
 
 class LongMemoryTemplateDict(TypedDict):
     template: str
-    updated_memory: list[str]
+    current_memory: list[str]
+    updated_block_id: str
+    updated_time: str
     template_format: PromptTemplateFormat
 
 
 class LongMemoryPromptTemplate(PromptTemplate):
     """Generative prompt template for long-term memory output."""
 
-    _template: ClassVar[str] = "{updated_memory_json}"
+    _template: ClassVar[str] = "{updated_memory}"
     template: str = Field(default=_template)
 
-    updated_memory: list[str]
+    current_memory: list[str]
+    updated_block_id: str
+    updated_time: str
 
     @model_validator(mode="before")
     @classmethod
     def setup_partial_variables(cls, values: dict[str, Any]) -> dict[str, Any]:
         """Ensure partial_variables is correctly set"""
-        if "updated_memory" in values:
-            memory_json = _format_memory(values["updated_memory"])
+        if "current_memory" in values:
+            memory_json = _format_memory(values["current_memory"])
             values["partial_variables"] = values.get("partial_variables", {}) | {
-                "updated_memory_json": memory_json
+                "updated_memory": memory_json
             }
         return values
 
@@ -172,14 +176,20 @@ class LongMemoryPromptTemplate(PromptTemplate):
         cls,
         template: str | None = None,
         *,
-        updated_memory: list[str],
+        current_memory: list[str],
+        updated_block_id: str,
+        updated_time: datetime | str,
         template_format: PromptTemplateFormat = "f-string",
         **kwargs: Any,
     ) -> LongMemoryPromptTemplate:
         """Create prompt template from variables."""
+        if isinstance(updated_time, datetime):
+            updated_time = updated_time.strftime("%Y-%m-%d %H:%M")
         return cls(
             template=template or cls._template,
-            updated_memory=updated_memory,
+            current_memory=current_memory,
+            updated_block_id=updated_block_id,
+            updated_time=updated_time,
             template_format=template_format,
             **kwargs,
         )
@@ -187,7 +197,9 @@ class LongMemoryPromptTemplate(PromptTemplate):
     def to_template_dict(self) -> LongMemoryTemplateDict:
         return LongMemoryTemplateDict(
             template=self.template,
-            updated_memory=self.updated_memory,
+            current_memory=self.current_memory,
+            updated_block_id=self.updated_block_id,
+            updated_time=self.updated_time,
             template_format=self.template_format,
         )
 

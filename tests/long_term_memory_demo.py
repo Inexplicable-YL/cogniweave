@@ -122,7 +122,7 @@ def test_complete_process(
 
         console.print("[bold green]✓ Memory updated successfully![/]")
         console.print(
-            f"[bold]Number of updated memory items:[/] [cyan]{len(result.updated_memory)}[/]"
+            f"[bold]Number of updated memory items:[/] [cyan]{len(result.current_memory)}[/]"
         )
 
         console.print(
@@ -130,7 +130,7 @@ def test_complete_process(
                 result.format(),
                 title="Complete Memory Content",
                 border_style="blue",
-                subtitle=f"Total {len(result.updated_memory)} items",
+                subtitle=f"Total {len(result.current_memory)} items",
             )
         )
     except Exception as e:
@@ -176,7 +176,7 @@ def test_async_complete_process(
         async_result = asyncio.run(test_async())
         console.print("[bold green]✓ Asynchronous version executed successfully![/]")
         console.print(
-            f"[bold]Number of asynchronous result memory items:[/] [cyan]{len(async_result.updated_memory)}[/]"
+            f"[bold]Number of asynchronous result memory items:[/] [cyan]{len(async_result.current_memory)}[/]"
         )
 
         console.print(
@@ -184,7 +184,7 @@ def test_async_complete_process(
                 async_result.format(),
                 title="Asynchronous complete Memory Content",
                 border_style="blue",
-                subtitle=f"Total {len(async_result.updated_memory)} items",
+                subtitle=f"Total {len(async_result.current_memory)} items",
             )
         )
     except Exception as e:

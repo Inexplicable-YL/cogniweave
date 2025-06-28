@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Literal, Self
+from typing import Any, Literal, Self, cast
 from typing_extensions import override
 
 from langchain_core.messages import get_buffer_string
@@ -64,8 +64,9 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
     extract_chain: LongTermJsonExtract | None = None
 
     history_variable_key: str = Field(default="history")
-    current_memory_variable_key: str = Field(default="current_long_term_memory")
-    last_update_time_variable_key: str = Field(default="last_update_time")
+    current_memory_template_variable_key: str = Field(default="current_memory_template")
+    current_block_id_variable_key: str = Field(default="current_block_id")
+    timestamp_variable_key: str = Field(default="timestamp")
 
     @model_validator(mode="after")
     def build_chain_if_needed(self) -> Self:
@@ -75,13 +76,29 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
 
         return self
 
-    def _get_current_timestamp(self) -> str:
+    def _get_current_timestamp(self, input: dict[str, Any]) -> str:
         """Get the current timestamp in the format: YYYY-MM-DD HH:MM"""
+        if timestamp := input.get(self.timestamp_variable_key, None):
+            return datetime.fromtimestamp(cast("float", timestamp)).strftime("%Y-%m-%d %H:%M")
+
         return datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    def _get_current_date(self) -> str:
+    def _get_current_date(self, input: dict[str, Any]) -> str:
         """Get the current date in the format: YYYY-MM-DD"""
+        if timestamp := input.get(self.timestamp_variable_key, None):
+            return datetime.fromtimestamp(cast("float", timestamp)).strftime("%Y-%m-%d")
+
         return datetime.now().strftime("%Y-%m-%d")
+
+    def _get_current_memory_template(self, input: dict[str, Any]) -> LongMemoryPromptTemplate:
+        """Get the current memory from the prompt template."""
+        input_val = input.get(self.current_memory_template_variable_key)
+        if isinstance(input_val, LongMemoryPromptTemplate):
+            return input_val
+        if isinstance(input_val, dict):
+            return LongMemoryPromptTemplate.load(input_val)
+        msg = f"Expected dict or LongMemoryPromptTemplate. Got {input_val}."
+        raise ValueError(msg)
 
     def _extract(
         self,
@@ -100,12 +117,12 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
 
         history_text = get_buffer_string(history, human_prefix="[User]", ai_prefix="[Assistant]")
 
-        time_kwargs = {
+        time_kwargs: dict[str, Any] = {
             "current_time": current_time,
             "current_date": current_date,
         }
         extract_template = LongMemoryExtractPromptTemplate.from_template(
-            history=history_text, **time_kwargs, template_format="f-string"
+            history=history_text, **time_kwargs
         )
         result = self.extract_chain.invoke(
             {"input": extract_template.format(), **time_kwargs},
@@ -131,12 +148,12 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
 
         history_text = get_buffer_string(history, human_prefix="[User]", ai_prefix="[Assistant]")
 
-        time_kwargs = {
+        time_kwargs: dict[str, Any] = {
             "current_time": current_time,
             "current_date": current_date,
         }
         extract_template = LongMemoryExtractPromptTemplate.from_template(
-            history=history_text, **time_kwargs, template_format="f-string"
+            history=history_text, **time_kwargs
         )
         result = await self.extract_chain.ainvoke(
             {"input": extract_template.format(), **time_kwargs},
@@ -149,21 +166,43 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
     def invoke(
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
     ) -> LongMemoryPromptTemplate:
-        """Extract and merge long-term memory, returning a Pydantic model."""
+        """Extract and merge long-term memory, returning a Pydantic model.
+
+        Args:
+            input: Dictionary containing:
+                - history: (list[BaseMessage]) List of chat message history
+                - current_memory_template: (LongMemoryPromptTemplate | dict) Current memory state
+                - current_block_id: (str) ID of the current memory block
+                - timestamp: (float) Unix timestamp
+            config: Optional RunnableConfig for the chain execution
+            **kwargs: Additional arguments to pass to the chain
+
+        Returns:
+            LongMemoryPromptTemplate containing:
+                - current_memory: Updated memory content
+                - updated_block_id: ID of the updated memory block
+                - updated_time: Timestamp of the update
+
+        Raises:
+            TypeError: If input[history] is not list
+            ValueError: If current_memory_template is invalid
+        """
         assert self.chat_chain is not None
 
-        current_time = self._get_current_timestamp()
-        current_date = self._get_current_date()
+        current_time = self._get_current_timestamp(input)
+        current_date = self._get_current_date(input)
 
         new_items_str = self._extract(input, current_time, current_date, config=config, **kwargs)
 
-        current_memory = input.get(self.current_memory_variable_key, [])
-        last_update = input.get(self.last_update_time_variable_key)
+        current_memory_template = self._get_current_memory_template(input)
+        current_block_id = input.get(self.current_block_id_variable_key, "")
+        current_memory = current_memory_template.current_memory
+        updated_time = current_memory_template.updated_time
 
-        time_kwargs = {
+        time_kwargs: dict[str, Any] = {
             "current_time": current_time,
             "current_date": current_date,
-            "last_update_time": last_update or "",
+            "last_update_time": updated_time,
         }
         merge_template = LongMemoryMergePromptTemplate.from_template(
             new_memory=new_items_str, current_memory=current_memory, **time_kwargs
@@ -173,30 +212,54 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
         )
 
         return LongMemoryPromptTemplate.from_template(
-            updated_memory=result.updated_memory,
+            current_memory=result.updated_memory,
+            updated_block_id=current_block_id,
+            updated_time=current_time,
         )
 
     @override
     async def ainvoke(
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
     ) -> LongMemoryPromptTemplate:
-        """Asynchronously extract and merge long-term memory."""
+        """Asynchronously extract and merge long-term memory.
+
+        Args:
+            input: Dictionary containing:
+                - history: (list[BaseMessage]) List of chat message history
+                - current_memory_template: (LongMemoryPromptTemplate | dict) Current memory state
+                - current_block_id: (str) ID of the current memory block
+                - timestamp: (float) Unix timestamp
+            config: Optional RunnableConfig for the chain execution
+            **kwargs: Additional arguments to pass to the chain
+
+        Returns:
+            LongMemoryPromptTemplate containing:
+                - current_memory: Updated memory content
+                - updated_block_id: ID of the updated memory block
+                - updated_time: Timestamp of the update
+
+        Raises:
+            TypeError: If input[history] is not list
+            ValueError: If current_memory_template is invalid
+        """
         assert self.chat_chain is not None
 
-        current_time = self._get_current_timestamp()
-        current_date = self._get_current_date()
+        current_time = self._get_current_timestamp(input)
+        current_date = self._get_current_date(input)
 
         new_items_str = await self._a_extract(
             input, current_time, current_date, config=config, **kwargs
         )
 
-        current_memory = input.get(self.current_memory_variable_key, [])
-        last_update = input.get(self.last_update_time_variable_key)
+        current_memory_template = self._get_current_memory_template(input)
+        current_block_id = input.get(self.current_block_id_variable_key, "")
+        current_memory = current_memory_template.current_memory
+        updated_time = current_memory_template.updated_time
 
-        time_kwargs = {
+        time_kwargs: dict[str, Any] = {
             "current_time": current_time,
             "current_date": current_date,
-            "last_update_time": last_update or "",
+            "last_update_time": updated_time,
         }
         merge_template = LongMemoryMergePromptTemplate.from_template(
             new_memory=new_items_str, current_memory=current_memory, **time_kwargs
@@ -206,5 +269,7 @@ class LongTermMemoryMaker(RunnableSerializable[dict[str, Any], LongMemoryPromptT
         )
 
         return LongMemoryPromptTemplate.from_template(
-            updated_memory=result.updated_memory,
+            current_memory=result.updated_memory,
+            updated_block_id=current_block_id,
+            updated_time=current_time,
         )
