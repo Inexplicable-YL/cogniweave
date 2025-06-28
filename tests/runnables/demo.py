@@ -15,11 +15,11 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from cogniweave.core.end_detector import EndDetector
-from cogniweave.history_stores import BaseHistoryStore as HistoryStore
+from cogniweave.core.history_stores import BaseHistoryStore as HistoryStore
+from cogniweave.core.time_splitter import TimeSplitter
 from cogniweave.llms import StringSingleTurnChat
 from cogniweave.runnables.end_detector import RunnableWithEndDetector
 from cogniweave.runnables.history_store import RunnableWithHistoryStore
-from cogniweave.time_splitter import TimeSplitter
 
 warnings.filterwarnings("ignore")
 

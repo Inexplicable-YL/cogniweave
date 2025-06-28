@@ -4,7 +4,7 @@ from cogniweave.core.prompt_values.values.tagger import (
     SHORT_TERM_MEMORY_TAGS_EN,
     SHORT_TERM_MEMORY_TAGS_ZH,
 )
-from cogniweave.prompt_values.base import MultilingualSystemPromptValue
+from cogniweave.prompt_values import MultilingualSystemPromptValue
 
 
 class ShortTermTagsPromptValue(MultilingualSystemPromptValue[Literal["zh", "en"]]):

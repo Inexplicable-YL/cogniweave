@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from cogniweave.core.prompt_values.end_detector import EndDetectorPromptValue
 from cogniweave.llms import PydanticSingleTurnChat
-from cogniweave.prompt_values.base import MultilingualSystemPromptValue
+from cogniweave.prompt_values import MultilingualSystemPromptValue
 from cogniweave.utils import get_model_from_env, get_provider_from_env
 
 if TYPE_CHECKING:

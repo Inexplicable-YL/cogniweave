@@ -6,7 +6,7 @@ from cogniweave.core.prompt_values.values.long_memory import (
     LONG_TERM_MEMORY_UPDATE_EN,
     LONG_TERM_MEMORY_UPDATE_ZH,
 )
-from cogniweave.prompt_values.base import MultilingualSystemPromptValue
+from cogniweave.prompt_values import MultilingualSystemPromptValue
 
 
 class LongTermMemoryExtractPromptValue(MultilingualSystemPromptValue[Literal["zh", "en"]]):

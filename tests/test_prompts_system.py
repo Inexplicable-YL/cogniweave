@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from cogniweave.core.prompts.short_memory import ShortMemoryPromptTemplate
-from cogniweave.prompts.message_templates import (
+from cogniweave.prompts import (
     MessageSegmentsPlaceholder,
     RichHumanMessagePromptTemplate,
 )

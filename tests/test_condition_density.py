@@ -2,7 +2,7 @@ import pathlib
 import sys
 from typing import Any
 
-from cogniweave.time_splitter import TimeSplitter
+from cogniweave.core.time_splitter import TimeSplitter
 
 sys.path.append(str(pathlib.Path(__file__).parent))
 

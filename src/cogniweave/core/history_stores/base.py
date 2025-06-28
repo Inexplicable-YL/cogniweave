@@ -10,8 +10,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from cogniweave.core.prompts import LongMemoryPromptTemplate, ShortMemoryPromptTemplate
-from cogniweave.history_stores.models import (
+from cogniweave.core.history_stores.models import (
     Base,
     ChatBlock,
     ChatBlockAttribute,
@@ -19,6 +18,7 @@ from cogniweave.history_stores.models import (
     User,
     UserAttribute,
 )
+from cogniweave.core.prompts import LongMemoryPromptTemplate, ShortMemoryPromptTemplate
 
 _USER_NAME_KEY: Literal["_user_name"] = "_user_name"
 _SHORT_MEMORY_KEY: Literal["_short_memory"] = "_short_memory"
