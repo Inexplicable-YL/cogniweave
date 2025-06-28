@@ -2,7 +2,7 @@ from typing import Any, Literal
 
 from cogniweave.prompt_values.base import MultilingualSystemPromptValue
 
-from .values.tagger import (
+from cogniweave.core.prompt_values.values.tagger import (
     SHORT_TERM_MEMORY_TAGS_EN,
     SHORT_TERM_MEMORY_TAGS_ZH,
 )

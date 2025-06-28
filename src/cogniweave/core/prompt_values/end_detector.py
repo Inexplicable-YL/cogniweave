@@ -2,7 +2,7 @@ from typing import Any, Literal
 
 from cogniweave.prompt_values.base import MultilingualSystemPromptValue
 
-from .values.end_detector import (
+from cogniweave.core.prompt_values.values.end_detector import (
     END_DETECTOR_PROMPT_EN,
     END_DETECTOR_PROMPT_ZH,
 )

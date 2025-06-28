@@ -2,7 +2,7 @@ from typing import Any, Literal
 
 from cogniweave.prompt_values.base import MultilingualSystemPromptValue
 
-from .values.summary import (
+from cogniweave.core.prompt_values.values.summary import (
     SHORT_TERM_MEMORY_SUMMARY_EN,
     SHORT_TERM_MEMORY_SUMMARY_ZH,
 )
