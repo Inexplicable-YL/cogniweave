@@ -1,47 +1,53 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 from typing_extensions import override
 
 from langchain_core.runnables import RunnableSerializable
-from langchain_core.runnables.config import RunnableConfig
 from pydantic import Field, model_validator
 
-from cogniweave.core.history_store import HistoryStore
+from cogniweave.core.history_store import HistoryStore  # noqa: TC001
 from cogniweave.core.memory_maker.long_memory import LongTermMemoryMaker
 from cogniweave.core.memory_maker.short_memory import ShortTermMemoryMaker
-from cogniweave.vector_stores import TagsVectorStore
+from cogniweave.vector_stores import TagsVectorStore  # noqa: TC001
+
+if TYPE_CHECKING:
+    from langchain_core.runnables.config import RunnableConfig
 
 
 class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
     """Manage generation and storage of short and long memories."""
 
-    history_store: HistoryStore = Field(default_factory=HistoryStore)
+    lang: Literal["zh", "en"] = Field(default="zh")
+
+    history_store: HistoryStore
     vector_store: TagsVectorStore[str]
     short_maker: ShortTermMemoryMaker | None = None
     long_maker: LongTermMemoryMaker | None = None
 
     @model_validator(mode="after")
-    def _build_makers(self) -> "SummaryMemoryMaker":
-        self.short_maker = self.short_maker or ShortTermMemoryMaker()
-        self.long_maker = self.long_maker or LongTermMemoryMaker()
+    def _build_makers(self) -> SummaryMemoryMaker:
+        self.short_maker = self.short_maker or ShortTermMemoryMaker(lang=self.lang)
+        self.long_maker = self.long_maker or LongTermMemoryMaker(lang=self.lang)
         return self
 
     def _get_recent_block_ids(self, session_id: str) -> list[str]:
         return self.history_store.get_session_block_ids(session_id, limit=4)
 
     @override
-    def invoke(self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any) -> None:
+    def invoke(
+        self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
+    ) -> None:
         session_id = input.get("session_id")
         if not isinstance(session_id, str):
             raise TypeError(f"session_id should be str, got {type(session_id)}")
 
         block_ids = self._get_recent_block_ids(session_id)
         if not block_ids:
-            return None
+            return
 
         # short memory on the second last block
-        if len(block_ids) >= 2:
+        if len(block_ids) >= 2:  # noqa: PLR2004
             short_block_id = block_ids[-2]
             if self.history_store.get_short_memory(short_block_id) is None:
                 history = self.history_store.get_block_history(short_block_id)
@@ -62,7 +68,7 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
                 self.vector_store.add_tags(short_mem.topic_tags, content=short_block_id)
 
         # long memory update using first three block ids
-        if len(block_ids) >= 3:
+        if len(block_ids) >= 3:  # noqa: PLR2004
             long_ids = block_ids[:-1]
             existing = self.history_store.get_long_memory(session_id)
             if existing is None or existing.updated_block_id not in long_ids:
@@ -81,7 +87,7 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
                 )
                 self.history_store.add_long_memory(long_mem, session_id=session_id)
 
-        return None
+        return
 
     async def _aget_recent_block_ids(self, session_id: str) -> list[str]:
         return await self.history_store.aget_session_block_ids(session_id, limit=4)
@@ -96,9 +102,9 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
 
         block_ids = await self._aget_recent_block_ids(session_id)
         if not block_ids:
-            return None
+            return
 
-        if len(block_ids) >= 2:
+        if len(block_ids) >= 2:  # noqa: PLR2004
             short_block_id = block_ids[-2]
             if await self.history_store.aget_short_memory(short_block_id) is None:
                 history = await self.history_store.aget_block_history(short_block_id)
@@ -118,7 +124,7 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
                 )
                 await self.vector_store.aadd_tags(short_mem.topic_tags, content=short_block_id)
 
-        if len(block_ids) >= 3:
+        if len(block_ids) >= 3:  # noqa: PLR2004
             long_ids = block_ids[:-1]
             existing = await self.history_store.aget_long_memory(session_id)
             if existing is None or existing.updated_block_id not in long_ids:
@@ -137,4 +143,4 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
                 )
                 await self.history_store.aadd_long_memory(long_mem, session_id=session_id)
 
-        return None
+        return
