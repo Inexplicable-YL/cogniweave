@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
 from pydantic import BaseModel, PrivateAttr
@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from cogniweave.history_store.models import (
+from cogniweave.core.prompts import LongMemoryPromptTemplate, ShortMemoryPromptTemplate
+from cogniweave.history_stores.models import (
     Base,
     ChatBlock,
     ChatBlockAttribute,
@@ -18,6 +19,10 @@ from cogniweave.history_store.models import (
     User,
     UserAttribute,
 )
+
+_USER_NAME_KEY: Literal["_user_name"] = "_user_name"
+_SHORT_MEMORY_KEY: Literal["_short_memory"] = "_short_memory"
+_LONG_MEMORY_KEY: Literal["_long_memory"] = "_long_memory"
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -1093,6 +1098,221 @@ class BaseHistoryStore(BaseModel):
             session_id, start_time=start_time, end_time=end_time, limit=limit, **kwargs
         )
         return [msg for msg, _ in pairs]
+
+    def add_user_name(self, user_name: str, *, session_id: str) -> None:
+        """Add user name to the history store.
+
+        Args:
+            user_name: User name to be stored.
+            session_id: Optional session/user ID. Uses user_name if not provided.
+
+        Return:
+            None: User name is persisted to the database.
+        """
+        self.add_user_attributes(
+            [UserAttributeData(type=_USER_NAME_KEY, value=user_name)], session_id=session_id
+        )
+
+    async def aadd_user_name(self, user_name: str, *, session_id: str) -> None:
+        """Async add user name to the history store.
+
+        Args:
+            user_name: User name to be stored.
+            session_id: Optional session/user ID. Uses user_name if not provided.
+
+        Return:
+            None: User name is persisted to the database.
+        """
+        await self.aadd_user_attributes(
+            [UserAttributeData(type=_USER_NAME_KEY, value=user_name)], session_id=session_id
+        )
+
+    def get_user_name(self, session_id: str) -> str | None:
+        """Get user name from the history store.
+
+        Args:
+            session_id: Optional session/user ID.
+
+        Return:
+            str | None: User name if found, None otherwise.
+        """
+        attributes = self.get_user_attributes(session_id, types=[_USER_NAME_KEY])
+        if attributes:
+            return attributes[0].get("value")
+        return None
+
+    async def aget_user_name(self, session_id: str) -> str | None:
+        """Async get user name from the history store.
+
+        Args:
+            session_id: Optional session/user ID.
+
+        Return:
+            str | None: User name if found, None otherwise.
+        """
+        attributes = await self.aget_user_attributes(session_id, types=[_USER_NAME_KEY])
+        if attributes:
+            return attributes[0].get("value")
+        return None
+
+    def add_short_memory(
+        self,
+        short_memory: ShortMemoryPromptTemplate,
+        *,
+        block_id: str,
+        block_ts: float,
+        session_id: str | None = None,
+    ) -> None:
+        """Add short memory data for a specific block.
+
+        This is a convenience method that combines message storage with
+        short memory attribute storage.
+
+        Args:
+            short_memory: Short memory prompt template instance.
+            block_id: Unique identifier for the message block.
+            block_ts: Unix timestamp for the block start time.
+            session_id: Optional session/user ID. Uses block_id if not provided.
+
+        Return:
+            None: Messages and attributes are persisted to the database.
+        """
+        short_memory_data = short_memory.to_template_dict()
+
+        self.add_block_attributes(
+            [BlockAttributeData(type=_SHORT_MEMORY_KEY, value=short_memory_data)],
+            block_id=block_id,
+            block_ts=block_ts,
+            session_id=session_id,
+        )
+
+    async def aadd_short_memory(
+        self,
+        short_memory: ShortMemoryPromptTemplate,
+        *,
+        block_id: str,
+        block_ts: float,
+        session_id: str | None = None,
+    ) -> None:
+        """Async add short memory data for a specific block.
+
+        This is a convenience method that combines message storage with
+        short memory attribute storage.
+
+        Args:
+            short_memory: Short memory prompt template instance.
+            block_id: Unique identifier for the message block.
+            block_ts: Unix timestamp for the block start time.
+            session_id: Optional session/user ID. Uses block_id if not provided.
+
+        Return:
+            None: Messages and attributes are persisted to the database."""
+        short_memory_data = short_memory.to_template_dict()
+
+        await self.aadd_block_attributes(
+            [BlockAttributeData(type=_SHORT_MEMORY_KEY, value=short_memory_data)],
+            block_id=block_id,
+            block_ts=block_ts,
+            session_id=session_id,
+        )
+
+    def get_short_memory(self, block_id: str) -> ShortMemoryPromptTemplate | None:
+        """Get short memory data for a specific block.
+
+        This is a convenience method that wraps get_block_attributes
+        to specifically retrieve short memory data.
+
+        Args:
+            block_id: The ID of the block to query.
+
+        Return:
+            ShortMemoryPromptTemplate | None: Short memory data if found, None otherwise.
+        """
+        attributes = self.get_block_attributes(block_id, types=[_SHORT_MEMORY_KEY])
+        if attributes:
+            return ShortMemoryPromptTemplate.load(attributes[0].get("value"))
+        return None
+
+    async def aget_short_memory(self, block_id: str) -> ShortMemoryPromptTemplate | None:
+        """Async get short memory data for a specific block.
+
+        This is a convenience method that wraps get_block_attributes
+        to specifically retrieve short memory data.
+
+        Args:
+            block_id: The ID of the block to query.
+
+        Return:
+            ShortMemoryPromptTemplate | None: Short memory data if found, None otherwise.
+        """
+        attributes = await self.aget_block_attributes(block_id, types=[_SHORT_MEMORY_KEY])
+        if attributes:
+            return ShortMemoryPromptTemplate.load(attributes[0].get("value"))
+        return None
+
+    def add_long_memory(self, long_memory: LongMemoryPromptTemplate, *, session_id: str) -> None:
+        """Add long memory data for a specific block.
+
+        Args:
+            long_memory: Long memory prompt template instance.
+            session_id: session/user ID.
+
+        Return:
+            None: Messages and attributes are persisted to the database.
+        """
+        long_memory_data = long_memory.to_template_dict()
+
+        self.add_user_attributes(
+            [UserAttributeData(type=_LONG_MEMORY_KEY, value=long_memory_data)],
+            session_id=session_id,
+        )
+
+    async def aadd_long_memory(
+        self, long_memory: LongMemoryPromptTemplate, *, session_id: str
+    ) -> None:
+        """Async add long memory data for a specific block.
+
+        Args:
+            long_memory: Long memory prompt template instance.
+            session_id: session/user ID.
+
+        Return:
+            None: Messages and attributes are persisted to the database.
+        """
+        long_memory_data = long_memory.to_template_dict()
+
+        await self.aadd_user_attributes(
+            [UserAttributeData(type=_LONG_MEMORY_KEY, value=long_memory_data)],
+            session_id=session_id,
+        )
+
+    def get_long_memory(self, session_id: str) -> LongMemoryPromptTemplate | None:
+        """Get long memory data for a specific block.
+
+        Args:
+            session_id: session/user ID.
+
+        Return:
+            LongMemoryPromptTemplate | None: Long memory data if found, None otherwise.
+        """
+        attributes = self.get_user_attributes(session_id, types=[_LONG_MEMORY_KEY])
+        if attributes:
+            return LongMemoryPromptTemplate.load(attributes[0].get("value"))
+        return None
+
+    async def aget_long_memory(self, session_id: str) -> LongMemoryPromptTemplate | None:
+        """Async get long memory data for a specific block.
+
+        Args:
+            session_id: session/user ID.
+
+        Return:
+            LongMemoryPromptTemplate | None: Long memory data if found, None otherwise.
+        """
+        attributes = await self.aget_user_attributes(session_id, types=[_LONG_MEMORY_KEY])
+        if attributes:
+            return LongMemoryPromptTemplate.load(attributes[0].get("value"))
+        return None
 
 
 def get_datetime_from_timestamp(timestamp: float | None) -> datetime | None:

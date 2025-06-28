@@ -6,9 +6,9 @@ from typing_extensions import override
 from langchain_core.runnables import RunnableSerializable
 from pydantic import Field, model_validator
 
-from cogniweave.core.history_store import HistoryStore  # noqa: TC001
 from cogniweave.core.memory_maker.long_memory import LongTermMemoryMaker
 from cogniweave.core.memory_maker.short_memory import ShortTermMemoryMaker
+from cogniweave.history_stores import BaseHistoryStore  # noqa: TC001
 from cogniweave.vector_stores import TagsVectorStore  # noqa: TC001
 
 if TYPE_CHECKING:
@@ -20,7 +20,7 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
 
     lang: Literal["zh", "en"] = Field(default="zh")
 
-    history_store: HistoryStore
+    history_store: BaseHistoryStore
     vector_store: TagsVectorStore[str]
     short_maker: ShortTermMemoryMaker | None = None
     long_maker: LongTermMemoryMaker | None = None
