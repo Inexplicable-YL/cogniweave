@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 
 from cogniweave.llms import OpenAIEmbeddings
-from cogniweave.vector_stores.tags import TagsVector
+from cogniweave.vector_stores.tags import TagsVectorStore
 
 
 # 定义测试用的 Pydantic 模型
@@ -11,7 +11,7 @@ class ContentItem(BaseModel):
 
 
 # 创建两种类型的 TagsVector 实例
-str_vector = TagsVector[str](
+str_vector = TagsVectorStore[str](
     folder_path="./.cache/str_cache",
     index_name="index-str",
     embeddings=OpenAIEmbeddings(),
@@ -19,7 +19,7 @@ str_vector = TagsVector[str](
     auto_save=True,
 )
 
-model_vector = TagsVector[ContentItem](
+model_vector = TagsVectorStore[ContentItem](
     folder_path="./.cache/model_cache",
     index_name="index-model",
     embeddings=OpenAIEmbeddings(),
@@ -60,7 +60,7 @@ model_samples = [
 ]
 
 
-def run_tests(vector: TagsVector, samples: list[tuple], vector_type: str) -> None:
+def run_tests(vector: TagsVectorStore, samples: list[tuple], vector_type: str) -> None:
     """通用测试运行函数"""
     print(f"\n===== 测试 {vector_type} 类型 =====")
 

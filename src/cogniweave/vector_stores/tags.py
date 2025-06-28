@@ -30,7 +30,7 @@ class TagDocumentId(TypedDict):
     file_ids: list[str]
 
 
-class TagsVector(Generic[MetaType]):
+class TagsVectorStore(Generic[MetaType]):
     vector: LazyFAISS
 
     folder_path: str
@@ -115,9 +115,7 @@ class TagsVector(Generic[MetaType]):
         unload_tags = {}
         for _hash, _tag in zip(hashs, tags, strict=True):
             if isinstance(tag_doc := self.vector.docstore.search(_hash), Document):
-                if doc_id not in (
-                    _id_list := cast("TagDocumentId", tag_doc.metadata)["file_ids"]
-                ):
+                if doc_id not in (_id_list := cast("TagDocumentId", tag_doc.metadata)["file_ids"]):
                     _id_list.append(doc_id)
             else:
                 unload_tags[_hash] = _tag
@@ -153,9 +151,7 @@ class TagsVector(Generic[MetaType]):
         unload_tags = {}
         for _hash, _tag in zip(hashs, tags, strict=True):
             if isinstance(tag_doc := self.vector.docstore.search(_hash), Document):
-                if doc_id not in (
-                    _id_list := cast("TagDocumentId", tag_doc.metadata)["file_ids"]
-                ):
+                if doc_id not in (_id_list := cast("TagDocumentId", tag_doc.metadata)["file_ids"]):
                     _id_list.append(doc_id)
             else:
                 unload_tags[_hash] = _tag
