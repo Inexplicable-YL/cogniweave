@@ -1,7 +1,10 @@
 from datetime import UTC, datetime
 
 from cogniweave.core.prompts.short_memory import ShortMemoryPromptTemplate
-from cogniweave.prompts import MessageSegmentsPlaceholder, RichHumanMessagePromptTemplate
+from cogniweave.prompts.message_templates import (
+    MessageSegmentsPlaceholder,
+    RichHumanMessagePromptTemplate,
+)
 
 
 def _create_memory(ts: datetime, summary: str) -> ShortMemoryPromptTemplate:

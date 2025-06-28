@@ -12,7 +12,7 @@ from cogniweave.core.prompt_values.summary import ShortTermMemoryPromptValue
 from cogniweave.core.prompt_values.tagger import ShortTermTagsPromptValue
 from cogniweave.core.prompts.short_memory import ShortMemoryPromptTemplate
 from cogniweave.llms import PydanticSingleTurnChat, StringSingleTurnChat
-from cogniweave.prompt_values import MultilingualSystemPromptValue
+from cogniweave.prompt_values.base import MultilingualSystemPromptValue
 from cogniweave.utils import get_model_from_env, get_provider_from_env
 
 

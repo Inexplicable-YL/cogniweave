@@ -4,7 +4,7 @@ from typing_extensions import override
 from langchain_core.runnables.config import RunnableConfig
 from pydantic import Field
 
-from cogniweave.time_splitter import BaseTimeSplitter
+from cogniweave.time_splitter.base import BaseTimeSplitter
 
 from .manager import ConditionDensityManager, DensityStrategy
 

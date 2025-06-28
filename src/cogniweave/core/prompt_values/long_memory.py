@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from cogniweave.prompt_values import MultilingualSystemPromptValue
+from cogniweave.prompt_values.base import MultilingualSystemPromptValue
 
 from .values.long_memory import (
     LONG_TERM_MEMORY_EXTRACT_EN,

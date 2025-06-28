@@ -17,7 +17,7 @@ from cogniweave.core.prompts.long_memory import (
     LongMemoryPromptTemplate,
 )
 from cogniweave.llms import PydanticSingleTurnChat
-from cogniweave.prompt_values import MultilingualSystemPromptValue
+from cogniweave.prompt_values.base import MultilingualSystemPromptValue
 from cogniweave.utils import get_model_from_env, get_provider_from_env
 
 
