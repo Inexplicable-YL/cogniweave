@@ -1,13 +1,13 @@
 from .message_templates import (
     MessageSegmentsPlaceholder,
-    RichHumanMessagePromptTemplate,
     RichAIMessagePromptTemplate,
+    RichHumanMessagePromptTemplate,
     RichSystemMessagePromptTemplate,
 )
 
 __all__ = [
     "MessageSegmentsPlaceholder",
-    "RichHumanMessagePromptTemplate",
     "RichAIMessagePromptTemplate",
+    "RichHumanMessagePromptTemplate",
     "RichSystemMessagePromptTemplate",
 ]
