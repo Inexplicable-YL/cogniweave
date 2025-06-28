@@ -23,7 +23,6 @@ load_dotenv()
 def create_test_conversation() -> dict[str, Any]:
     """Create a test conversation."""
     return {
-        "name": "言灵",
         "history": [
             HumanMessage("我最近在学习 React，遇到了 useEffect 的问题。"),
             AIMessage("useEffect 确实是 React 中比较复杂的概念。你遇到了什么具体问题？"),  # noqa: RUF001
@@ -42,7 +41,6 @@ def create_test_conversation() -> dict[str, Any]:
 def create_art_conversation() -> dict[str, Any]:
     """Create another test conversation (art topic)."""
     return {
-        "name": "小梦",
         "history": [
             HumanMessage("我刚画了一张初音未来，给你看看。"),
             AIMessage("哇，好漂亮的画！你画得真细腻，特别是头发的光泽处理得很好。"),

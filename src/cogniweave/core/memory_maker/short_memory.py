@@ -89,10 +89,8 @@ class ShortTermMemoryMaker(RunnableSerializable[dict[str, Any], ShortMemoryPromp
         if not isinstance(history, list):
             raise TypeError(f"Expected a list for {self.history_variable_key}, got {type(history)}")
         return (
-            f"<UserName>{name}</UserName>\n"
-            if name
-            else ""
-            f"<ChatHistory>\n{get_buffer_string(history, human_prefix='[User]', ai_prefix='[Assistant]')}\n</ChatHistory>"
+            (f"<UserName>{name}</UserName>\n" if name else "")
+            + f"<ChatHistory>\n{get_buffer_string(history, human_prefix='[User]', ai_prefix='[Assistant]')}\n</ChatHistory>"
         )
 
     def _get_current_datetime(self, input: dict[str, Any]) -> datetime:
