@@ -9,7 +9,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from cogniweave.core.memory_maker.long_memory import LongTermMemoryMaker
-from cogniweave.core.prompts.long_memory import LongMemoryPromptTemplate, _format_memory
+from cogniweave.core.prompts.long_memory import LongMemoryPromptTemplate
 
 console = Console()
 
@@ -65,72 +65,39 @@ def print_history(history: list[BaseMessage]) -> None:
     console.print(Panel(table, title="Test Data", border_style="blue"))
 
 
-def test_extraction(memory_maker: LongTermMemoryMaker, history: list[BaseMessage]) -> bool:
-    """Test memory extraction functionality."""
-    console.print(Panel("Step 1: Test Memory Extraction", style="bold green", border_style="green"))
-    try:
-        extracted_list = memory_maker._extract(
-            {"history": history},
-            memory_maker._get_current_timestamp(),
-            memory_maker._get_current_date(),
-        )
-
-        console.print("[bold]Original extraction result:[/]")
-        console.print(Syntax(str(extracted_list), "python", theme="monokai"))
-
-        console.print(
-            f"\n[bold green]✓ Successfully extracted {len(extracted_list)} memory items:[/]"
-        )
-        console.print(
-            Panel(_format_memory(extracted_list), title="Extracted Memories", border_style="blue")
-        )
-    except Exception as e:
-        console.print(
-            Panel(
-                f"[bold red]Extraction failed: {e}\nError type: {type(e).__name__}[/]",
-                title="Error",
-                border_style="red",
-            )
-        )
-        import traceback
-
-        console.print(Syntax(traceback.format_exc(), "python", theme="monokai"))
-        return False
-    else:
-        return True
-
-
 def test_complete_process(
     memory_maker: LongTermMemoryMaker, history: list[BaseMessage]
 ) -> LongMemoryPromptTemplate | None:
-    """Test complete memory update process."""
+    """Test creating and updating long-term memory."""
     console.print(
         Panel(
-            "Step 2: Test Complete Memory Update Process", style="bold green", border_style="green"
+            "Step 1: Test Complete Memory Update Process", style="bold green", border_style="green"
         )
     )
     try:
-        input_data = {
-            "history": history,
-            "current_long_term_memory": [
-                "2025-06-17（2天前）得知用戶對程式設計有興趣，想學習新技術",
-                "2025-06-16（3天前）得知用戶提到喜歡閱讀技術書籍",
-            ],
-            "last_update_time": "2025-06-17 15:30",
-        }
-        result = memory_maker.invoke(input_data)
-
-        console.print("[bold green]✓ Memory updated successfully![/]")
-        console.print(
-            f"[bold]Number of updated memory items:[/] [cyan]{len(result.current_memory)}[/]"
-        )
-
+        console.print("[bold]First invoke without current memory[/]")
+        first_result = memory_maker.invoke({"history": history})
+        console.print("[bold green]✓ Created new memory from history[/]")
         console.print(
             Panel(
-                result.format(),
-                title="Complete Memory Content",
+                first_result.format(),
+                title="First Memory Content",
                 border_style="blue",
-                subtitle=f"Total {len(result.current_memory)} items",
+                subtitle=f"Total {len(first_result.current_memory)} items",
+            )
+        )
+
+        console.print("[bold]Second invoke with previous memory[/]")
+        second_result = memory_maker.invoke(
+            {"history": history, "current_memory_template": first_result}
+        )
+        console.print("[bold green]✓ Memory updated successfully![/]")
+        console.print(
+            Panel(
+                second_result.format(),
+                title="Updated Memory Content",
+                border_style="blue",
+                subtitle=f"Total {len(second_result.current_memory)} items",
             )
         )
     except Exception as e:
@@ -146,7 +113,7 @@ def test_complete_process(
         console.print(Syntax(traceback.format_exc(), "python", theme="monokai"))
         return None
     else:
-        return result
+        return second_result
 
 
 def test_async_complete_process(
@@ -155,7 +122,7 @@ def test_async_complete_process(
     """Test asynchronous version of memory update."""
     console.print(
         Panel(
-            "Step 3: Test Asynchronous Complete Memory Update Process",
+            "Step 2: Test Asynchronous Complete Memory Update Process",
             style="bold green",
             border_style="green",
         )
@@ -163,11 +130,14 @@ def test_async_complete_process(
     try:
         input_data = {
             "history": history,
-            "current_long_term_memory": [
-                "2025-06-17（2天前）得知用戶對程式設計有興趣，想學習新技術",
-                "2025-06-16（3天前）得知用戶提到喜歡閱讀技術書籍",
-            ],
-            "last_update_time": "2025-06-17 15:30",
+            "current_memory_template": LongMemoryPromptTemplate.from_template(
+                current_memory=[
+                    "2025-06-17（2天前）得知用戶對程式設計有興趣，想學習新技術",
+                    "2025-06-16（3天前）得知用戶提到喜歡閱讀技術書籍",
+                ],
+                updated_block_id="",
+                updated_time="2025-06-17 15:30",
+            ),
         }
 
         async def test_async() -> LongMemoryPromptTemplate:
@@ -232,9 +202,6 @@ def main() -> None:
     history = prepare_test_history()
     memory_maker = LongTermMemoryMaker(lang="zh")
     print_history(history)
-
-    if not test_extraction(memory_maker, history):
-        return
 
     result = test_complete_process(memory_maker, history)
     if not result:
