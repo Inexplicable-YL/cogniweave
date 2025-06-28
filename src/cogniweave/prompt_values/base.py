@@ -18,7 +18,7 @@ from langchain_core.prompts.message import (
 from langchain_core.prompts.string import PromptTemplateFormat
 from pydantic import Field
 
-from cogniweave.prompts import RichSystemMessagePromptTemplate
+from cogniweave.prompts.message_templates import RichSystemMessagePromptTemplate
 from cogniweave.typing import MessageLike, SupportLangType
 
 SystemMessageLike = SystemMessage | SystemMessagePromptTemplate | RichSystemMessagePromptTemplate

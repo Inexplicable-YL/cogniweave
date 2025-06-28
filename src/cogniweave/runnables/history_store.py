@@ -26,7 +26,7 @@ from langchain_core.utils.pydantic import create_model_v2
 from pydantic import BaseModel, PrivateAttr
 
 from cogniweave.history_store import BaseHistoryStore  # noqa: TC001
-from cogniweave.time_splitter import BaseTimeSplitter  # noqa: TC001
+from cogniweave.time_splitter.base import BaseTimeSplitter  # noqa: TC001
 
 if TYPE_CHECKING:
     from langchain_core.runnables.config import RunnableConfig
