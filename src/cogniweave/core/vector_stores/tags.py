@@ -330,7 +330,7 @@ class TagsVectorStore(Generic[MetaType]):
                 - float: similarity score (lower means more similar, usually L2 distance)
         """
         tag_docs_and_scores = self.vector.similarity_search_with_score_by_vector(
-            embedding, k=fetch_k if filter is None else fetch_k * 2, **kwargs
+            embedding, k=fetch_k if filter is None else fetch_k * 2
         )
         relevance_score_fn = self.vector._select_relevance_score_fn()
         if relevance_score_fn is None:
@@ -369,6 +369,9 @@ class TagsVectorStore(Generic[MetaType]):
 
         if kwargs.get("extract_high_score", False):
             return self._extract_high_score(docs, k=k, **kwargs)
+        if "score_threshold" in kwargs:
+            score_threshold = kwargs["score_threshold"]
+            docs = [doc for doc in docs if doc[1] > score_threshold]
         return docs[:k]
 
     async def asimilarity_search_with_score_by_vector(
