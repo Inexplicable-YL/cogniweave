@@ -52,9 +52,6 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
     session_factory_config: Sequence[ConfigurableFieldSpec]
 
     _memory_maker: SummaryMemoryMaker = PrivateAttr()
-    _input_messages_cache: dict[str, list[tuple[BaseMessage, float]]] = PrivateAttr(
-        default_factory=dict
-    )
 
     def __init__(
         self,
@@ -134,7 +131,7 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
             history_messages_key=history_messages_key,
             short_memory_key=short_memory_key,
             long_memory_key=long_memory_key,
-            history_factory_config=_config_specs,
+            session_factory_config=_config_specs,
             **kwargs,
         )
         self._history_chain = short_memory_chain
