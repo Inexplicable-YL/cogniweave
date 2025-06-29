@@ -12,10 +12,10 @@ from rich.table import Table
 
 from cogniweave.core.history_stores import BaseHistoryStore
 from cogniweave.core.memory_maker.summary import SummaryMemoryMaker
+from cogniweave.core.prompts.long_memory import LongMemoryPromptTemplate
+from cogniweave.core.prompts.short_memory import ShortMemoryPromptTemplate
 from cogniweave.core.vector_stores import TagsVectorStore
 from cogniweave.llms import OpenAIEmbeddings
-from cogniweave.core.prompts.short_memory import ShortMemoryPromptTemplate
-from cogniweave.core.prompts.long_memory import LongMemoryPromptTemplate
 
 console = Console()
 
@@ -41,9 +41,11 @@ def check_api_key() -> bool:
 def create_block1() -> list[Any]:
     return [
         HumanMessage("我最近在学习 React，遇到了 useEffect 的问题。"),
-        AIMessage("useEffect 确实是 React 中比较复杂的概念。你遇到了什么具体问题？"),
+        AIMessage("useEffect 确实是 React 中比较复杂的概念。你遇到了什么具体问题?"),
         HumanMessage("就是不知道什么时候该用依赖数组。"),
-        AIMessage("依赖数组决定了 effect 何时重新执行。空数组表示只在组件挂载时执行一次，有依赖项则在依赖项变化时重新执行。"),
+        AIMessage(
+            "依赖数组决定了 effect 何时重新执行。空数组表示只在组件挂载时执行一次，有依赖项则在依赖项变化时重新执行。"
+        ),
     ]
 
 
@@ -59,16 +61,18 @@ def create_block2() -> list[Any]:
 def create_block3() -> list[Any]:
     return [
         HumanMessage("我最近開始學習 Python 程式設計"),
-        AIMessage("太好了！Python 是一個很棒的程式語言，適合初學者。你有什麼特別想學的方向嗎？"),
+        AIMessage("太好了! Python 是一個很棒的程式語言，適合初學者。你有什麼特別想學的方向嗎?"),
         HumanMessage("我對機器學習很有興趣，想用 Python 來做 AI 專案"),
-        AIMessage("機器學習確實是 Python 的強項！建議你可以從 scikit-learn 開始，然後再學習 TensorFlow 或 PyTorch。"),
+        AIMessage(
+            "機器學習確實是 Python 的強項！建議你可以從 scikit-learn 開始，然後再學習 TensorFlow 或 PyTorch。"
+        ),
     ]
 
 
 def create_block4() -> list[Any]:
     return [
         HumanMessage("最近在看一部日剧，非常好看。"),
-        AIMessage("是什么剧？推荐我看看呗。"),
+        AIMessage("是什么剧? 推荐我看看呗。"),
     ]
 
 
@@ -103,7 +107,9 @@ def print_memory(title: str, memory: ShortMemoryPromptTemplate | LongMemoryPromp
 
 
 def test_sync(maker: SummaryMemoryMaker, session_id: str) -> bool:
-    console.print(Panel("Step 1: Test synchronous summary", style="bold green", border_style="green"))
+    console.print(
+        Panel("Step 1: Test synchronous summary", style="bold green", border_style="green")
+    )
     try:
         maker.invoke({"session_id": session_id})
         console.print("[bold green]✓ Synchronous version executed successfully![/]")
@@ -131,7 +137,9 @@ def test_sync(maker: SummaryMemoryMaker, session_id: str) -> bool:
 
 
 async def test_async(maker: SummaryMemoryMaker, session_id: str) -> bool:
-    console.print(Panel("Step 2: Test asynchronous summary", style="bold green", border_style="green"))
+    console.print(
+        Panel("Step 2: Test asynchronous summary", style="bold green", border_style="green")
+    )
     try:
         await maker.ainvoke({"session_id": session_id})
         console.print("[bold green]✓ Asynchronous version executed successfully![/]")

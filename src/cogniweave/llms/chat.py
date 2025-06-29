@@ -124,7 +124,6 @@ class SingleTurnChatBase(
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
     ) -> Iterator[Output]:
         """Streaming call to the single-turn chat model."""
-        print(input, config, kwargs)
         assert self.chain is not None
         yield from self.chain.stream(input, config=config, **kwargs)
 
