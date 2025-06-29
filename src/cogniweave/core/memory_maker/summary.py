@@ -68,7 +68,11 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
                     block_ts=ts,
                     session_id=session_id,
                 )
-                self.vector_store.add_tags(short_mem.topic_tags, content=short_block_id)
+                self.vector_store.add_tags(
+                    short_mem.topic_tags,
+                    content=short_block_id,
+                    metadata={"session_id": session_id},
+                )
 
         # long memory update using first three block ids
         if len(block_ids) >= 3:  # noqa: PLR2004
@@ -125,7 +129,11 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
                     block_ts=ts,
                     session_id=session_id,
                 )
-                await self.vector_store.aadd_tags(short_mem.topic_tags, content=short_block_id)
+                await self.vector_store.aadd_tags(
+                    short_mem.topic_tags,
+                    content=short_block_id,
+                    metadata={"session_id": session_id},
+                )
 
         if len(block_ids) >= 3:  # noqa: PLR2004
             long_ids = block_ids[:-1]

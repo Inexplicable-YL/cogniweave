@@ -5,6 +5,7 @@ import shutil
 import sys
 import textwrap
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -13,8 +14,6 @@ from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
-
-from pathlib import Path
 
 from cogniweave.quickstart import DEF_FOLDER_PATH, build_pipeline
 
@@ -119,7 +118,3 @@ def main() -> None:
         demo(args.session, index=args.index, folder=Path(args.folder))
     else:
         parser.print_help()
-
-
-if __name__ == "__main__":
-    main()

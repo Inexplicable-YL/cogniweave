@@ -264,7 +264,11 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
                 short_memory_ids = [
                     data.content
                     for data in self.vector_store.similarity_search(
-                        input_message.content, k=2, score_threshold=2, extract_high_score=True
+                        input_message.content,
+                        k=2,
+                        filter={"session_id": session_id},
+                        score_threshold=2,
+                        extract_high_score=True,
                     )
                 ]
                 short_memorys = (
@@ -307,7 +311,11 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
                 short_memory_ids = [
                     data.content
                     for data in await self.vector_store.asimilarity_search(
-                        input_msg.content, k=2, score_threshold=2, extract_high_score=True
+                        input_msg.content,
+                        k=2,
+                        filter={"session_id": session_id},
+                        score_threshold=2,
+                        extract_high_score=True,
                     )
                 ]
                 if not short_memory_ids:
