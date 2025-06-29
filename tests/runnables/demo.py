@@ -17,24 +17,53 @@ from rich.panel import Panel
 from cogniweave.core.end_detector import EndDetector
 from cogniweave.core.history_stores import BaseHistoryStore as HistoryStore
 from cogniweave.core.time_splitter import TimeSplitter
-from cogniweave.llms import StringSingleTurnChat
+from cogniweave.core.vector_stores import TagsVectorStore
+from cogniweave.llms import OpenAIEmbeddings, StringSingleTurnChat
+from cogniweave.prompts import MessageSegmentsPlaceholder, RichSystemMessagePromptTemplate
 from cogniweave.runnables.end_detector import RunnableWithEndDetector
 from cogniweave.runnables.history_store import RunnableWithHistoryStore
+from cogniweave.runnables.memory_maker import RunnableWithMemoryMaker
 
 warnings.filterwarnings("ignore")
 
+embeddings = OpenAIEmbeddings()
 
-db_path = Path("test1.sqlite")
+db_path = Path("./.cache/history_cache/test1.sqlite")
 history_store = HistoryStore(db_url=f"sqlite:///{db_path}")
+
+vector_store = TagsVectorStore(
+    folder_path="./.cache/model_cache",
+    index_name="test1",
+    embeddings=embeddings,
+    allow_dangerous_deserialization=True,
+    auto_save=True,
+)
 
 agent = StringSingleTurnChat(
     lang="zh",
     provider="deepseek",
     model="deepseek-chat",
-    contexts=[MessagesPlaceholder(variable_name="history", optional=True)],
+    contexts=[
+        RichSystemMessagePromptTemplate.from_template(
+            [
+                "你是一个AI助手，你叫CogniWeave，你的任务是回答用户的问题。\n",
+                MessageSegmentsPlaceholder(variable_name="long_memory"),
+            ]
+        ),
+        MessagesPlaceholder(variable_name="history", optional=True),
+    ],
+)
+runnable_with_memory_maker = RunnableWithMemoryMaker(
+    agent,
+    history_store=history_store,
+    vector_store=vector_store,
+    input_messages_key="input",
+    history_messages_key="history",
+    short_memory_key="short_memory",
+    long_memory_key="long_memory",
 )
 runnable_with_end_detector = RunnableWithEndDetector(
-    agent,
+    runnable_with_memory_maker,
     end_detector=EndDetector(),
     default={"output": []},
     history_messages_key="history",

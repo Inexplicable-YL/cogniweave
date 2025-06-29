@@ -19,7 +19,7 @@ from langchain_core.runnables.utils import (
     get_unique_config_specs,
 )
 from langchain_core.utils.pydantic import create_model_v2
-from pydantic import BaseModel, PrivateAttr
+from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from cogniweave.core.history_stores import BaseHistoryStore  # noqa: TC001
 from cogniweave.core.memory_maker import SummaryMemoryMaker
@@ -52,6 +52,8 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
     session_factory_config: Sequence[ConfigurableFieldSpec]
 
     _memory_maker: SummaryMemoryMaker = PrivateAttr()
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(
         self,

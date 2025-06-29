@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from typing_extensions import override
 
 from langchain_core.runnables import RunnableSerializable
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from cogniweave.core.history_stores import BaseHistoryStore  # noqa: TC001
 from cogniweave.core.memory_maker.long_memory import LongTermMemoryMaker
@@ -22,6 +22,9 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
 
     history_store: BaseHistoryStore
     vector_store: TagsVectorStore[str]
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     short_maker: ShortTermMemoryMaker | None = None
     long_maker: LongTermMemoryMaker | None = None
 

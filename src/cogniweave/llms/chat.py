@@ -123,6 +123,8 @@ class SingleTurnChatBase(
     def stream(
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
     ) -> Iterator[Output]:
+        """Streaming call to the single-turn chat model."""
+        print(input, config, kwargs)
         assert self.chain is not None
         yield from self.chain.stream(input, config=config, **kwargs)
 
@@ -130,6 +132,7 @@ class SingleTurnChatBase(
     async def astream(
         self, input: dict[str, Any], config: RunnableConfig | None = None, **kwargs: Any
     ) -> AsyncIterator[Output]:
+        """Asynchronous streaming call to the single-turn chat model."""
         assert self.chain is not None
         async for chunk in self.chain.astream(input, config=config, **kwargs):
             yield chunk
