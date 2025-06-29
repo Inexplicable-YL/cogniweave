@@ -182,21 +182,6 @@ def flatten_exception_group(
             yield exc
 
 
-def handle_exception(
-    # msg: str,
-    # level: Literal["debug", "info", "warning", "error", "critical"] = "error",
-    # **kwargs: Any,
-) -> Callable[[BaseExceptionGroup[Exception]], None]:
-    """递归遍历 BaseExceptionGroup ，并输出日志"""
-
-    def _handle(exc_group: BaseExceptionGroup[Exception]) -> None:
-        for exc in flatten_exception_group(exc_group):
-            pass
-            # 干啥我也不知道，再说吧
-
-    return _handle
-
-
 def remove_not_given_params(**kwargs: Any) -> dict[str, Any]:
     """Remove ``NotGiven`` parameters from ``kwargs``."""
 

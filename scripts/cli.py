@@ -5,10 +5,7 @@ import shutil
 import sys
 import textwrap
 import warnings
-from typing import Any, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AIMessage, HumanMessage
 from rich.align import Align
@@ -17,8 +14,12 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from cogniweave.quickstart import build_pipeline, DEF_DB
 from cogniweave.core.history_stores import BaseHistoryStore as HistoryStore
+from cogniweave.quickstart import DEF_FOLDER_PATH, build_pipeline
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 
 warnings.filterwarnings("ignore")
 
@@ -52,8 +53,8 @@ def _print_output(console: Console, message: str) -> None:
 
 
 def demo(session_id: str) -> None:
-    pipeline = build_pipeline(session_id=session_id)
-    history_store = HistoryStore(db_url=f"sqlite:///{DEF_DB}")
+    pipeline = build_pipeline()
+    history_store = HistoryStore(db_url=f"sqlite:///{DEF_FOLDER_PATH}")
     console = Console()
 
     nearly_history = history_store.get_session_history(session_id, limit=10)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from langchain_core.messages import MessagesPlaceholder
+from langchain_core.prompts import MessagesPlaceholder
 
 from cogniweave.core.end_detector import EndDetector
 from cogniweave.core.history_stores import BaseHistoryStore as HistoryStore
@@ -13,42 +13,54 @@ from cogniweave.prompts import MessageSegmentsPlaceholder, RichSystemMessageProm
 from cogniweave.runnables.end_detector import RunnableWithEndDetector
 from cogniweave.runnables.history_store import RunnableWithHistoryStore
 from cogniweave.runnables.memory_maker import RunnableWithMemoryMaker
+from cogniweave.utils import get_model_from_env, get_provider_from_env
 
-DEF_DB = Path("./.cache/history_cache/demo.sqlite")
-DEF_MODEL_CACHE = Path("./.cache/model_cache")
+DEF_FOLDER_PATH = Path("./.cache/")
 
 
-def create_embeddings() -> OpenAIEmbeddings:
+def create_embeddings(
+    provider: str | None = None,
+    model: str | None = None,
+) -> OpenAIEmbeddings:
     """Create default embeddings instance."""
-    return OpenAIEmbeddings()
+    return OpenAIEmbeddings(
+        provider=get_provider_from_env("EMBEDDINGS_MODEL", default=provider or "openai")(),
+        model=get_model_from_env("EMBEDDINGS_MODEL", default=model or "text-embedding-ada-002")(),
+    )
 
 
-def create_history_store(db_path: str | Path = DEF_DB) -> HistoryStore:
+def create_history_store(
+    *, index_name: str = "demo", folder_path: str | Path = DEF_FOLDER_PATH
+) -> HistoryStore:
     """Create a history store backed by a SQLite database."""
-    return HistoryStore(db_url=f"sqlite:///{Path(db_path)}")
+    return HistoryStore(db_url=f"sqlite:///{folder_path}/{index_name}.sqlite")
 
 
 def create_vector_store(
-    session_id: str,
     embeddings: OpenAIEmbeddings,
-    cache_path: str | Path = DEF_MODEL_CACHE,
+    *,
+    index_name: str = "demo",
+    folder_path: str | Path = DEF_FOLDER_PATH,
 ) -> TagsVectorStore:
     """Create a vector store for long term memory."""
     return TagsVectorStore(
-        folder_path=str(cache_path),
-        index_name=session_id,
+        folder_path=str(folder_path),
+        index_name=index_name,
         embeddings=embeddings,
         allow_dangerous_deserialization=True,
         auto_save=True,
     )
 
 
-def create_agent() -> StringSingleTurnChat:
+def create_agent(
+    provider: str | None = None,
+    model: str | None = None,
+) -> StringSingleTurnChat:
     """Create the base chat agent."""
     return StringSingleTurnChat(
         lang="zh",
-        provider="deepseek",
-        model="deepseek-chat",
+        provider=get_provider_from_env("AGENT_MODEL", default=provider or "openai")(),
+        model=get_model_from_env("AGENT_MODEL", default=model or "gpt-4.1-mini")(),
         contexts=[
             RichSystemMessagePromptTemplate.from_template(
                 [
@@ -62,17 +74,16 @@ def create_agent() -> StringSingleTurnChat:
 
 
 def build_pipeline(
-    session_id: str = "demo",
-    db_path: str | Path = DEF_DB,
-    model_cache: str | Path = DEF_MODEL_CACHE,
+    index_name: str = "demo",
+    folder_path: str | Path = DEF_FOLDER_PATH,
 ) -> RunnableWithHistoryStore:
     """Assemble the runnable pipeline used in the demos."""
     embeddings = create_embeddings()
-    history_store = create_history_store(db_path)
-    vector_store = create_vector_store(session_id, embeddings, model_cache)
+    history_store = create_history_store(index_name=index_name, folder_path=folder_path)
+    vector_store = create_vector_store(embeddings, index_name=index_name, folder_path=folder_path)
     agent = create_agent()
 
-    pipeline: RunnableWithHistoryStore = RunnableWithMemoryMaker(
+    pipeline = RunnableWithMemoryMaker(
         agent,
         history_store=history_store,
         vector_store=vector_store,
@@ -87,11 +98,10 @@ def build_pipeline(
         default={"output": []},
         history_messages_key="history",
     )
-    pipeline = RunnableWithHistoryStore(
+    return RunnableWithHistoryStore(
         pipeline,
         history_store=history_store,
         time_splitter=TimeSplitter(),
         input_messages_key="input",
         history_messages_key="history",
     )
-    return pipeline
