@@ -14,7 +14,8 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from cogniweave.core.history_stores import BaseHistoryStore as HistoryStore
+from pathlib import Path
+
 from cogniweave.quickstart import DEF_FOLDER_PATH, build_pipeline
 
 if TYPE_CHECKING:
@@ -52,9 +53,16 @@ def _print_output(console: Console, message: str) -> None:
     console.print(Align.left(bubble))
 
 
-def demo(session_id: str) -> None:
-    pipeline = build_pipeline()
-    history_store = HistoryStore(db_url=f"sqlite:///{DEF_FOLDER_PATH}")
+def demo(
+    session_id: str,
+    *,
+    index: str = "demo",
+    folder: str | Path = DEF_FOLDER_PATH,
+) -> None:
+    """Run the interactive demo."""
+
+    pipeline = build_pipeline(index_name=index, folder_path=folder)
+    history_store = pipeline.history_store
     console = Console()
 
     nearly_history = history_store.get_session_history(session_id, limit=10)
@@ -93,12 +101,22 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command")
 
     demo_cmd = sub.add_parser("demo", help="Run interactive demo")
-    demo_cmd.add_argument("session", nargs="?", default="demo")
+    demo_cmd.add_argument("session", nargs="?", default="demo", help="Session identifier")
+    demo_cmd.add_argument(
+        "--index",
+        default="demo",
+        help="Index name for history and vector store",
+    )
+    demo_cmd.add_argument(
+        "--folder",
+        default=str(DEF_FOLDER_PATH),
+        help="Folder used to store cache files",
+    )
 
     args = parser.parse_args()
 
     if args.command == "demo":
-        demo(args.session)
+        demo(args.session, index=args.index, folder=Path(args.folder))
     else:
         parser.print_help()
 
