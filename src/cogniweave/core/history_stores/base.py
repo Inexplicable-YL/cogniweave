@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
@@ -61,18 +60,18 @@ class BaseHistoryStore(BaseModel):
     _session_local: sessionmaker[Session] = PrivateAttr()
     _async_session_local: async_sessionmaker[AsyncSession] = PrivateAttr()
 
-    def __init__(self, *, db_url: str | None = None, echo: bool = False, **kwargs: Any) -> None:
+    def __init__(self, db_url: str, *, echo: bool = False, **kwargs: Any) -> None:
         """Initialize a new HistoryStore instance.
 
         Args:
-            db_url: Database connection string. If None, uses CHAT_DB_URL environment variable
+            db_url: Database connection string.
                 or defaults to local SQLite file.
             echo: If True, enables SQLAlchemy statement logging.
 
         Raises:
             ValueError: If database connection fails.
         """
-        url = db_url or os.getenv("CHAT_DB_URL", "sqlite:///optimized_chat_db.sqlite")
+        url = db_url
         engine = create_engine(url, echo=echo, future=True)
         session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 

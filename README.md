@@ -18,12 +18,11 @@ The agent relies on several environment variables. Reasonable defaults are used 
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `AGENT_MODEL` | Chat model in the form `provider/model` | `openai/gpt-4.1-mini` |
+| `AGENT_MODEL` | Chat model in the form `provider/model` | `openai/gpt-4.1` |
 | `EMBEDDINGS_MODEL` | Embedding model in the form `provider/model` | `openai/text-embedding-ada-002` |
 | `SHORT_MEMORY_MODEL` | Model used to summarise recent messages | `openai/gpt-4.1-mini` |
-| `LONG_MEMORY_MODEL` | Model used for long‑term memory extraction | `openai/gpt-4.1-mini` |
+| `LONG_MEMORY_MODEL` | Model used for long‑term memory extraction | `openai/gpt-o3` |
 | `END_DETECTOR_MODEL` | Model that decides when a conversation is over | `openai/gpt-4.1-mini` |
-| `CHAT_DB_URL` | Connection string for the history database | `sqlite:///optimized_chat_db.sqlite` |
 
 Model providers usually require credentials such as `*_API_KEY` and `*_API_BASE`. These can be supplied via a `.env` file in the project root.
 
@@ -66,30 +65,39 @@ The pipeline object exposes a LangChain `Runnable` that contains the agent, hist
 For full control you can construct the components step by step.
 
 1. **Create embeddings**
+
    ```python
    from cogniweave.quickstart import create_embeddings
 
    embeddings = create_embeddings()
    ```
+
 2. **Create history store**
+
    ```python
    from cogniweave.quickstart import create_history_store
 
    history_store = create_history_store(index_name="demo")
    ```
+
 3. **Create vector store**
+
    ```python
    from cogniweave.quickstart import create_vector_store
 
    vector_store = create_vector_store(embeddings, index_name="demo")
    ```
+
 4. **Create chat agent**
+
    ```python
    from cogniweave.quickstart import create_agent
 
    agent = create_agent()
    ```
+
 5. **Wire up memory and end detection**
+
    ```python
    from cogniweave.runnables.memory_maker import RunnableWithMemoryMaker
    from cogniweave.runnables.end_detector import RunnableWithEndDetector
@@ -120,7 +128,9 @@ For full control you can construct the components step by step.
        history_messages_key="history",
    )
    ```
+
 6. **Stream messages**
+
    ```python
    for chunk in pipeline.stream({"input": "Hello"}, config={"configurable": {"session_id": "demo"}}):
        print(chunk)
