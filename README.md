@@ -133,7 +133,7 @@ For full control you can construct the components step by step.
 
    ```python
    for chunk in pipeline.stream({"input": "Hello"}, config={"configurable": {"session_id": "demo"}}):
-       print(chunk)
+       print(chunk, end="")
    ```
 
 With these steps you can tailor the pipeline to your own requirements.
