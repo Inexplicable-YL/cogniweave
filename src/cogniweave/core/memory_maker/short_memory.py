@@ -8,8 +8,10 @@ from langchain_core.runnables import RunnableSerializable
 from langchain_core.runnables.config import RunnableConfig
 from pydantic import BaseModel, Field, model_validator
 
-from cogniweave.core.prompt_values.summary import ShortTermMemoryPromptValue
-from cogniweave.core.prompt_values.tagger import ShortTermTagsPromptValue
+from cogniweave.core.prompt_values.short_memory import (
+    ShortMemorySummaryPromptValue,
+    ShortMemoryTagsPromptValue,
+)
 from cogniweave.core.prompts.short_memory import ShortMemoryPromptTemplate
 from cogniweave.llms import PydanticSingleTurnChat, StringSingleTurnChat
 from cogniweave.prompt_values import MultilingualSystemPromptValue
@@ -28,7 +30,7 @@ class ShortTermSummary(StringSingleTurnChat[Literal["zh", "en"]]):
     temperature: float = 0.7
 
     prompt: MultilingualSystemPromptValue[Literal["zh", "en"]] | None = Field(
-        default=ShortTermMemoryPromptValue()
+        default=ShortMemorySummaryPromptValue()
     )
 
 
@@ -50,7 +52,7 @@ class ShortTermTags(PydanticSingleTurnChat[Literal["zh", "en"], ContextTags]):
     temperature: float = 0.7
 
     prompt: MultilingualSystemPromptValue[Literal["zh", "en"]] | None = Field(
-        default=ShortTermTagsPromptValue()
+        default=ShortMemoryTagsPromptValue()
     )
 
 

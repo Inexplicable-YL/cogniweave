@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import pickle
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
 from types import GenericAlias
 from typing import TYPE_CHECKING, Any, Literal, cast
 from typing_extensions import override
@@ -19,11 +19,14 @@ from langchain_core.runnables.utils import (
     get_unique_config_specs,
 )
 from langchain_core.utils.pydantic import create_model_v2
-from pydantic import BaseModel, ConfigDict, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from cogniweave.core.history_stores import BaseHistoryStore  # noqa: TC001
 from cogniweave.core.memory_maker import SummaryMemoryMaker
+from cogniweave.core.prompt_values.long_memory import LongTermMemoryPromptValue
+from cogniweave.core.prompt_values.short_memory import ShortTermMemoryPromptValue
 from cogniweave.core.vector_stores import TagsVectorStore  # noqa: TC001
+from cogniweave.prompts import RichHumanMessagePromptTemplate
 
 if TYPE_CHECKING:
     from langchain_core.prompts.string import StringPromptTemplate
@@ -40,7 +43,7 @@ MessageLikeWithTimeType = (
 
 
 class RunnableWithMemoryMaker(RunnableBindingBase):
-    lang: Literal["zh", "en"] = "zh"
+    lang: Literal["zh", "en"] = Field(default="zh")
 
     history_store: BaseHistoryStore
     vector_store: TagsVectorStore[str]
@@ -248,6 +251,10 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
         )
         raise ValueError(msg)
 
+    def _get_message_content(self, message: BaseMessage) -> str | list[dict[str, Any]]:
+        content = cast("dict", convert_to_openai_messages(message))["content"]
+        return cast("str | list[dict[str, Any]]", content)
+
     def _enter_short_memory(self, value: Any, config: RunnableConfig) -> list[BaseMessage]:
         session_id: str = config["configurable"]["_unique_session_id"]  # type: ignore
 
@@ -260,6 +267,7 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
 
         messages: list[BaseMessage] = []
         for input_message in input_messages:
+            prompt_template: RichHumanMessagePromptTemplate | None = None
             if isinstance(input_message, HumanMessage) and isinstance(input_message.content, str):
                 short_memory_ids = [
                     data.content
@@ -271,21 +279,29 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
                         extract_high_score=True,
                     )
                 ]
-                short_memorys = (
-                    "以下是可能相关的聊天记录：\n<ChatMemory>\n"
-                    + "\n".join(
-                        result.format(**value)
+                short_memorys = [
+                    *ShortTermMemoryPromptValue().to_messages(lang=self.lang),
+                    "<ChatMemory>\n",
+                    *[
+                        result
                         for block_id in short_memory_ids
                         if (result := self.history_store.get_short_memory(block_id)) is not None
-                    )
-                    + "</ChatMemory>"
-                )
-                content = cast("dict", convert_to_openai_messages(input_message))["content"]
+                    ],
+                    "</ChatMemory>",
+                ]
+                content = self._get_message_content(input_message)
                 if isinstance(content, str):
-                    input_message.content = short_memorys + "\n" + content
+                    prompt_template = RichHumanMessagePromptTemplate.from_template(
+                        [*short_memorys, content]
+                    )
                 if isinstance(content, list):
-                    input_message.content = [{"type": "text", "text": short_memorys}, *content]
-            messages.append(input_message)
+                    prompt_template = RichHumanMessagePromptTemplate.from_template(
+                        [*short_memorys, *content]
+                    )
+            if prompt_template is not None:
+                messages.append(prompt_template.format(**value))
+            else:
+                messages.append(input_message)
 
         if not self.history_messages_key:
             messages = raw_messages[: len(historic_messages)] + messages  # type: ignore
@@ -304,7 +320,7 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
             historic_messages = await self.history_store.aget_session_history(session_id)
             input_messages = raw_messages[len(historic_messages) :]
 
-        processed_message_map: dict[int, Any] = {}
+        processed_message_map: dict[int, BaseMessage] = {}
 
         async def _process_one(idx: int, input_msg: BaseMessage) -> None:
             if isinstance(input_msg, HumanMessage) and isinstance(input_msg.content, str):
@@ -320,26 +336,28 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
                 ]
                 if not short_memory_ids:
                     return
-                short_memorys = (
-                    "以下是可能相关的聊天记录：\n<ChatMemory>\n"
-                    + "\n".join(
-                        [
-                            result.format(**value)
-                            for block_id in short_memory_ids
-                            if (result := await self.history_store.aget_short_memory(block_id))
-                            is not None
-                        ]
-                    )
-                    + "</ChatMemory>"
-                )
-                content = cast("dict", convert_to_openai_messages(input_msg))["content"]
-                new_content: str | list[dict] | None = None
+                short_memorys = [
+                    *ShortTermMemoryPromptValue().to_messages(lang=self.lang),
+                    "<ChatMemory>\n",
+                    *[
+                        result
+                        for block_id in short_memory_ids
+                        if (result := self.history_store.get_short_memory(block_id)) is not None
+                    ],
+                    "</ChatMemory>",
+                ]
+                content = self._get_message_content(input_message)
+                prompt_template: RichHumanMessagePromptTemplate | None = None
                 if isinstance(content, str):
-                    new_content = short_memorys + "\n" + content
+                    prompt_template = RichHumanMessagePromptTemplate.from_template(
+                        [*short_memorys, content]
+                    )
                 if isinstance(content, list):
-                    new_content = [{"type": "text", "text": short_memorys}, *content]
-                if new_content is not None:
-                    processed_message_map[idx] = new_content
+                    prompt_template = RichHumanMessagePromptTemplate.from_template(
+                        [*short_memorys, *content]
+                    )
+                if prompt_template is not None:
+                    processed_message_map[idx] = prompt_template.format(**value)
 
         async with anyio.create_task_group() as tg:
             for idx, input_msg in enumerate(input_messages):
@@ -348,7 +366,7 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
         messages: list[BaseMessage] = []
         for idx, input_message in enumerate(input_messages):
             if idx in processed_message_map:
-                input_message.content = processed_message_map[idx]
+                input_message = processed_message_map[idx]
             messages.append(input_message)
 
         if not self.history_messages_key:
@@ -363,7 +381,15 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
 
         long_memory = self.history_store.get_long_memory(session_id)
         if long_memory is not None:
-            return ["以下是你对用户的长期记忆：\n<LongMemory>\n", long_memory, "</LongMemory>\n"]
+            return [
+                *cast(
+                    "Generator[str | StringPromptTemplate]",
+                    LongTermMemoryPromptValue().to_messages(lang=self.lang),
+                ),
+                "<LongMemory>\n",
+                long_memory,
+                "</LongMemory>\n",
+            ]
         return []
 
     async def _aenter_long_memory(
@@ -373,7 +399,15 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
 
         long_memory = await self.history_store.aget_long_memory(session_id)
         if long_memory is not None:
-            return ["以下是你对用户的长期记忆：\n<LongMemory>\n", long_memory, "</LongMemory>\n"]
+            return [
+                *cast(
+                    "Generator[str | StringPromptTemplate]",
+                    LongTermMemoryPromptValue().to_messages(lang=self.lang),
+                ),
+                "<LongMemory>\n",
+                long_memory,
+                "</LongMemory>\n",
+            ]
         return []
 
     def _exit_memory(self, _: Run, config: RunnableConfig) -> None:

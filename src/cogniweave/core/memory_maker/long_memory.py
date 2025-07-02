@@ -8,8 +8,8 @@ from langchain_core.runnables.config import RunnableConfig
 from pydantic import BaseModel, Field, model_validator
 
 from cogniweave.core.prompt_values.long_memory import (
-    LongTermMemoryExtractPromptValue,
-    LongTermMemoryPromptValue,
+    LongMemoryExtractPromptValue,
+    LongMemoryUpdatePromptValue,
 )
 from cogniweave.core.prompts.long_memory import (
     LongMemoryExtractPromptTemplate,
@@ -38,7 +38,7 @@ class LongTermPydanticSummary(PydanticSingleTurnChat[Literal["zh", "en"], LongTe
     )
     temperature: float = Field(default=1.0)
     prompt: MultilingualSystemPromptValue[Literal["zh", "en"]] | None = Field(
-        default=LongTermMemoryPromptValue()
+        default=LongMemoryUpdatePromptValue()
     )
 
 
@@ -52,7 +52,7 @@ class LongTermJsonExtract(PydanticSingleTurnChat[Literal["zh", "en"], LongTermOu
     model_name: str = Field(default_factory=get_model_from_env("LONG_MEMORY_MODEL", default="o3"))
     temperature: float = Field(default=1.0)
     prompt: MultilingualSystemPromptValue[Literal["zh", "en"]] | None = Field(
-        default=LongTermMemoryExtractPromptValue()
+        default=LongMemoryExtractPromptValue()
     )
 
 
