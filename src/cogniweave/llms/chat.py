@@ -63,7 +63,7 @@ class SingleTurnChatBase(
     contexts: list[MessageLikeRepresentation] = Field(default_factory=list)
 
     # Output parser
-    parser: BaseOutputParser[Any] | None = None
+    parser: BaseOutputParser[Any] = Field(default_factory=StrOutputParser)
 
     # Response format
     response_format: dict[str, Any] | type[BaseModel] | None = None
@@ -166,9 +166,6 @@ class SingleTurnChatBase(
 class StringSingleTurnChat(SingleTurnChatBase[SupportLangType, str], Generic[SupportLangType]):
     """A single-turn chat model that returns a string response."""
 
-    response_format: dict[str, Any] | type[BaseModel] | None = None
-    parser: BaseOutputParser[Any] | None = StrOutputParser()
-
     def __init__(
         self,
         *,
@@ -182,6 +179,7 @@ class StringSingleTurnChat(SingleTurnChatBase[SupportLangType, str], Generic[Sup
         contexts: list[MessageLikeRepresentation] | None = None,
         **kwargs: Any,
     ) -> None:
+        parser = StrOutputParser()
         super().__init__(
             lang=lang,
             provider=provider,
@@ -191,6 +189,7 @@ class StringSingleTurnChat(SingleTurnChatBase[SupportLangType, str], Generic[Sup
             client=client,
             prompt=prompt,
             contexts=contexts,
+            parser=parser,
             **kwargs,
         )
 
@@ -200,11 +199,6 @@ class JsonSingleTurnChat(
 ):
     """A single-turn chat model that returns a JSON response."""
 
-    response_format: dict[str, Any] | type[BaseModel] | None = Field(
-        default={"type": "json_object"}
-    )
-    parser: BaseOutputParser[Any] | None = JsonOutputParser()
-
     def __init__(
         self,
         *,
@@ -218,6 +212,8 @@ class JsonSingleTurnChat(
         contexts: list[MessageLikeRepresentation] | None = None,
         **kwargs: Any,
     ) -> None:
+        response_format = {"type": "json_object"}
+        parser = JsonOutputParser()
         super().__init__(
             lang=lang,
             provider=provider,
@@ -227,6 +223,8 @@ class JsonSingleTurnChat(
             client=client,
             prompt=prompt,
             contexts=contexts,
+            parser=parser,
+            response_format=response_format,
             **kwargs,
         )
 
@@ -237,8 +235,6 @@ class PydanticSingleTurnChat(
     """A single-turn chat model that returns a Pydantic model response."""
 
     structured_output: bool = True
-    """Whether to use structured output."""
-    parser: BaseOutputParser[Any] | None = None
 
     def __init__(
         self,
