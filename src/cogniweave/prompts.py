@@ -161,8 +161,6 @@ class MessageSegmentsPlaceholder(StringPromptTemplate):
 class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
     """Rich String Image Message Prompt Template."""
 
-    auto_merge_strings: bool = True
-
     @override
     @classmethod
     def from_template(
@@ -174,7 +172,6 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
         template_format: PromptTemplateFormat = "f-string",
         *,
         partial_variables: dict[str, Any] | None = None,
-        auto_merge_strings: bool = True,
         **kwargs: Any,
     ) -> Self:
         if isinstance(template, str):
@@ -183,7 +180,7 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
                 template_format=template_format,
                 partial_variables=partial_variables,
             )
-            return cls(prompt=prompt, auto_merge_strings=auto_merge_strings, **kwargs)
+            return cls(prompt=prompt, **kwargs)
         if isinstance(template, list):
             if (partial_variables is not None) and len(partial_variables) > 0:
                 msg = "Partial variables are not supported for list of templates."
@@ -264,7 +261,7 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
                 else:
                     msg = f"Invalid template: {tmpl}"
                     raise ValueError(msg)
-            return cls(prompt=prompt, auto_merge_strings=auto_merge_strings, **kwargs)
+            return cls(prompt=prompt, **kwargs)
         msg = f"Invalid template: {template}"
         raise ValueError(msg)
 
@@ -286,12 +283,11 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
             formatted: str | ImageURL | dict[str, Any] = prompt.format(**kwargs)
             if isinstance(formatted, str):
                 if (
-                    self.auto_merge_strings
-                    and content
+                    content
                     and content[-1]["type"] == "text"
                     and isinstance(content[-1]["text"], str)
                 ):
-                    content[-1]["text"] += formatted
+                    content[-1]["text"] += "\n" + formatted
                 else:
                     content.append({"type": "text", "text": formatted})
             elif isinstance(formatted, dict) and set(formatted.keys()) <= {"detail", "url"}:
@@ -299,14 +295,13 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
             elif isinstance(formatted, dict):
                 formatted = cast("dict[str, Any]", formatted)
                 if (
-                    self.auto_merge_strings
-                    and content
+                    content
                     and content[-1]["type"] == "text"
                     and isinstance(content[-1]["text"], str)
                     and formatted["type"] == "text"
                     and isinstance(formatted["text"], str)
                 ):
-                    content[-1]["text"] += formatted["text"]
+                    content[-1]["text"] += "\n" + formatted["text"]
                 else:
                     content.append(formatted)
         return self._msg_class(content=content, additional_kwargs=self.additional_kwargs)
@@ -329,12 +324,11 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
             formatted: str | ImageURL | dict[str, Any] = await prompt.aformat(**kwargs)
             if isinstance(formatted, str):
                 if (
-                    self.auto_merge_strings
-                    and content
+                    content
                     and content[-1]["type"] == "text"
                     and isinstance(content[-1]["text"], str)
                 ):
-                    content[-1]["text"] += formatted
+                    content[-1]["text"] += "\n" + formatted
                 else:
                     content.append({"type": "text", "text": formatted})
             elif isinstance(formatted, dict) and set(formatted.keys()) <= {"detail", "url"}:
@@ -342,14 +336,13 @@ class _RichStringImageMessagePromptTemplate(_StringImageMessagePromptTemplate):
             elif isinstance(formatted, dict):
                 formatted = cast("dict[str, Any]", formatted)
                 if (
-                    self.auto_merge_strings
-                    and content
+                    content
                     and content[-1]["type"] == "text"
                     and isinstance(content[-1]["text"], str)
                     and formatted["type"] == "text"
                     and isinstance(formatted["text"], str)
                 ):
-                    content[-1]["text"] += formatted["text"]
+                    content[-1]["text"] += "\n" + formatted["text"]
                 else:
                     content.append(formatted)
         return self._msg_class(content=content, additional_kwargs=self.additional_kwargs)

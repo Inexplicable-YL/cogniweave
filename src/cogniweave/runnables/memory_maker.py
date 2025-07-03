@@ -281,7 +281,7 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
                 ]
                 short_memorys = [
                     *ShortTermMemoryPromptValue().to_messages(lang=self.lang),
-                    "<ChatMemory>\n",
+                    "<ChatMemory>",
                     *[
                         result
                         for block_id in short_memory_ids
@@ -338,7 +338,7 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
                     return
                 short_memorys = [
                     *ShortTermMemoryPromptValue().to_messages(lang=self.lang),
-                    "<ChatMemory>\n",
+                    "<ChatMemory>",
                     *[
                         result
                         for block_id in short_memory_ids
@@ -386,9 +386,9 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
                     "Generator[str | StringPromptTemplate]",
                     LongTermMemoryPromptValue().to_messages(lang=self.lang),
                 ),
-                "<LongMemory>\n",
+                "<LongMemory>",
                 long_memory,
-                "</LongMemory>\n",
+                "</LongMemory>",
             ]
         return []
 
@@ -404,9 +404,9 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
                     "Generator[str | StringPromptTemplate]",
                     LongTermMemoryPromptValue().to_messages(lang=self.lang),
                 ),
-                "<LongMemory>\n",
+                "<LongMemory>",
                 long_memory,
-                "</LongMemory>\n",
+                "</LongMemory>",
             ]
         return []
 

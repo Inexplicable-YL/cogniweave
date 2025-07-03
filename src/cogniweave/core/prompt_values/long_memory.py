@@ -8,7 +8,7 @@ from cogniweave.core.prompt_values.values.long_memory import (
     LONG_TERM_MEMORY_UPDATE_EN,
     LONG_TERM_MEMORY_UPDATE_ZH,
 )
-from cogniweave.prompt_values import MultilingualSystemPromptValue
+from cogniweave.prompt_values import MultilingualStringPromptValue, MultilingualSystemPromptValue
 
 
 class LongMemoryExtractPromptValue(MultilingualSystemPromptValue[Literal["zh", "en"]]):
@@ -25,7 +25,7 @@ class LongMemoryUpdatePromptValue(MultilingualSystemPromptValue[Literal["zh", "e
         super().__init__(zh=LONG_TERM_MEMORY_UPDATE_ZH, en=LONG_TERM_MEMORY_UPDATE_EN, **kwargs)
 
 
-class LongTermMemoryPromptValue(MultilingualSystemPromptValue[Literal["zh", "en"]]):
+class LongTermMemoryPromptValue(MultilingualStringPromptValue[Literal["zh", "en"]]):
     """Long-term memory system prompt wrapper."""
 
     def __init__(self, **kwargs: Any) -> None:

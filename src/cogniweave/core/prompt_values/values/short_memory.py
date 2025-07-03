@@ -156,6 +156,6 @@ Extract the most accurate and representative topic tags.
 """
 
 
-SHORT_TERM_MEMORY_PROMPT_ZH = "以下是可能相关的聊天记录：\n"
+SHORT_TERM_MEMORY_PROMPT_ZH = "以下是可能相关的聊天记录："
 
-SHORT_TERM_MEMORY_PROMPT_EN = "The following is a possible chat history:\n"
+SHORT_TERM_MEMORY_PROMPT_EN = "The following is a possible chat history:"

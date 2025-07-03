@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from langchain_core.prompts import MessagesPlaceholder
 
@@ -8,12 +10,16 @@ from cogniweave.core.end_detector import EndDetector
 from cogniweave.core.history_stores import BaseHistoryStore as HistoryStore
 from cogniweave.core.time_splitter import TimeSplitter
 from cogniweave.core.vector_stores import TagsVectorStore
-from cogniweave.llms import OpenAIEmbeddings, StringSingleTurnChat
+from cogniweave.llms import AgentBase, OpenAIEmbeddings, StringSingleTurnChat
+from cogniweave.prompt_values import MultilingualStringPromptValue
 from cogniweave.prompts import MessageSegmentsPlaceholder, RichSystemMessagePromptTemplate
 from cogniweave.runnables.end_detector import RunnableWithEndDetector
 from cogniweave.runnables.history_store import RunnableWithHistoryStore
 from cogniweave.runnables.memory_maker import RunnableWithMemoryMaker
 from cogniweave.utils import get_model_from_env, get_provider_from_env
+
+if TYPE_CHECKING:
+    from langchain_core.tools import BaseTool
 
 DEF_FOLDER_PATH = Path("./.cache/")
 
@@ -52,24 +58,61 @@ def create_vector_store(
     )
 
 
-def create_agent(
+def create_chat(
+    lang: str | None = None,
+    *,
+    prompt: str | None = None,
     provider: str | None = None,
     model: str | None = None,
 ) -> StringSingleTurnChat:
     """Create the base chat agent."""
+    lang = lang or os.getenv("LANG", "zh")
+    prompt_list = (
+        [prompt] if prompt else list(MultilingualStringPromptValue().to_messages(lang=lang))
+    ) + ["\n"]
     return StringSingleTurnChat(
-        lang="zh",
+        lang=lang,
         provider=get_provider_from_env("AGENT_MODEL", default=provider or "openai")(),
         model=get_model_from_env("AGENT_MODEL", default=model or "gpt-4.1-mini")(),
         contexts=[
             RichSystemMessagePromptTemplate.from_template(
                 [
-                    "你是一个AI助手，你叫CogniWeave，你的任务是回答用户的问题。\n",
+                    *prompt_list,
                     MessageSegmentsPlaceholder(variable_name="long_memory"),
                 ]
             ),
             MessagesPlaceholder(variable_name="history", optional=True),
         ],
+    )
+
+
+def create_agent(
+    lang: str | None = None,
+    *,
+    prompt: str | None = None,
+    tools: list[BaseTool] | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+) -> AgentBase:
+    """Create the base chat agent."""
+    lang = lang or os.getenv("LANG", "zh")
+    prompt_list = (
+        [prompt] if prompt else list(MultilingualStringPromptValue().to_messages(lang=lang))
+    ) + ["\n"]
+    return AgentBase(
+        lang=lang,
+        provider=get_provider_from_env("AGENT_MODEL", default=provider or "openai")(),
+        model=get_model_from_env("AGENT_MODEL", default=model or "gpt-4.1-mini")(),
+        contexts=[
+            RichSystemMessagePromptTemplate.from_template(
+                [
+                    *prompt_list,
+                    MessageSegmentsPlaceholder(variable_name="long_memory"),
+                ]
+            ),
+            MessagesPlaceholder(variable_name="history", optional=True),
+        ],
+        tools=tools or [],
     )
 
 
@@ -81,7 +124,7 @@ def build_pipeline(
     embeddings = create_embeddings()
     history_store = create_history_store(index_name=index_name, folder_path=folder_path)
     vector_store = create_vector_store(embeddings, index_name=index_name, folder_path=folder_path)
-    agent = create_agent()
+    agent = create_chat()
 
     pipeline = RunnableWithMemoryMaker(
         agent,

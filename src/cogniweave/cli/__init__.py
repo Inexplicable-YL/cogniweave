@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import shutil
 import sys
-import textwrap
+import time
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -24,9 +23,9 @@ if TYPE_CHECKING:
 warnings.filterwarnings("ignore")
 
 
-def _get_input(prompt: str = "> ") -> str | None:
+def _get_input() -> str | None:
     console = Console()
-    console.print(f"{prompt}", style="bold blink bright_cyan", end="")
+    console.print("> ", style="bold blink bright_cyan", end="")
     try:
         input_msg = input()
     except (KeyboardInterrupt, EOFError):
@@ -35,16 +34,12 @@ def _get_input(prompt: str = "> ") -> str | None:
 
     if input_msg.strip().lower() == "exit":
         return None
-
-    term_width = shutil.get_terminal_size().columns
-    wrapped = textwrap.wrap(prompt + input_msg, width=term_width)
-    sys.stdout.write("\033[F" * len(wrapped))
     return input_msg
 
 
 def _print_input(console: Console, message: str) -> None:
-    bubble = Panel(message, style="bold #63bbd0", expand=False)
-    console.print(Align.right(bubble))
+    console.print("> ", style="bold blink bright_cyan", end="")
+    console.print(message)
 
 
 def _print_output(console: Console, message: str) -> None:
@@ -76,11 +71,12 @@ def demo(
         if not input_msg:
             break
 
-        _print_input(console, input_msg)
-        chunks: Iterator[dict[str, Any]] = pipeline.stream(
-            {"input": input_msg},
-            config={"configurable": {"session_id": session_id}},
-        )
+        with console.status("[#83cbac]Processing...", spinner_style="#83cbac"):
+            time.sleep(3)
+            chunks: Iterator[dict[str, Any]] = pipeline.stream(
+                {"input": input_msg},
+                config={"configurable": {"session_id": session_id}},
+            )
 
         text_buffer = ""
         with Live("", console=console, refresh_per_second=8, transient=True) as live:

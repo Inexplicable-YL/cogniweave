@@ -19,16 +19,12 @@ from langchain_core.prompts.string import PromptTemplateFormat
 from pydantic import Field
 
 from cogniweave.prompts import RichSystemMessagePromptTemplate
-from cogniweave.typing import MessageLike, SupportLangType
+from cogniweave.typing import MessageLike, MessageLikeRepresentation, SupportLangType
+
+from .default import DEFAULT_PROMPT_EN, DEFAULT_PROMPT_ZH
 
 SystemMessageLike = SystemMessage | SystemMessagePromptTemplate | RichSystemMessagePromptTemplate
 SystemMessageLikeRepresentation = SystemMessageLike | str
-
-DEFAULT_SINGLE_TURN_PROMPT_ZH = (
-    """你是一个有帮助的中文助手。请根据以下用户的问题进行简洁明了的回复。"""
-)
-
-DEFAULT_SINGLE_TURN_PROMPT_EN = """You are a helpful assistant. Please provide concise and clear responses to the user's questions."""
 
 
 class BasePromptValue(Serializable, ABC):
@@ -55,7 +51,7 @@ class BasePromptValue(Serializable, ABC):
         return []
 
     @abstractmethod
-    def to_messages(self, **kwargs: Any) -> Generator[MessageLike]:
+    def to_messages(self, **kwargs: Any) -> Generator[MessageLikeRepresentation]:
         """Return prompt as a list of Messages."""
 
 
@@ -69,9 +65,9 @@ class MultilingualSystemPromptValue(BasePromptValue, Generic[SupportLangType]):
     def __init__(
         self,
         zh: SystemMessageLikeRepresentation
-        | list[SystemMessageLikeRepresentation] = DEFAULT_SINGLE_TURN_PROMPT_ZH,
+        | list[SystemMessageLikeRepresentation] = DEFAULT_PROMPT_ZH,
         en: SystemMessageLikeRepresentation
-        | list[SystemMessageLikeRepresentation] = DEFAULT_SINGLE_TURN_PROMPT_EN,
+        | list[SystemMessageLikeRepresentation] = DEFAULT_PROMPT_EN,
         **kwargs: SystemMessageLikeRepresentation | list[SystemMessageLikeRepresentation],
     ) -> None:
         """Initialize the LangPromptValue with prompts for different languages."""
@@ -91,6 +87,29 @@ class MultilingualSystemPromptValue(BasePromptValue, Generic[SupportLangType]):
             raise ValueError(
                 f"Language '{lang}' not supported. Supported languages: {', '.join(self.prompts.keys())}"
             )
+
+
+class MultilingualStringPromptValue(BasePromptValue, Generic[SupportLangType]):
+    prompts: dict[str, str | list[str]] = Field(default_factory=dict)
+
+    def __init__(
+        self,
+        zh: str | list[str] = DEFAULT_PROMPT_ZH,
+        en: str | list[str] = DEFAULT_PROMPT_EN,
+        **kwargs: str | list[str],
+    ) -> None:
+        """Initialize the LangPromptValue with prompts for different languages."""
+        prompts = {
+            "zh": zh,
+            "en": en,
+        } | kwargs
+        super().__init__(prompts=prompts)  # type: ignore[arg-type]
+
+    @override
+    def to_messages(self, lang: SupportLangType = "zh", **kwargs: Any) -> Generator[str]:
+        if prompt := self.prompts.get(lang, None):
+            prompt = prompt if isinstance(prompt, list) else [prompt]
+            yield from prompt
 
 
 def _convert_to_system_message_template(

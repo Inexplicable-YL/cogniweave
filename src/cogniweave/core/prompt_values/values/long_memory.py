@@ -158,6 +158,6 @@ Read the new memory items and perform the following:
 """
 
 
-LONG_TERM_MEMORY_PROMPT_ZH = "以下是你对用户的长期记忆：\n"
+LONG_TERM_MEMORY_PROMPT_ZH = "以下是你对用户的长期记忆："
 
-LONG_TERM_MEMORY_PROMPT_EN = "Here is your long-term memory about the user:\n"
+LONG_TERM_MEMORY_PROMPT_EN = "Here is your long-term memory about the user:"

@@ -8,7 +8,7 @@ from cogniweave.core.prompt_values.values.short_memory import (
     SHORT_TERM_MEMORY_TAGS_EN,
     SHORT_TERM_MEMORY_TAGS_ZH,
 )
-from cogniweave.prompt_values import MultilingualSystemPromptValue
+from cogniweave.prompt_values import MultilingualStringPromptValue, MultilingualSystemPromptValue
 
 
 class ShortMemorySummaryPromptValue(MultilingualSystemPromptValue[Literal["zh", "en"]]):
@@ -27,7 +27,7 @@ class ShortMemoryTagsPromptValue(MultilingualSystemPromptValue[Literal["zh", "en
         super().__init__(en=SHORT_TERM_MEMORY_TAGS_EN, zh=SHORT_TERM_MEMORY_TAGS_ZH, **kwargs)
 
 
-class ShortTermMemoryPromptValue(MultilingualSystemPromptValue[Literal["zh", "en"]]):
+class ShortTermMemoryPromptValue(MultilingualStringPromptValue[Literal["zh", "en"]]):
     """Short-term memory system prompt wrapper."""
 
     def __init__(self, **kwargs: Any) -> None:
