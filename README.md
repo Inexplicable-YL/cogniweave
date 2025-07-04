@@ -18,7 +18,8 @@ The agent relies on several environment variables. Reasonable defaults are used 
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `AGENT_MODEL` | Chat model in the form `provider/model` | `openai/gpt-4.1` |
+| `CHAT_MODEL` | Chat model in the form `provider/model` | `openai/gpt-4.1` |
+| `AGENT_MODEL` | Agent model in the form `provider/model` | `openai/gpt-4.1` |
 | `EMBEDDINGS_MODEL` | Embedding model in the form `provider/model` | `openai/text-embedding-ada-002` |
 | `SHORT_MEMORY_MODEL` | Model used to summarise recent messages | `openai/gpt-4.1-mini` |
 | `LONG_MEMORY_MODEL` | Model used for long‑term memory extraction | `openai/gpt-o3` |
