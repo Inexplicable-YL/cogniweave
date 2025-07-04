@@ -66,14 +66,15 @@ def create_chat(
     model: str | None = None,
 ) -> StringSingleTurnChat:
     """Create the base chat agent."""
-    lang = lang or os.getenv("LANG", "zh")
-    prompt_list = (
-        [prompt] if prompt else list(MultilingualStringPromptValue().to_messages(lang=lang))
-    ) + ["\n"]
+    lang = lang or os.getenv("LANGUAGE", "zh")
+    prompt_list = [
+        *([prompt] if prompt else MultilingualStringPromptValue().to_messages(lang=lang)),
+        "\n",
+    ]
     return StringSingleTurnChat(
         lang=lang,
-        provider=get_provider_from_env("AGENT_MODEL", default=provider or "openai")(),
-        model=get_model_from_env("AGENT_MODEL", default=model or "gpt-4.1-mini")(),
+        provider=get_provider_from_env("CHAT_MODEL", default=provider or "openai")(),
+        model=get_model_from_env("CHAT_MODEL", default=model or "gpt-4.1-mini")(),
         contexts=[
             RichSystemMessagePromptTemplate.from_template(
                 [
@@ -95,10 +96,11 @@ def create_agent(
     model: str | None = None,
 ) -> AgentBase:
     """Create the base chat agent."""
-    lang = lang or os.getenv("LANG", "zh")
-    prompt_list = (
-        [prompt] if prompt else list(MultilingualStringPromptValue().to_messages(lang=lang))
-    ) + ["\n"]
+    lang = lang or os.getenv("LANGUAGE", "zh")
+    prompt_list = [
+        *([prompt] if prompt else MultilingualStringPromptValue().to_messages(lang=lang)),
+        "\n",
+    ]
     return AgentBase(
         lang=lang,
         provider=get_provider_from_env("AGENT_MODEL", default=provider or "openai")(),
