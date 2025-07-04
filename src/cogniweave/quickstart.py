@@ -119,6 +119,9 @@ def create_agent(
 
 
 def build_pipeline(
+    lang: str | None = None,
+    prompt: str | None = None,
+    *,
     index_name: str = "demo",
     folder_path: str | Path = DEF_FOLDER_PATH,
 ) -> RunnableWithHistoryStore:
@@ -126,7 +129,7 @@ def build_pipeline(
     embeddings = create_embeddings()
     history_store = create_history_store(index_name=index_name, folder_path=folder_path)
     vector_store = create_vector_store(embeddings, index_name=index_name, folder_path=folder_path)
-    agent = create_chat()
+    agent = create_chat(lang=lang, prompt=prompt)
 
     pipeline = RunnableWithMemoryMaker(
         agent,
