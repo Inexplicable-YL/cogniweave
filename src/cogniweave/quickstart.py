@@ -74,7 +74,7 @@ def create_chat(
     return StringSingleTurnChat(
         lang=lang,
         provider=get_provider_from_env("CHAT_MODEL", default=provider or "openai")(),
-        model=get_model_from_env("CHAT_MODEL", default=model or "gpt-4.1-mini")(),
+        model=get_model_from_env("CHAT_MODEL", default=model or "gpt-4.1")(),
         contexts=[
             RichSystemMessagePromptTemplate.from_template(
                 [
@@ -104,7 +104,7 @@ def create_agent(
     return AgentBase(
         lang=lang,
         provider=get_provider_from_env("AGENT_MODEL", default=provider or "openai")(),
-        model=get_model_from_env("AGENT_MODEL", default=model or "gpt-4.1-mini")(),
+        model=get_model_from_env("AGENT_MODEL", default=model or "gpt-4.1")(),
         contexts=[
             RichSystemMessagePromptTemplate.from_template(
                 [
