@@ -127,7 +127,7 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
         messages: list[tuple[BaseMessage, float]],
         *,
         block_id: str,
-        block_ts: float,
+        block_ts: float | None = None,
         session_id: str | None = None,
     ) -> None:
         """Persist a list of messages with timestamps to the store.
@@ -145,8 +145,8 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
             return
         session_id = session_id or block_id
         super().add_messages(messages, block_id=block_id, block_ts=block_ts, session_id=session_id)
-        self._session_caches[session_id].add_messages(block_id, block_ts, messages)
-        self._blocks_time_session_ids[block_id] = (block_ts, session_id)
+        self._session_caches[session_id].add_messages(block_id, block_ts or 0.0, messages)
+        self._blocks_time_session_ids[block_id] = (block_ts or 0.0, session_id)
 
     @override
     async def aadd_messages(
@@ -154,7 +154,7 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
         messages: list[tuple[BaseMessage, float]],
         *,
         block_id: str,
-        block_ts: float,
+        block_ts: float | None = None,
         session_id: str | None = None,
     ) -> None:
         """Async version of :meth:`add_messages`.
@@ -176,8 +176,8 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
         await super().aadd_messages(
             messages, block_id=block_id, block_ts=block_ts, session_id=session_id
         )
-        self._session_caches[session_id].add_messages(block_id, block_ts, messages)
-        self._blocks_time_session_ids[block_id] = (block_ts, session_id)
+        self._session_caches[session_id].add_messages(block_id, block_ts or 0.0, messages)
+        self._blocks_time_session_ids[block_id] = (block_ts or 0.0, session_id)
 
     @override
     def get_block_timestamp(self, block_id: str) -> float | None:
