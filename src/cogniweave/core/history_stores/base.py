@@ -19,7 +19,6 @@ from cogniweave.core.history_stores.models import (
 )
 from cogniweave.core.prompts import LongMemoryPromptTemplate, ShortMemoryPromptTemplate
 
-_USER_NAME_KEY: Literal["_user_name"] = "_user_name"
 _SHORT_MEMORY_KEY: Literal["_short_memory"] = "_short_memory"
 _LONG_MEMORY_KEY: Literal["_long_memory"] = "_long_memory"
 
@@ -125,24 +124,24 @@ class BaseHistoryStore(BaseModel):
         return user
 
     def _get_or_create_block(
-        self, session: Session, user: User, context_id: str, start_ts: float | None
+        self, session: Session, user: User, block_id: str, start_ts: float | None
     ) -> ChatBlock:
         """Get existing chat block or create new one if not found.
 
         Args:
             session: SQLAlchemy session.
             user: Owner User instance.
-            context_id: Unique block/context ID.
+            block_id: Unique block/context ID.
             start_ts: Unix timestamp for block start time if block creation is needed.
 
         Return:
             ChatBlock: The existing or newly created ChatBlock instance.
         """
-        block = session.query(ChatBlock).filter_by(context_id=context_id).first()
+        block = session.query(ChatBlock).filter_by(block_id=block_id).first()
         if block is None:
             ts = start_ts if start_ts is not None else datetime.now(tz=UTC).timestamp()
             block = ChatBlock(
-                context_id=context_id,
+                block_id=block_id,
                 session_id=user.id,
                 timestamp=datetime.fromtimestamp(ts, tz=UTC),
             )
@@ -151,25 +150,25 @@ class BaseHistoryStore(BaseModel):
         return block
 
     async def _a_get_or_create_block(
-        self, session: AsyncSession, user: User, context_id: str, start_ts: float | None
+        self, session: AsyncSession, user: User, block_id: str, start_ts: float | None
     ) -> ChatBlock:
         """Async version of _get_or_create_block.
 
         Args:
             session: Async SQLAlchemy session.
             user: Owner User instance.
-            context_id: Unique block/context ID.
+            block_id: Unique block/context ID.
             start_ts: Unix timestamp for block start time if block creation is needed.
 
         Return:
             ChatBlock: The existing or newly created ChatBlock instance.
         """
-        result = await session.execute(select(ChatBlock).filter_by(context_id=context_id))
+        result = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
         block = result.scalar_one_or_none()
         if block is None:
             ts = start_ts if start_ts is not None else datetime.now(tz=UTC).timestamp()
             block = ChatBlock(
-                context_id=context_id,
+                block_id=block_id,
                 session_id=user.id,
                 timestamp=datetime.fromtimestamp(ts, tz=UTC),
             )
@@ -445,7 +444,7 @@ class BaseHistoryStore(BaseModel):
             float | None: Unix timestamp of block start time, or None if not found.
         """
         with self._session_local() as session:
-            block = session.query(ChatBlock).filter_by(context_id=block_id).first()
+            block = session.query(ChatBlock).filter_by(block_id=block_id).first()
             if not block:
                 return None
             return block.timestamp.replace(tzinfo=UTC).timestamp()
@@ -460,7 +459,7 @@ class BaseHistoryStore(BaseModel):
             float | None: Unix timestamp of block start time, or None if not found.
         """
         async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
+            result = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
             block = result.scalar_one_or_none()
             if not block:
                 return None
@@ -476,7 +475,7 @@ class BaseHistoryStore(BaseModel):
             list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
         """
         with self._session_local() as session:
-            block = session.query(ChatBlock).filter_by(context_id=block_id).first()
+            block = session.query(ChatBlock).filter_by(block_id=block_id).first()
             if not block:
                 return []
             return [
@@ -496,7 +495,7 @@ class BaseHistoryStore(BaseModel):
             list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
         """
         async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
+            result = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
             block = result.scalar_one_or_none()
             if not block:
                 return []
@@ -608,7 +607,7 @@ class BaseHistoryStore(BaseModel):
         stmt = (
             select(ChatMessage)
             .join(ChatBlock, ChatMessage.block_id == ChatBlock.id)
-            .filter(ChatBlock.context_id.in_(block_ids))
+            .filter(ChatBlock.block_id.in_(block_ids))
             .filter(*criteria)
         )
         if limit is not None:
@@ -649,7 +648,7 @@ class BaseHistoryStore(BaseModel):
         stmt = (
             select(ChatMessage)
             .join(ChatBlock, ChatMessage.block_id == ChatBlock.id)
-            .filter(ChatBlock.context_id.in_(block_ids))
+            .filter(ChatBlock.block_id.in_(block_ids))
             .filter(*criteria)
         )
         if limit is not None:
@@ -775,7 +774,7 @@ class BaseHistoryStore(BaseModel):
                 optionally filtered by type.
         """
         with self._session_local() as session:
-            block = session.query(ChatBlock).filter_by(context_id=block_id).first()
+            block = session.query(ChatBlock).filter_by(block_id=block_id).first()
             if not block:
                 return []
 
@@ -804,7 +803,7 @@ class BaseHistoryStore(BaseModel):
                 optionally filtered by type.
         """
         async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(context_id=block_id))
+            result = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
             block = result.scalar_one_or_none()
             if not block:
                 return []
@@ -869,7 +868,7 @@ class BaseHistoryStore(BaseModel):
                 blocks = stmt.order_by(ChatBlock.timestamp).all()
             return [
                 (
-                    block.context_id,
+                    block.block_id,
                     block.timestamp.replace(tzinfo=UTC).timestamp(),
                 )
                 for block in blocks
@@ -929,7 +928,7 @@ class BaseHistoryStore(BaseModel):
                 blocks = res.scalars().all()
             return [
                 (
-                    block.context_id,
+                    block.block_id,
                     block.timestamp.replace(tzinfo=UTC).timestamp(),
                 )
                 for block in blocks

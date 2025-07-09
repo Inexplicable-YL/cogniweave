@@ -75,7 +75,7 @@ class ChatBlock(Base):
 
     __tablename__ = "chat_blocks"
 
-    context_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    block_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
     session_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
@@ -101,7 +101,7 @@ class ChatBlock(Base):
     @override
     def __repr__(self) -> str:
         return (
-            f"<ChatBlock(id={self.id}, context_id={self.context_id!r}, "
+            f"<ChatBlock(id={self.id}, block_id={self.block_id!r}, "
             f"session_id={self.session_id}, timestamp={self.timestamp})>"
         )
 
