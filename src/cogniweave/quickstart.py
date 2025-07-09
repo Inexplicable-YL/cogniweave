@@ -7,15 +7,15 @@ from typing import TYPE_CHECKING
 from langchain_core.prompts import MessagesPlaceholder
 
 from cogniweave.core.end_detector import EndDetector
+from cogniweave.core.runnables.end_detector import RunnableWithEndDetector
+from cogniweave.core.runnables.history_store import RunnableWithHistoryStore
+from cogniweave.core.runnables.memory_maker import RunnableWithMemoryMaker
 from cogniweave.core.time_splitter import TimeSplitter
 from cogniweave.core.vector_stores import TagsVectorStore
 from cogniweave.history_stores import BaseHistoryStore as HistoryStore
 from cogniweave.llms import AgentBase, OpenAIEmbeddings, StringSingleTurnChat
 from cogniweave.prompt_values import MultilingualStringPromptValue
 from cogniweave.prompts import MessageSegmentsPlaceholder, RichSystemMessagePromptTemplate
-from cogniweave.runnables.end_detector import RunnableWithEndDetector
-from cogniweave.runnables.history_store import RunnableWithHistoryStore
-from cogniweave.runnables.memory_maker import RunnableWithMemoryMaker
 from cogniweave.utils import get_model_from_env, get_provider_from_env
 
 if TYPE_CHECKING:

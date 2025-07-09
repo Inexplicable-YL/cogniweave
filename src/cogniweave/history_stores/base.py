@@ -70,11 +70,10 @@ class BaseHistoryStore(BaseModel):
         Raises:
             ValueError: If database connection fails.
         """
-        url = db_url
-        engine = create_engine(url, echo=echo, future=True)
+        engine = create_engine(db_url, echo=echo, future=True)
         session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
-        async_url = url.replace("sqlite://", "sqlite+aiosqlite://")
+        async_url = db_url.replace("sqlite://", "sqlite+aiosqlite://")
         async_engine = create_async_engine(async_url, echo=echo, future=True)
         async_session_local = async_sessionmaker(
             bind=async_engine,

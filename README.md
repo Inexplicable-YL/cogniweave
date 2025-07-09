@@ -100,9 +100,9 @@ For full control you can construct the components step by step.
 5. **Wire up memory and end detection**
 
    ```python
-   from cogniweave.runnables.memory_maker import RunnableWithMemoryMaker
-   from cogniweave.runnables.end_detector import RunnableWithEndDetector
-   from cogniweave.runnables.history_store import RunnableWithHistoryStore
+   from cogniweave.core.runnables.memory_maker import RunnableWithMemoryMaker
+   from cogniweave.core.runnables.end_detector import RunnableWithEndDetector
+   from cogniweave.core.runnables.history_store import RunnableWithHistoryStore
    from cogniweave.core.end_detector import EndDetector
    from cogniweave.core.time_splitter import TimeSplitter
 

@@ -6,7 +6,7 @@ from langchain_core.messages import HumanMessage
 from test_runnable import RunnableForTest
 
 from cogniweave.core.end_detector import EndDetector
-from cogniweave.runnables.end_detector import RunnableWithEndDetector
+from cogniweave.core.runnables.end_detector import RunnableWithEndDetector
 
 load_dotenv()
 

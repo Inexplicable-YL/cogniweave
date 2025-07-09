@@ -9,7 +9,9 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(
+        autoincrement=True, nullable=False, unique=True, primary_key=True
+    )
 
 
 class User(Base):

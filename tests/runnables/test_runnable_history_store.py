@@ -7,7 +7,7 @@ from test_runnable import RunnableForTest
 
 from cogniweave.core.time_splitter import TimeSplitter
 from cogniweave.history_stores import BaseHistoryStore as HistoryStore
-from cogniweave.runnables.history_store import RunnableWithHistoryStore
+from cogniweave.core.runnables.history_store import RunnableWithHistoryStore
 
 sleep_time = 0.1
 
