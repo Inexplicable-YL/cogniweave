@@ -21,11 +21,11 @@ from langchain_core.runnables.utils import (
 from langchain_core.utils.pydantic import create_model_v2
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
-from cogniweave.core.history_stores import BaseHistoryStore  # noqa: TC001
 from cogniweave.core.memory_maker import SummaryMemoryMaker
 from cogniweave.core.prompt_values.long_memory import LongTermMemoryPromptValue
 from cogniweave.core.prompt_values.short_memory import ShortTermMemoryPromptValue
 from cogniweave.core.vector_stores import TagsVectorStore  # noqa: TC001
+from cogniweave.history_stores import BaseHistoryStore  # noqa: TC001
 from cogniweave.prompts import RichHumanMessagePromptTemplate
 
 if TYPE_CHECKING:

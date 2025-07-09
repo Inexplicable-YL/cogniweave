@@ -10,11 +10,11 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
-from cogniweave.core.history_stores import BaseHistoryStore
 from cogniweave.core.memory_maker.summary import SummaryMemoryMaker
 from cogniweave.core.prompts.long_memory import LongMemoryPromptTemplate
 from cogniweave.core.prompts.short_memory import ShortMemoryPromptTemplate
 from cogniweave.core.vector_stores import TagsVectorStore
+from cogniweave.history_stores import BaseHistoryStore
 from cogniweave.llms import OpenAIEmbeddings
 
 console = Console()

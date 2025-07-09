@@ -3,8 +3,8 @@ from pathlib import Path
 from langchain_core.messages import HumanMessage
 from sqlalchemy import select
 
-from cogniweave.core.history_stores import BaseHistoryStoreWithCache as BaseHistoryStore
-from cogniweave.core.history_stores import (
+from cogniweave.history_stores import (
+    BaseHistoryStore,
     ChatBlock,
     ChatBlockAttribute,
     ChatMessage,
@@ -181,7 +181,7 @@ def test_user_attributes_operations(tmp_path: Path) -> None:
     )
 
     with store._session_local() as session:
-        user = session.query(User).filter_by(name="u").first()
+        user = session.query(User).filter_by(session_id="u").first()
         assert user is not None
         attrs = {a.type: a.value for a in user.attributes}
         assert attrs == {"color": "red", "role": "admin"}

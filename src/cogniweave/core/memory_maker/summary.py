@@ -6,10 +6,10 @@ from typing_extensions import override
 from langchain_core.runnables import RunnableSerializable
 from pydantic import ConfigDict, Field, model_validator
 
-from cogniweave.core.history_stores import BaseHistoryStore  # noqa: TC001
 from cogniweave.core.memory_maker.long_memory import LongTermMemoryMaker
 from cogniweave.core.memory_maker.short_memory import ShortTermMemoryMaker
 from cogniweave.core.vector_stores import TagsVectorStore  # noqa: TC001
+from cogniweave.history_stores import BaseHistoryStore  # noqa: TC001
 
 if TYPE_CHECKING:
     from langchain_core.runnables.config import RunnableConfig
@@ -65,7 +65,6 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
                 self.history_store.add_short_memory(
                     short_mem,
                     block_id=short_block_id,
-                    block_ts=ts,
                     session_id=session_id,
                 )
                 self.vector_store.add_tags(
@@ -126,7 +125,6 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
                 await self.history_store.aadd_short_memory(
                     short_mem,
                     block_id=short_block_id,
-                    block_ts=ts,
                     session_id=session_id,
                 )
                 await self.vector_store.aadd_tags(

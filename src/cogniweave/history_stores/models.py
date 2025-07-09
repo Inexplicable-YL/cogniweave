@@ -4,7 +4,7 @@ from datetime import datetime  # noqa: TC003
 from typing import Any
 from typing_extensions import override
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -111,6 +111,9 @@ class ChatMessage(Base):
 
     __tablename__ = "chat_messages"
 
+    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
     block_id: Mapped[int] = mapped_column(
         ForeignKey("chat_blocks.id", ondelete="CASCADE"),
         nullable=False,
@@ -121,9 +124,6 @@ class ChatMessage(Base):
         nullable=False,
         index=True,
     )
-    uid: Mapped[int] = mapped_column(Integer, autoincrement=True, index=True, nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
-    content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
     block: Mapped[ChatBlock] = relationship("ChatBlock", back_populates="messages", lazy="joined")
     user: Mapped[User] = relationship("User", back_populates="messages", lazy="joined")
@@ -137,7 +137,7 @@ class ChatMessage(Base):
     @override
     def __repr__(self) -> str:
         return (
-            f"<ChatMessage(id={self.id}, uid={self.uid}, block_id={self.block_id}, "
+            f"<ChatMessage(id={self.id}, block_id={self.block_id}, "
             f"timestamp={self.timestamp}, content={self.content})>"
         )
 
@@ -147,7 +147,6 @@ class ChatBlockAttribute(Base):
 
     __tablename__ = "chat_block_attributes"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
     block_id: Mapped[int] = mapped_column(
         ForeignKey("chat_blocks.id", ondelete="CASCADE"),
         nullable=False,

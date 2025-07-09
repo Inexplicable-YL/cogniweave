@@ -25,8 +25,8 @@ from langchain_core.runnables.utils import (
 from langchain_core.utils.pydantic import create_model_v2
 from pydantic import BaseModel, PrivateAttr
 
-from cogniweave.core.history_stores import BaseHistoryStore  # noqa: TC001
 from cogniweave.core.time_splitter.base import BaseTimeSplitter  # noqa: TC001
+from cogniweave.history_stores import BaseHistoryStore  # noqa: TC001
 
 if TYPE_CHECKING:
     from langchain_core.runnables.config import RunnableConfig
@@ -317,16 +317,11 @@ class RunnableWithHistoryStore(RunnableBindingBase):
 
         input_val = value if not self.input_messages_key else value[self.input_messages_key]
         input_messages = self._get_input_messages(input_val)
-        if len(input_messages) != 1:
-            raise ValueError(
-                "We currently do not support the input of multiple messages to avoid unpredictable results. "
-                "Please ensure that the input is a single message."
-            )
         self._input_messages_cache[cache_id] = input_messages
 
         if not self.history_messages_key:
             # return all messages
-            messages += [input_messages[0][0]]
+            messages += [msg for msg, _ in input_messages]
         return messages
 
     async def _aenter_history(
@@ -340,16 +335,11 @@ class RunnableWithHistoryStore(RunnableBindingBase):
 
         input_val = value if not self.input_messages_key else value[self.input_messages_key]
         input_messages = self._get_input_messages(input_val)
-        if len(input_messages) != 1:
-            raise ValueError(
-                "We currently do not support the input of multiple messages to avoid unpredictable results. "
-                "Please ensure that the input is a single message."
-            )
         self._input_messages_cache[cache_id] = input_messages
 
         if not self.history_messages_key:
             # return all messages
-            messages += [input_messages[0][0]]
+            messages += [msg for msg, _ in input_messages]
         return messages
 
     def _exit_history(self, run: Run, config: RunnableConfig) -> None:
@@ -359,9 +349,9 @@ class RunnableWithHistoryStore(RunnableBindingBase):
         # Get the input messages
         input_messages = self._input_messages_cache.pop(cache_id)
 
-        assert len(input_messages) == 1
+        assert len(input_messages) > 0
         block_id, block_ts = self.time_splitter.invoke(
-            input={"timestamp": input_messages[0][1]},
+            input={"timestamp": input_messages[-1][1]},
             config={"configurable": {"session_id": session_id}},
         )
 
@@ -382,9 +372,9 @@ class RunnableWithHistoryStore(RunnableBindingBase):
         # Get the input messages
         input_messages = self._input_messages_cache.pop(cache_id)
 
-        assert len(input_messages) == 1
+        assert len(input_messages) > 0
         block_id, block_ts = self.time_splitter.invoke(
-            input={"timestamp": input_messages[0][1]},
+            input={"timestamp": input_messages[-1][1]},
             config={"configurable": {"session_id": session_id}},
         )
 

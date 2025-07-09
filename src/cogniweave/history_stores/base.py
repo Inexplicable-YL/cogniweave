@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from cogniweave.core.history_stores.models import (
+from cogniweave.core.prompts import LongMemoryPromptTemplate, ShortMemoryPromptTemplate
+from cogniweave.history_stores.models import (
     Base,
     ChatBlock,
     ChatBlockAttribute,
@@ -17,7 +18,6 @@ from cogniweave.core.history_stores.models import (
     User,
     UserAttribute,
 )
-from cogniweave.core.prompts import LongMemoryPromptTemplate, ShortMemoryPromptTemplate
 
 _SHORT_MEMORY_KEY: Literal["_short_memory"] = "_short_memory"
 _LONG_MEMORY_KEY: Literal["_long_memory"] = "_long_memory"
@@ -541,15 +541,15 @@ class BaseHistoryStore(BaseModel):
         stmt = select(ChatMessage).filter(ChatMessage.session_id == user_id).filter(*criteria)
         if limit is not None:
             if kwargs.get("from_first", False):
-                stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid).limit(limit)
+                stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.id).limit(limit)
                 result = list(session.scalars(stmt).all())
             else:
-                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(
+                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.id.desc()).limit(
                     limit
                 )
                 result = list(reversed(session.scalars(stmt).all()))
         else:
-            stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid)
+            stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.id)
             result = list(session.scalars(stmt).all())
         return [
             (messages_from_dict([rec.content])[0], rec.timestamp.replace(tzinfo=UTC).timestamp())
@@ -571,17 +571,17 @@ class BaseHistoryStore(BaseModel):
         stmt = select(ChatMessage).filter(ChatMessage.session_id == user_id).filter(*criteria)
         if limit is not None:
             if kwargs.get("from_first", False):
-                stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid).limit(limit)
+                stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.id).limit(limit)
                 rec = await session.execute(stmt)
                 result = list(rec.scalars().all())
             else:
-                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(
+                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.id.desc()).limit(
                     limit
                 )
                 rec = await session.execute(stmt)
                 result = list(reversed(rec.scalars().all()))
         else:
-            stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid)
+            stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.id)
             rec = await session.execute(stmt)
             result = list(rec.scalars().all())
         return [
@@ -612,15 +612,15 @@ class BaseHistoryStore(BaseModel):
         )
         if limit is not None:
             if kwargs.get("from_first", False):
-                stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid).limit(limit)
+                stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.id).limit(limit)
                 result = list(session.scalars(stmt).all())
             else:
-                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(
+                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.id.desc()).limit(
                     limit
                 )
                 result = list(reversed(session.scalars(stmt).all()))
         else:
-            stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid)
+            stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.id)
             result = list(session.scalars(stmt).all())
         return [
             (
@@ -653,17 +653,17 @@ class BaseHistoryStore(BaseModel):
         )
         if limit is not None:
             if kwargs.get("from_first", False):
-                stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid).limit(limit)
+                stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.id).limit(limit)
                 rec = await session.execute(stmt)
                 result = list(rec.scalars().all())
             else:
-                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(
+                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.id.desc()).limit(
                     limit
                 )
                 rec = await session.execute(stmt)
                 result = list(reversed(rec.scalars().all()))
         else:
-            stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid)
+            stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.id)
             rec = await session.execute(stmt)
             result = list(rec.scalars().all())
         return [

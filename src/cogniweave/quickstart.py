@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING
 from langchain_core.prompts import MessagesPlaceholder
 
 from cogniweave.core.end_detector import EndDetector
-from cogniweave.core.history_stores import BaseHistoryStore as HistoryStore
 from cogniweave.core.time_splitter import TimeSplitter
 from cogniweave.core.vector_stores import TagsVectorStore
+from cogniweave.history_stores import BaseHistoryStore as HistoryStore
 from cogniweave.llms import AgentBase, OpenAIEmbeddings, StringSingleTurnChat
 from cogniweave.prompt_values import MultilingualStringPromptValue
 from cogniweave.prompts import MessageSegmentsPlaceholder, RichSystemMessagePromptTemplate
