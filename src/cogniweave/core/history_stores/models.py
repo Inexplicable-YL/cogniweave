@@ -4,7 +4,7 @@ from datetime import datetime  # noqa: TC003
 from typing import Any
 from typing_extensions import override
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Integer
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -45,10 +45,7 @@ class User(Base):
 
     @override
     def __repr__(self) -> str:
-        return (
-            f"<User(id={self.id}, session_id={self.session_id!r}, "
-            f"name={self.name!r})>"
-        )
+        return f"<User(id={self.id}, session_id={self.session_id!r}, name={self.name!r})>"
 
 
 class UserAttribute(Base):
@@ -128,12 +125,8 @@ class ChatMessage(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
-    block: Mapped[ChatBlock] = relationship(
-        "ChatBlock", back_populates="messages", lazy="joined"
-    )
-    user: Mapped[User] = relationship(
-        "User", back_populates="messages", lazy="joined"
-    )
+    block: Mapped[ChatBlock] = relationship("ChatBlock", back_populates="messages", lazy="joined")
+    user: Mapped[User] = relationship("User", back_populates="messages", lazy="joined")
 
     __table_args__ = (
         Index("idx_messages_block_timestamp", "block_id", "timestamp"),

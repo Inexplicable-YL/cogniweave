@@ -104,7 +104,7 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
     def __init__(
         self,
         *,
-        db_url: str | None = None,
+        db_url: str,
         echo: bool = False,
         max_cache_blocks: int = 20,
         **kwargs: Any,

@@ -89,7 +89,7 @@ class BaseHistoryStore(BaseModel):
         self._session_local = session_local
         self._async_session_local = async_session_local
 
-    def _get_or_create_user(self, session: Session, name: str) -> User:
+    def _get_or_create_user(self, session: Session, session_id: str) -> User:
         """Get existing user or create new one if not found.
 
         Args:
@@ -99,14 +99,14 @@ class BaseHistoryStore(BaseModel):
         Return:
             User: The existing or newly created User instance.
         """
-        user = session.query(User).filter_by(session_id=name).first()
+        user = session.query(User).filter_by(session_id=session_id).first()
         if user is None:
-            user = User(session_id=name)
+            user = User(session_id=session_id)
             session.add(user)
             session.flush()
         return user
 
-    async def _a_get_or_create_user(self, session: AsyncSession, name: str) -> User:
+    async def _a_get_or_create_user(self, session: AsyncSession, session_id: str) -> User:
         """Async version of _get_or_create_user.
 
         Args:
@@ -116,10 +116,10 @@ class BaseHistoryStore(BaseModel):
         Return:
             User: The existing or newly created User instance.
         """
-        result = await session.execute(select(User).filter_by(session_id=name))
+        result = await session.execute(select(User).filter_by(session_id=session_id))
         user = result.scalar_one_or_none()
         if user is None:
-            user = User(session_id=name)
+            user = User(session_id=session_id)
             session.add(user)
             await session.flush()
         return user
@@ -200,14 +200,13 @@ class BaseHistoryStore(BaseModel):
         if not messages:
             return
 
-        context_id = block_id
         start_ts = float(block_ts) if block_ts is not None else None
         sid = session_id or block_id
 
         with self._session_local() as session:
             try:
                 db_user = self._get_or_create_user(session, sid)
-                block = self._get_or_create_block(session, db_user, context_id, start_ts)
+                block = self._get_or_create_block(session, db_user, block_id, start_ts)
 
                 records = [
                     ChatMessage(
@@ -250,14 +249,13 @@ class BaseHistoryStore(BaseModel):
         if not messages:
             return
 
-        context_id = block_id
         start_ts = float(block_ts) if block_ts is not None else None
         sid = session_id or block_id
 
         async with self._async_session_local() as session:
             try:
                 db_user = await self._a_get_or_create_user(session, sid)
-                block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
+                block = await self._a_get_or_create_block(session, db_user, block_id, start_ts)
 
                 records = [
                     ChatMessage(
@@ -299,14 +297,13 @@ class BaseHistoryStore(BaseModel):
         if not attributes:
             return
 
-        context_id = block_id
         start_ts = float(block_ts) if block_ts is not None else None
         sid = session_id or block_id
 
         with self._session_local() as session:
             try:
                 db_user = self._get_or_create_user(session, sid)
-                block = self._get_or_create_block(session, db_user, context_id, start_ts)
+                block = self._get_or_create_block(session, db_user, block_id, start_ts)
 
                 attr_recs = [
                     ChatBlockAttribute(
@@ -348,14 +345,13 @@ class BaseHistoryStore(BaseModel):
         if not attributes:
             return
 
-        context_id = block_id
         start_ts = float(block_ts) if block_ts is not None else None
         sid = session_id or block_id
 
         async with self._async_session_local() as session:
             try:
                 db_user = await self._a_get_or_create_user(session, sid)
-                block = await self._a_get_or_create_block(session, db_user, context_id, start_ts)
+                block = await self._a_get_or_create_block(session, db_user, block_id, start_ts)
 
                 attr_recs = [
                     ChatBlockAttribute(
@@ -549,7 +545,9 @@ class BaseHistoryStore(BaseModel):
                 stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid).limit(limit)
                 result = list(session.scalars(stmt).all())
             else:
-                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(limit)
+                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(
+                    limit
+                )
                 result = list(reversed(session.scalars(stmt).all()))
         else:
             stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid)
@@ -578,7 +576,9 @@ class BaseHistoryStore(BaseModel):
                 rec = await session.execute(stmt)
                 result = list(rec.scalars().all())
             else:
-                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(limit)
+                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(
+                    limit
+                )
                 rec = await session.execute(stmt)
                 result = list(reversed(rec.scalars().all()))
         else:
@@ -616,7 +616,9 @@ class BaseHistoryStore(BaseModel):
                 stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid).limit(limit)
                 result = list(session.scalars(stmt).all())
             else:
-                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(limit)
+                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(
+                    limit
+                )
                 result = list(reversed(session.scalars(stmt).all()))
         else:
             stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid)
@@ -656,7 +658,9 @@ class BaseHistoryStore(BaseModel):
                 rec = await session.execute(stmt)
                 result = list(rec.scalars().all())
             else:
-                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(limit)
+                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(
+                    limit
+                )
                 rec = await session.execute(stmt)
                 result = list(reversed(rec.scalars().all()))
         else:
