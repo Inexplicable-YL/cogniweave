@@ -4,7 +4,7 @@ from datetime import datetime  # noqa: TC003
 from typing import Any
 from typing_extensions import override
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Integer
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -17,12 +17,19 @@ class User(Base):
 
     __tablename__ = "users"
 
-    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    session_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     chat_blocks: Mapped[list[ChatBlock]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         order_by="ChatBlock.timestamp",
+        lazy="selectin",
+    )
+    messages: Mapped[list[ChatMessage]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="ChatMessage.timestamp",
         lazy="selectin",
     )
     attributes: Mapped[list[UserAttribute]] = relationship(
@@ -31,11 +38,17 @@ class User(Base):
         lazy="selectin",
     )
 
-    __table_args__ = (Index("idx_user_name", "name"),)
+    __table_args__ = (
+        Index("idx_user_session", "session_id"),
+        Index("idx_user_name", "name"),
+    )
 
     @override
     def __repr__(self) -> str:
-        return f"<User(id={self.id}, name={self.name!r})>"
+        return (
+            f"<User(id={self.id}, session_id={self.session_id!r}, "
+            f"name={self.name!r})>"
+        )
 
 
 class UserAttribute(Base):
@@ -106,20 +119,32 @@ class ChatMessage(Base):
         nullable=False,
         index=True,
     )
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    uid: Mapped[int] = mapped_column(Integer, autoincrement=True, index=True, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
-    block: Mapped[ChatBlock] = relationship("ChatBlock", back_populates="messages", lazy="joined")
+    block: Mapped[ChatBlock] = relationship(
+        "ChatBlock", back_populates="messages", lazy="joined"
+    )
+    user: Mapped[User] = relationship(
+        "User", back_populates="messages", lazy="joined"
+    )
 
     __table_args__ = (
         Index("idx_messages_block_timestamp", "block_id", "timestamp"),
         Index("idx_messages_timestamp", "timestamp"),
+        Index("idx_messages_session_timestamp", "session_id", "timestamp"),
     )
 
     @override
     def __repr__(self) -> str:
         return (
-            f"<ChatMessage(id={self.id}, block_id={self.block_id}, "
+            f"<ChatMessage(id={self.id}, uid={self.uid}, block_id={self.block_id}, "
             f"timestamp={self.timestamp}, content={self.content})>"
         )
 

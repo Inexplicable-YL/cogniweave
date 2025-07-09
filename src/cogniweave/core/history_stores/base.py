@@ -99,9 +99,9 @@ class BaseHistoryStore(BaseModel):
         Return:
             User: The existing or newly created User instance.
         """
-        user = session.query(User).filter_by(name=name).first()
+        user = session.query(User).filter_by(session_id=name).first()
         if user is None:
-            user = User(name=name)
+            user = User(session_id=name)
             session.add(user)
             session.flush()
         return user
@@ -116,16 +116,16 @@ class BaseHistoryStore(BaseModel):
         Return:
             User: The existing or newly created User instance.
         """
-        result = await session.execute(select(User).filter_by(name=name))
+        result = await session.execute(select(User).filter_by(session_id=name))
         user = result.scalar_one_or_none()
         if user is None:
-            user = User(name=name)
+            user = User(session_id=name)
             session.add(user)
             await session.flush()
         return user
 
     def _get_or_create_block(
-        self, session: Session, user: User, context_id: str, start_ts: float
+        self, session: Session, user: User, context_id: str, start_ts: float | None
     ) -> ChatBlock:
         """Get existing chat block or create new one if not found.
 
@@ -133,24 +133,25 @@ class BaseHistoryStore(BaseModel):
             session: SQLAlchemy session.
             user: Owner User instance.
             context_id: Unique block/context ID.
-            start_ts: Unix timestamp for block start time.
+            start_ts: Unix timestamp for block start time if block creation is needed.
 
         Return:
             ChatBlock: The existing or newly created ChatBlock instance.
         """
         block = session.query(ChatBlock).filter_by(context_id=context_id).first()
         if block is None:
+            ts = start_ts if start_ts is not None else datetime.now(tz=UTC).timestamp()
             block = ChatBlock(
                 context_id=context_id,
                 session_id=user.id,
-                timestamp=datetime.fromtimestamp(start_ts, tz=UTC),
+                timestamp=datetime.fromtimestamp(ts, tz=UTC),
             )
             session.add(block)
             session.flush()
         return block
 
     async def _a_get_or_create_block(
-        self, session: AsyncSession, user: User, context_id: str, start_ts: float
+        self, session: AsyncSession, user: User, context_id: str, start_ts: float | None
     ) -> ChatBlock:
         """Async version of _get_or_create_block.
 
@@ -158,7 +159,7 @@ class BaseHistoryStore(BaseModel):
             session: Async SQLAlchemy session.
             user: Owner User instance.
             context_id: Unique block/context ID.
-            start_ts: Unix timestamp for block start time.
+            start_ts: Unix timestamp for block start time if block creation is needed.
 
         Return:
             ChatBlock: The existing or newly created ChatBlock instance.
@@ -166,10 +167,11 @@ class BaseHistoryStore(BaseModel):
         result = await session.execute(select(ChatBlock).filter_by(context_id=context_id))
         block = result.scalar_one_or_none()
         if block is None:
+            ts = start_ts if start_ts is not None else datetime.now(tz=UTC).timestamp()
             block = ChatBlock(
                 context_id=context_id,
                 session_id=user.id,
-                timestamp=datetime.fromtimestamp(start_ts, tz=UTC),
+                timestamp=datetime.fromtimestamp(ts, tz=UTC),
             )
             session.add(block)
             await session.flush()
@@ -180,7 +182,7 @@ class BaseHistoryStore(BaseModel):
         messages: list[tuple[BaseMessage, float]],
         *,
         block_id: str,
-        block_ts: float,
+        block_ts: float | None = None,
         session_id: str | None = None,
     ) -> None:
         """Persist a list of messages with timestamps to the store.
@@ -199,7 +201,7 @@ class BaseHistoryStore(BaseModel):
             return
 
         context_id = block_id
-        start_ts = float(block_ts)
+        start_ts = float(block_ts) if block_ts is not None else None
         sid = session_id or block_id
 
         with self._session_local() as session:
@@ -210,6 +212,7 @@ class BaseHistoryStore(BaseModel):
                 records = [
                     ChatMessage(
                         block_id=block.id,
+                        session_id=db_user.id,
                         timestamp=datetime.fromtimestamp(float(ts), tz=UTC),
                         content=message_to_dict(msg),
                     )
@@ -227,7 +230,7 @@ class BaseHistoryStore(BaseModel):
         messages: list[tuple[BaseMessage, float]],
         *,
         block_id: str,
-        block_ts: float,
+        block_ts: float | None = None,
         session_id: str | None = None,
     ) -> None:
         """Async version of :meth:`add_messages`.
@@ -248,7 +251,7 @@ class BaseHistoryStore(BaseModel):
             return
 
         context_id = block_id
-        start_ts = float(block_ts)
+        start_ts = float(block_ts) if block_ts is not None else None
         sid = session_id or block_id
 
         async with self._async_session_local() as session:
@@ -259,6 +262,7 @@ class BaseHistoryStore(BaseModel):
                 records = [
                     ChatMessage(
                         block_id=block.id,
+                        session_id=db_user.id,
                         timestamp=datetime.fromtimestamp(float(ts), tz=UTC),
                         content=message_to_dict(msg),
                     )
@@ -277,7 +281,7 @@ class BaseHistoryStore(BaseModel):
         attributes: list[BlockAttributeData],
         *,
         block_id: str,
-        block_ts: float,
+        block_ts: float | None = None,
         session_id: str | None = None,
     ) -> None:
         """Persist a list of block attributes to the store.
@@ -296,7 +300,7 @@ class BaseHistoryStore(BaseModel):
             return
 
         context_id = block_id
-        start_ts = float(block_ts)
+        start_ts = float(block_ts) if block_ts is not None else None
         sid = session_id or block_id
 
         with self._session_local() as session:
@@ -324,7 +328,7 @@ class BaseHistoryStore(BaseModel):
         attributes: list[BlockAttributeData],
         *,
         block_id: str,
-        block_ts: float,
+        block_ts: float | None = None,
         session_id: str | None = None,
     ) -> None:
         """Async version of :meth:`add_attributes`.
@@ -345,7 +349,7 @@ class BaseHistoryStore(BaseModel):
             return
 
         context_id = block_id
-        start_ts = float(block_ts)
+        start_ts = float(block_ts) if block_ts is not None else None
         sid = session_id or block_id
 
         async with self._async_session_local() as session:
@@ -527,6 +531,65 @@ class BaseHistoryStore(BaseModel):
         """
         return [m for m, _ in await self.aget_block_history_with_timestamps(block_id)]
 
+    def _query_messages_by_session(
+        self,
+        session: Session,
+        user_id: int,
+        *,
+        limit: int | None = None,
+        criteria: Sequence[_ColumnExpressionArgument[bool]] | None = None,
+        **kwargs: Any,
+    ) -> list[tuple[BaseMessage, float]]:
+        if limit is not None and limit <= 0:
+            return []
+        criteria = criteria or []
+        stmt = select(ChatMessage).filter(ChatMessage.session_id == user_id).filter(*criteria)
+        if limit is not None:
+            if kwargs.get("from_first", False):
+                stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid).limit(limit)
+                result = list(session.scalars(stmt).all())
+            else:
+                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(limit)
+                result = list(reversed(session.scalars(stmt).all()))
+        else:
+            stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid)
+            result = list(session.scalars(stmt).all())
+        return [
+            (messages_from_dict([rec.content])[0], rec.timestamp.replace(tzinfo=UTC).timestamp())
+            for rec in result
+        ]
+
+    async def _a_query_messages_by_session(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        *,
+        limit: int | None = None,
+        criteria: Sequence[_ColumnExpressionArgument[bool]] | None = None,
+        **kwargs: Any,
+    ) -> list[tuple[BaseMessage, float]]:
+        if limit is not None and limit <= 0:
+            return []
+        criteria = criteria or []
+        stmt = select(ChatMessage).filter(ChatMessage.session_id == user_id).filter(*criteria)
+        if limit is not None:
+            if kwargs.get("from_first", False):
+                stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid).limit(limit)
+                rec = await session.execute(stmt)
+                result = list(rec.scalars().all())
+            else:
+                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(limit)
+                rec = await session.execute(stmt)
+                result = list(reversed(rec.scalars().all()))
+        else:
+            stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid)
+            rec = await session.execute(stmt)
+            result = list(rec.scalars().all())
+        return [
+            (messages_from_dict([rec.content])[0], rec.timestamp.replace(tzinfo=UTC).timestamp())
+            for rec in result
+        ]
+
     def _query_messages(
         self,
         session: Session,
@@ -550,13 +613,13 @@ class BaseHistoryStore(BaseModel):
         )
         if limit is not None:
             if kwargs.get("from_first", False):
-                stmt = stmt.order_by(ChatMessage.timestamp).limit(limit)
+                stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid).limit(limit)
                 result = list(session.scalars(stmt).all())
             else:
-                stmt = stmt.order_by(ChatMessage.timestamp.desc()).limit(limit)
+                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(limit)
                 result = list(reversed(session.scalars(stmt).all()))
         else:
-            stmt = stmt.order_by(ChatMessage.timestamp)
+            stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid)
             result = list(session.scalars(stmt).all())
         return [
             (
@@ -589,15 +652,15 @@ class BaseHistoryStore(BaseModel):
         )
         if limit is not None:
             if kwargs.get("from_first", False):
-                stmt = stmt.order_by(ChatMessage.timestamp).limit(limit)
+                stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid).limit(limit)
                 rec = await session.execute(stmt)
                 result = list(rec.scalars().all())
             else:
-                stmt = stmt.order_by(ChatMessage.timestamp.desc()).limit(limit)
+                stmt = stmt.order_by(ChatMessage.timestamp.desc(), ChatMessage.uid.desc()).limit(limit)
                 rec = await session.execute(stmt)
                 result = list(reversed(rec.scalars().all()))
         else:
-            stmt = stmt.order_by(ChatMessage.timestamp)
+            stmt = stmt.order_by(ChatMessage.timestamp, ChatMessage.uid)
             rec = await session.execute(stmt)
             result = list(rec.scalars().all())
         return [
@@ -614,7 +677,7 @@ class BaseHistoryStore(BaseModel):
         """Get user attributes, optionally filtered by type."""
 
         with self._session_local() as session:
-            user = session.query(User).filter_by(name=session_id).first()
+            user = session.query(User).filter_by(session_id=session_id).first()
             if not user:
                 return []
 
@@ -629,7 +692,7 @@ class BaseHistoryStore(BaseModel):
         """Async version of :meth:`get_user_attributes`."""
 
         async with self._async_session_local() as session:
-            result = await session.execute(select(User).filter_by(name=session_id))
+            result = await session.execute(select(User).filter_by(session_id=session_id))
             user = result.scalar_one_or_none()
             if not user:
                 return []
@@ -780,7 +843,7 @@ class BaseHistoryStore(BaseModel):
         start_date_time = get_datetime_from_timestamp(start_time)
         end_date_time = get_datetime_from_timestamp(end_time)
         with self._session_local() as session:
-            user = session.query(User).filter_by(name=session_id).first()
+            user = session.query(User).filter_by(session_id=session_id).first()
             if not user:
                 return []
 
@@ -835,7 +898,7 @@ class BaseHistoryStore(BaseModel):
         start_date_time = get_datetime_from_timestamp(start_time)
         end_date_time = get_datetime_from_timestamp(end_time)
         async with self._async_session_local() as session:
-            result = await session.execute(select(User).filter_by(name=session_id))
+            result = await session.execute(select(User).filter_by(session_id=session_id))
             user = result.scalar_one_or_none()
             if not user:
                 return []
@@ -946,28 +1009,13 @@ class BaseHistoryStore(BaseModel):
         if limit is not None and limit <= 0:
             return []
 
-        block_limit = limit if start_time is None and end_time is None else None
-        all_blocks = self.get_session_block_ids_with_timestamps(
-            session_id, limit=block_limit, start_time=start_time, end_time=end_time
-        )
-        if not all_blocks:
-            return []
-
-        if start_time is not None:
-            all_blocks = (
-                self.get_session_block_ids_with_timestamps(session_id, limit=2, end_time=start_time)
-                + all_blocks
-            )
-        if end_time is not None:
-            all_blocks = all_blocks + self.get_session_block_ids_with_timestamps(
-                session_id, limit=2, start_time=end_time, from_first=True
-            )
-
-        block_ids = [bid for bid, _ in dict.fromkeys(all_blocks)]
         with self._session_local() as session:
-            return self._query_messages(
+            user = session.query(User).filter_by(session_id=session_id).first()
+            if not user:
+                return []
+            return self._query_messages_by_session(
                 session,
-                block_ids,
+                user.id,
                 limit=limit,
                 criteria=(
                     [ChatMessage.timestamp >= get_datetime_from_timestamp(start_time)]
@@ -1006,30 +1054,14 @@ class BaseHistoryStore(BaseModel):
         if limit is not None and limit <= 0:
             return []
 
-        block_limit = limit if start_time is None and end_time is None else None
-        all_blocks = await self.aget_session_block_ids_with_timestamps(
-            session_id, limit=block_limit, start_time=start_time, end_time=end_time
-        )
-        if not all_blocks:
-            return []
-
-        if start_time is not None:
-            all_blocks = (
-                await self.aget_session_block_ids_with_timestamps(
-                    session_id, limit=2, end_time=start_time
-                )
-                + all_blocks
-            )
-        if end_time is not None:
-            all_blocks = all_blocks + await self.aget_session_block_ids_with_timestamps(
-                session_id, limit=2, start_time=end_time, from_first=True
-            )
-
-        block_ids = [bid for bid, _ in dict.fromkeys(all_blocks)]
         async with self._async_session_local() as session:
-            return await self._a_query_messages(
+            result = await session.execute(select(User).filter_by(session_id=session_id))
+            user = result.scalar_one_or_none()
+            if not user:
+                return []
+            return await self._a_query_messages_by_session(
                 session,
-                block_ids,
+                user.id,
                 limit=limit,
                 criteria=(
                     [ChatMessage.timestamp >= get_datetime_from_timestamp(start_time)]
@@ -1108,9 +1140,14 @@ class BaseHistoryStore(BaseModel):
         Return:
             None: User name is persisted to the database.
         """
-        self.add_user_attributes(
-            [UserAttributeData(type=_USER_NAME_KEY, value=user_name)], session_id=session_id
-        )
+        with self._session_local() as session:
+            try:
+                user = self._get_or_create_user(session, session_id)
+                user.name = user_name
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
     async def aadd_user_name(self, user_name: str, *, session_id: str) -> None:
         """Async add user name to the history store.
@@ -1122,9 +1159,14 @@ class BaseHistoryStore(BaseModel):
         Return:
             None: User name is persisted to the database.
         """
-        await self.aadd_user_attributes(
-            [UserAttributeData(type=_USER_NAME_KEY, value=user_name)], session_id=session_id
-        )
+        async with self._async_session_local() as session:
+            try:
+                user = await self._a_get_or_create_user(session, session_id)
+                user.name = user_name
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     def get_user_name(self, session_id: str) -> str | None:
         """Get user name from the history store.
@@ -1135,10 +1177,11 @@ class BaseHistoryStore(BaseModel):
         Return:
             str | None: User name if found, None otherwise.
         """
-        attributes = self.get_user_attributes(session_id, types=[_USER_NAME_KEY])
-        if attributes:
-            return attributes[0].get("value")
-        return None
+        with self._session_local() as session:
+            user = session.query(User).filter_by(session_id=session_id).first()
+            if user:
+                return user.name
+            return None
 
     async def aget_user_name(self, session_id: str) -> str | None:
         """Async get user name from the history store.
@@ -1149,17 +1192,19 @@ class BaseHistoryStore(BaseModel):
         Return:
             str | None: User name if found, None otherwise.
         """
-        attributes = await self.aget_user_attributes(session_id, types=[_USER_NAME_KEY])
-        if attributes:
-            return attributes[0].get("value")
-        return None
+        async with self._async_session_local() as session:
+            result = await session.execute(select(User).filter_by(session_id=session_id))
+            user = result.scalar_one_or_none()
+            if user:
+                return user.name
+            return None
 
     def add_short_memory(
         self,
         short_memory: ShortMemoryPromptTemplate,
         *,
         block_id: str,
-        block_ts: float,
+        block_ts: float | None = None,
         session_id: str | None = None,
     ) -> None:
         """Add short memory data for a specific block.
@@ -1190,7 +1235,7 @@ class BaseHistoryStore(BaseModel):
         short_memory: ShortMemoryPromptTemplate,
         *,
         block_id: str,
-        block_ts: float,
+        block_ts: float | None = None,
         session_id: str | None = None,
     ) -> None:
         """Async add short memory data for a specific block.
