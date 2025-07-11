@@ -47,7 +47,13 @@ Additional options control where history and vector data are stored:
 python -m cogniweave demo my_session --index my_index --folder /tmp/cache
 ```
 
-The `--index` argument sets the file names for the SQLite database and FAISS index, while `--folder` chooses the directory used to store them.
+You can also load a custom system prompt from a file:
+
+```bash
+python -m cogniweave demo my_session --prompt-file prompt.txt
+```
+
+The `--index` argument sets the file names for the SQLite database and FAISS index, while `--folder` chooses the directory used to store them. The optional `--prompt-file` points to a text file whose content becomes the system prompt for the demo.
 
 ## Quick build
 

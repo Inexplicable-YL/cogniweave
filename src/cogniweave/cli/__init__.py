@@ -52,10 +52,14 @@ def demo(
     *,
     index: str = "demo",
     folder: str | Path = DEF_FOLDER_PATH,
+    prompt_file: str | Path | None = None,
 ) -> None:
     """Run the interactive demo."""
 
-    pipeline = build_pipeline(index_name=index, folder_path=folder)
+    prompt: str | None = None
+    if prompt_file:
+        prompt = Path(prompt_file).read_text(encoding="utf-8")
+    pipeline = build_pipeline(index_name=index, folder_path=folder, prompt=prompt)
     history_store = pipeline.history_store
     console = Console()
 
@@ -107,10 +111,20 @@ def main() -> None:
         default=str(DEF_FOLDER_PATH),
         help="Folder used to store cache files",
     )
+    demo_cmd.add_argument(
+        "--prompt-file",
+        help="Path to a file containing the system prompt",
+        default=None,
+    )
 
     args = parser.parse_args()
 
     if args.command == "demo":
-        demo(args.session, index=args.index, folder=Path(args.folder))
+        demo(
+            args.session,
+            index=args.index,
+            folder=Path(args.folder),
+            prompt_file=args.prompt_file,
+        )
     else:
         parser.print_help()
