@@ -62,6 +62,7 @@ def create_chat(
     lang: str | None = None,
     *,
     prompt: str | None = None,
+    temperature: float | None = None,
     provider: str | None = None,
     model: str | None = None,
 ) -> StringSingleTurnChat:
@@ -75,6 +76,9 @@ def create_chat(
         lang=lang,
         provider=get_provider_from_env("CHAT_MODEL", default=provider or "openai")(),
         model=get_model_from_env("CHAT_MODEL", default=model or "gpt-4.1")(),
+        temperature=(
+            temperature if temperature is not None else float(os.getenv("CHAT_TEMPERATURE", "1.0"))
+        ),
         contexts=[
             RichSystemMessagePromptTemplate.from_template(
                 [
@@ -91,6 +95,7 @@ def create_agent(
     lang: str | None = None,
     *,
     prompt: str | None = None,
+    temperature: float = 1.0,
     tools: list[BaseTool] | None = None,
     provider: str | None = None,
     model: str | None = None,
@@ -105,6 +110,9 @@ def create_agent(
         lang=lang,
         provider=get_provider_from_env("AGENT_MODEL", default=provider or "openai")(),
         model=get_model_from_env("AGENT_MODEL", default=model or "gpt-4.1")(),
+        temperature=(
+            temperature if temperature is not None else float(os.getenv("AGENT_TEMPERATURE", "1.0"))
+        ),
         contexts=[
             RichSystemMessagePromptTemplate.from_template(
                 [
@@ -122,6 +130,7 @@ def build_pipeline(
     lang: str | None = None,
     prompt: str | None = None,
     *,
+    temperature: float | None = None,
     index_name: str = "demo",
     folder_path: str | Path = DEF_FOLDER_PATH,
 ) -> RunnableWithHistoryStore:
@@ -129,10 +138,10 @@ def build_pipeline(
     embeddings = create_embeddings()
     history_store = create_history_store(index_name=index_name, folder_path=folder_path)
     vector_store = create_vector_store(embeddings, index_name=index_name, folder_path=folder_path)
-    agent = create_chat(lang=lang, prompt=prompt)
+    chat = create_chat(lang=lang, prompt=prompt, temperature=temperature)
 
     pipeline = RunnableWithMemoryMaker(
-        agent,
+        chat,
         history_store=history_store,
         vector_store=vector_store,
         input_messages_key="input",
