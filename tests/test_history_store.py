@@ -4,7 +4,9 @@ from langchain_core.messages import HumanMessage
 from sqlalchemy import select
 
 from cogniweave.history_stores import (
-    BaseHistoryStore,
+    BaseHistoryStoreWithCache as BaseHistoryStore,
+)
+from cogniweave.history_stores import (
     ChatBlock,
     ChatBlockAttribute,
     ChatMessage,

@@ -4,7 +4,7 @@ import bisect
 from collections import defaultdict
 from functools import partial
 from itertools import groupby
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 from typing_extensions import override
 
 from langchain_core.messages import BaseMessage  # noqa: TC002
@@ -15,6 +15,9 @@ from .base import BaseHistoryStore
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+
+_T = TypeVar("_T", bound="Any")
 
 
 class SessionCache(BaseModel):
@@ -367,7 +370,7 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
                         + result
                     )
         if result:
-            result = list(dict.fromkeys(sorted(result, key=lambda x: x[1])))
+            result = self.deduplicate_unhashable(result)
             if limit is not None:
                 result = result[:limit] if from_first else result[-limit:]
             return result
@@ -443,7 +446,7 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
                         + result
                     )
         if result:
-            result = list(dict.fromkeys(sorted(result, key=lambda x: x[1])))
+            result = self.deduplicate_unhashable(result)
             if limit is not None:
                 result = result[:limit] if from_first else result[-limit:]
             return result
@@ -519,7 +522,7 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
                         + result
                     )
         if result:
-            result = [next(group) for _, group in groupby(sorted(result, key=lambda x: x[1]))]
+            result = self.deduplicate_unhashable(result)
             if limit is not None:
                 result = result[:limit] if from_first else result[-limit:]
             return result
@@ -595,7 +598,7 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
                         + result
                     )
         if result:
-            result = [next(group) for _, group in groupby(sorted(result, key=lambda x: x[1]))]
+            result = self.deduplicate_unhashable(result)
             if limit is not None:
                 result = result[:limit] if from_first else result[-limit:]
             return result
@@ -606,3 +609,22 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
             end_time=end_time,
             **kwargs,
         )
+
+    @staticmethod
+    def deduplicate_unhashable(
+        messages: list[tuple[_T, float]],
+    ) -> list[tuple[_T, float]]:
+        """Removes duplicate messages that are unhashable.
+
+        Args:
+            messages: List of (message, timestamp) pairs to deduplicate.
+
+        Return:
+            list[tuple[_T, float]]: List of unique (message, timestamp) pairs.
+        """
+        return [
+            next(group)
+            for _, group in groupby(
+                sorted([(msg, round(ts, 3)) for msg, ts in messages], key=lambda x: x[1])
+            )
+        ]
