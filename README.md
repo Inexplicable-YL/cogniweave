@@ -2,6 +2,10 @@
 
 CogniWeave is an experimental agent framework built on top of [LangChain](https://github.com/langchain-ai/langchain). The repository showcases how to combine short‑term memory, persistent chat history and a long‑term vector store with end‑of‑conversation detection. The code base mainly serves as a set of runnable components used by the demonstration scripts and tests.
 
+<p align="left">
+<img src="https://github.com/Inexplicable-YL/CogniWeave/blob/main/docs/flow.png" width="600px">
+</p>
+
 ## Features
 
 - **Extensible chat agent** – defaults to OpenAI models but can be switched to other providers via environment variables.
