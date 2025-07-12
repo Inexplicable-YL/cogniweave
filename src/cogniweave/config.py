@@ -28,11 +28,39 @@ from cogniweave.typing import (
     type_is_complex,
 )
 from cogniweave.utils import deep_update
+from dataclasses import dataclass
+from pydantic.fields import FieldInfo
 
-from .compat import (
-    ModelField,
-    model_fields,
-)
+
+@dataclass
+class ModelField:
+    """Simplified model field information used for settings parsing."""
+
+    name: str
+    annotation: Any
+    field_info: FieldInfo
+
+
+def model_fields(model: type[BaseModel]) -> list[ModelField]:
+    """Return model fields as :class:`ModelField` list compatible with pydantic v1 and v2."""
+
+    # pydantic v2 provides ``model_fields`` containing ``FieldInfo`` objects
+    fields = getattr(model, "model_fields", None)
+    if fields is not None:
+        return [
+            ModelField(name=name, annotation=field.annotation, field_info=field)
+            for name, field in fields.items()
+        ]
+
+    # fallback to pydantic v1 ``__fields__`` structure
+    return [
+        ModelField(
+            name=name,
+            annotation=field.annotation,
+            field_info=field.field_info,
+        )
+        for name, field in getattr(model, "__fields__", {}).items()
+    ]
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
