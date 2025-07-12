@@ -1,9 +1,10 @@
-from __future__ import annotations
-
 import abc
 import json
 import os
-import warnings
+import tomllib
+from collections.abc import Mapping
+from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -15,11 +16,13 @@ from typing import (
 )
 from typing_extensions import override
 
+import yaml
 from dotenv import dotenv_values
 from pydantic import (
     BaseModel,
     ConfigDict,
 )
+from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined, PydanticUndefinedType
 
 from cogniweave.typing import (
@@ -28,8 +31,6 @@ from cogniweave.typing import (
     type_is_complex,
 )
 from cogniweave.utils import deep_update
-from dataclasses import dataclass
-from pydantic.fields import FieldInfo
 
 
 @dataclass
@@ -62,8 +63,6 @@ def model_fields(model: type[BaseModel]) -> list[ModelField]:
         for name, field in getattr(model, "__fields__", {}).items()
     ]
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping
 
 DOTENV_TYPE: TypeAlias = Path | str | list[Path | str] | tuple[Path | str, ...]
 
@@ -74,11 +73,11 @@ class SettingsError(ValueError): ...
 
 
 class BaseSettingsSource(abc.ABC):
-    def __init__(self, settings_cls: type[BaseSettings]) -> None:
+    def __init__(self, settings_cls: type["BaseSettings"]) -> None:
         self.settings_cls = settings_cls
 
     @property
-    def config(self) -> SettingsConfig:
+    def config(self) -> "SettingsConfig":
         return cast("SettingsConfig", self.settings_cls.model_config)
 
     @abc.abstractmethod
@@ -89,7 +88,7 @@ class BaseSettingsSource(abc.ABC):
 class InitSettingsSource(BaseSettingsSource):
     __slots__ = ("init_kwargs",)
 
-    def __init__(self, settings_cls: type[BaseSettings], init_kwargs: dict[str, Any]) -> None:
+    def __init__(self, settings_cls: type["BaseSettings"], init_kwargs: dict[str, Any]) -> None:
         self.init_kwargs = init_kwargs
         super().__init__(settings_cls)
 
@@ -105,7 +104,7 @@ class InitSettingsSource(BaseSettingsSource):
 class DotEnvSettingsSource(BaseSettingsSource):
     def __init__(
         self,
-        settings_cls: type[BaseSettings],
+        settings_cls: type["BaseSettings"],
         env_file: DOTENV_TYPE | None = ENV_FILE_SENTINEL,
         env_file_encoding: str | None = None,
         case_sensitive: bool | None = None,
@@ -271,15 +270,8 @@ class DotEnvSettingsSource(BaseSettingsSource):
             env_val = env_vars[env_name]
             if env_val and (val_striped := env_val.strip()):
                 # there's a value, decode that as JSON
-                try:
+                with suppress(ValueError):
                     env_val = json.loads(val_striped)
-                except ValueError:
-                    warnings.warn(
-                        "Error while parsing JSON for "
-                        f"{env_name!r}={val_striped!r}. "
-                        "Assumed as string.",
-                        stacklevel=2,
-                    )
 
             # explode value when it's a nested dict
             env_name, *nested_keys = env_name.split(self.env_nested_delimiter)
@@ -297,11 +289,86 @@ class DotEnvSettingsSource(BaseSettingsSource):
         return d
 
 
+class DotFileSettingsSource(BaseSettingsSource):
+    def __init__(
+        self,
+        settings_cls: type["BaseSettings"],
+        config_file: str | Path | None = None,
+        config_file_encoding: str | None = None,
+        case_sensitive: bool | None = None,
+    ) -> None:
+        super().__init__(settings_cls)
+        self.config_file = str(
+            config_file
+            if config_file is not None
+            else self.config.get("config_file", "config.toml")
+        )
+        self.config_file_encoding = (
+            config_file_encoding
+            if config_file_encoding is not None
+            else self.config.get("config_file_encoding", "utf-8")
+        )
+        self.case_sensitive = (
+            case_sensitive
+            if case_sensitive is not None
+            else self.config.get("case_sensitive", False)
+        )
+
+    def _apply_case_sensitive(self, key: str) -> str:
+        """Return *key* untouched when *case_sensitive* is True, else lower case it."""
+        return key if self.case_sensitive else key.lower()
+
+    def _convert_keys(self, obj: Any) -> Any:
+        """Recursively apply :pymeth:`_apply_case_sensitive` to every dict key."""
+        if isinstance(obj, dict):
+            return {
+                (self._apply_case_sensitive(k) if isinstance(k, str) else k): self._convert_keys(v)
+                for k, v in obj.items()
+            }
+        if isinstance(obj, list):
+            return [self._convert_keys(v) for v in obj]
+        return obj
+
+    @override
+    def __call__(self) -> dict[str, Any]:
+        """从配置文件中读取配置项。"""
+        d: dict[str, Any] = {}
+
+        if self.config_file is not None and (config_path := Path(self.config_file)).is_file():
+            try:
+                with config_path.open("rb") as f:
+                    if self.config_file.endswith(".json"):
+                        d = json.load(f)
+                    elif self.config_file.endswith(".toml"):
+                        d = tomllib.load(f)
+                    elif self.config_file.endswith((".yml", ".yaml")):
+                        d = yaml.safe_load(f)
+                    else:
+                        raise ValueError(
+                            "Read config file failed: Unable to determine config file type"
+                        )
+            except OSError as e:
+                raise SettingsError(f"Can not open config file: {self.config_file!r}") from e
+            except (
+                ValueError,
+                json.JSONDecodeError,
+                tomllib.TOMLDecodeError,
+                yaml.YAMLError,
+            ) as e:
+                raise SettingsError(f"Read config file failed: {self.config_file!r}") from e
+
+        return self._convert_keys(d or {})
+
+
 class SettingsConfig(ConfigDict, total=False):
     env_file: DOTENV_TYPE | None
     env_file_encoding: str
-    case_sensitive: bool
     env_nested_delimiter: str | None
+
+    config_file: str | Path | None
+    config_file_encoding: str
+
+    case_sensitive: bool
 
 
 class BaseSettings(BaseModel):
@@ -314,8 +381,10 @@ class BaseSettings(BaseModel):
         extra="allow",
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=False,
         env_nested_delimiter="__",
+        config_file="config.toml",
+        config_file_encoding="utf-8",
+        case_sensitive=False,
     )
 
     def __init__(
@@ -323,6 +392,8 @@ class BaseSettings(BaseModel):
         _env_file: DOTENV_TYPE | None = ENV_FILE_SENTINEL,
         _env_file_encoding: str | None = None,
         _env_nested_delimiter: str | None = None,
+        _config_file: str | Path | None = None,
+        _config_file_encoding: str | None = None,
         **values: Any,
     ) -> None:
         super().__init__(
@@ -331,6 +402,8 @@ class BaseSettings(BaseModel):
                 env_file=_env_file,
                 env_file_encoding=_env_file_encoding,
                 env_nested_delimiter=_env_nested_delimiter,
+                config_file=_config_file,
+                config_file_encoding=_config_file_encoding,
             )
         )
 
@@ -340,6 +413,8 @@ class BaseSettings(BaseModel):
         env_file: DOTENV_TYPE | None = None,
         env_file_encoding: str | None = None,
         env_nested_delimiter: str | None = None,
+        config_file: str | Path | None = None,
+        config_file_encoding: str | None = None,
     ) -> dict[str, Any]:
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
         env_settings = DotEnvSettingsSource(
@@ -348,7 +423,12 @@ class BaseSettings(BaseModel):
             env_file_encoding=env_file_encoding,
             env_nested_delimiter=env_nested_delimiter,
         )
-        return deep_update(env_settings(), init_settings())
+        config_settings = DotFileSettingsSource(
+            self.__class__,
+            config_file=config_file,
+            config_file_encoding=config_file_encoding,
+        )
+        return deep_update(config_settings(), env_settings(), init_settings())
 
 
 class Env(BaseSettings):
@@ -358,5 +438,9 @@ class Env(BaseSettings):
 class Config(BaseSettings):
     if TYPE_CHECKING:
         _env_file: DOTENV_TYPE | None = ".env", ".env.prod"
+        _config_file: str | Path | None = "config.toml"
+
+    index_name: str = "demo"
+    folder_path: str | Path = Path("./.cache/")
 
     model_config = SettingsConfig(env_file=(".env", ".env.prod"))
