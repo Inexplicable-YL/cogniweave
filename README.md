@@ -87,10 +87,10 @@ another language, define the prompt in the `prompt_values` section and set the
 `language` key to match. For Japanese using a TOML config:
 
 ```toml
+language = "jp"
+
 [prompt_values.chat]
 jp = "あなたは役に立つアシスタントです。"
-
-language = "jp"
 ```
 
 When a configuration file or environment variables include nested values like
