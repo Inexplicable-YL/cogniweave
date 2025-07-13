@@ -31,6 +31,21 @@ The agent relies on several environment variables. Reasonable defaults are used 
 
 Model providers usually require credentials such as `*_API_KEY` and `*_API_BASE`. These can be supplied via a `.env` file in the project root.
 
+Environment variables are **case-insensitive** and override any value defined in
+`config.toml`. All settings can be provided entirely through environment
+variables. Nested options use `__` to separate levels, for example:
+
+```bash
+PROMPT_VALUES__CHAT__EN="You are a helpful assistant."
+```
+
+is equivalent to the configuration file section:
+
+```toml
+[prompt_values.chat]
+en = "You are a helpful assistant."
+```
+
 ## Configuration file
 
 In addition to environment variables, settings can be defined in a `config.toml` (or
@@ -49,6 +64,38 @@ chat_temperature = 0.8
 Any fields matching the keys of the :class:`cogniweave.config.Config` model are
 accepted, including nested `prompt_values` sections for overriding system
 prompts.
+
+All `prompt_values` strings support the f-string placeholder `{default}`. The
+placeholder is replaced with CogniWeave's built-in prompt so you can extend it
+easily:
+
+```toml
+[prompt_values.chat]
+en = "Your name is CogniWeave. {default}"
+```
+
+which becomes `"Your name is CogniWeave. You are a helpful assistant."`.
+
+If you supply a configuration file or define nested options via environment
+variables, make sure to call `cogniweave.init_config()` before invoking
+`build_pipeline()` so the settings take effect.
+
+## Multi-language support
+
+The built-in prompt templates only include Chinese and English text. To use
+another language, define the prompt in the `prompt_values` section and set the
+`language` key to match. For Japanese using a TOML config:
+
+```toml
+[prompt_values.chat]
+jp = "あなたは役に立つアシスタントです。"
+
+language = "jp"
+```
+
+When a configuration file or environment variables include nested values like
+this, remember to call `cogniweave.init_config()` before creating the
+pipeline so the custom prompts are applied.
 
 ## CLI usage
 
