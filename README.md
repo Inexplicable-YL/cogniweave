@@ -223,3 +223,7 @@ For full control you can construct the components step by step.
    ```
 
 With these steps you can tailor the pipeline to your own requirements.
+
+## Thanks
+- **Langchain**: Our project is developed entirely based on Langchain.
+- **NoneBot**: The configuration extraction module in our project was developed with reference to certain parts of the NoneBot codebase.
