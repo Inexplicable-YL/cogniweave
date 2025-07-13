@@ -1,5 +1,5 @@
 [project]
-name = "CogniWeave"
+name = "cogniweave"
 version = "0.1.0"
 description = "Experimental agent framework built on top of LangChain"
 authors = [
