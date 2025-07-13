@@ -31,6 +31,25 @@ The agent relies on several environment variables. Reasonable defaults are used 
 
 Model providers usually require credentials such as `*_API_KEY` and `*_API_BASE`. These can be supplied via a `.env` file in the project root.
 
+## Configuration file
+
+In addition to environment variables, settings can be defined in a `config.toml` (or
+JSON/YAML) file. The CLI automatically loads this file when present, or you can
+explicitly provide a path with `--config-file` or by calling
+`cogniweave.init_config(_config_file=...)` in your own code.
+
+```toml
+index_name = "demo"
+folder_path = "./.cache"
+language = "en"
+chat_model = "openai/gpt-4.1"
+chat_temperature = 0.8
+```
+
+Any fields matching the keys of the :class:`cogniweave.config.Config` model are
+accepted, including nested `prompt_values` sections for overriding system
+prompts.
+
 ## CLI usage
 
 After installing the dependencies (see `pyproject.toml`), start the interactive demo with:
