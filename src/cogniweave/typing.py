@@ -77,7 +77,7 @@ NOT_GIVEN = NotGiven()
 
 
 def lenient_issubclass(cls: Any, class_or_tuple: type[Any] | tuple[type[Any], ...]) -> bool:
-    """检查 cls 是否是 class_or_tuple 中的一个类型子类并忽略类型错误。"""
+    """Check if `cls` is a subclass of `class_or_tuple`, allowing for lenient checks."""
     try:
         return isinstance(cls, type) and issubclass(cls, class_or_tuple)
     except TypeError:
@@ -94,15 +94,16 @@ def _type_is_complex_inner(type_: type[Any] | None) -> bool:
 
 
 def type_is_complex(type_: type[Any]) -> bool:
-    """检查 type_ 是否是复杂类型"""
+    """Check if the type is complex, meaning it is not a simple type like str or bytes."""
     origin = get_origin(type_)
     return _type_is_complex_inner(type_) or _type_is_complex_inner(origin)
 
 
 def origin_is_union(origin: type[Any] | None) -> bool:
+    """Check if the origin is Union or types.UnionType."""
     return origin is Union or origin is types.UnionType
 
 
 def origin_is_annotated(origin: type[Any] | None) -> bool:
-    """判断是否是 Annotated 类型"""
+    """Check if the origin is Annotated."""
     return origin is Annotated

@@ -29,7 +29,7 @@ _K = TypeVar("_K")
 
 
 def deep_update(mapping: dict[_K, Any], *updating_mappings: dict[_K, Any]) -> dict[_K, Any]:
-    """深度更新合并字典"""
+    """Recursively update a mapping with multiple updating mappings."""
     updated_mapping = mapping.copy()
     for updating_mapping in updating_mappings:
         for k, v in updating_mapping.items():
@@ -289,14 +289,14 @@ def remove_not_given_params(**kwargs: Any) -> dict[str, Any]:
 def sync_func_wrapper(
     func: Callable[_P, _R], *, to_thread: bool = False
 ) -> Callable[_P, Coroutine[None, None, _R]]:
-    """包装一个同步函数为异步函数。
+    """Wrap a synchronous function to be used in an async context.
 
     Args:
-        func: 待包装的同步函数。
-        to_thread: 是否在独立的线程中运行同步函数。默认为 `False`。
+        func: The synchronous function to wrap.
+        to_thread: Whether to run the function in a separate thread. Defaults to `False`.
 
     Returns:
-        异步函数。
+        An asynchronous wrapper function that can be awaited.
     """
     if to_thread:
 
@@ -317,14 +317,14 @@ def sync_func_wrapper(
 async def sync_ctx_manager_wrapper(
     cm: ContextManager[_T], *, to_thread: bool = False
 ) -> AsyncGenerator[_T, None]:
-    """将同步上下文管理器包装为异步上下文管理器。
+    """Wrap a synchronous context manager to be used in an async context.
 
     Args:
-        cm: 待包装的同步上下文管理器。
-        to_thread: 是否在独立的线程中运行同步函数。默认为 `False`。
+        cm: The synchronous context manager to wrap.
+        to_thread: Whether to run the context manager in a separate thread. Defaults to `False`.
 
     Returns:
-        异步上下文管理器。
+        An asynchronous context manager that can be used with `async with`.
     """
     try:
         yield await sync_func_wrapper(cm.__enter__, to_thread=to_thread)()
