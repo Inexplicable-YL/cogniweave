@@ -174,9 +174,9 @@ class ShortTermMemoryMaker(RunnableSerializable[dict[str, Any], ShortMemoryPromp
         async def _get_topic_tags() -> None:
             nonlocal topic_tags_result
             assert self.tags_chain is not None
-            topic_tags_result = (
-                await self.tags_chain.ainvoke({"input": message}, config=config, **kwargs)
-            ).tags
+            result = await self.tags_chain.ainvoke({"input": message}, config=config, **kwargs)
+            assert isinstance(result, ContextTags)
+            topic_tags_result = result.tags
 
         async with anyio.create_task_group() as tg:
             tg.start_soon(_get_chat_summary)
