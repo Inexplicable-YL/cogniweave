@@ -117,21 +117,22 @@ Additional options control where history and vector data are stored:
 python -m cogniweave demo my_session --index my_index --folder /tmp/cache
 ```
 
-You can also load a custom system prompt from a file:
+You can load custom configuration from a file using the --config-file argument:
 
 ```bash
-python -m cogniweave demo my_session --prompt-file prompt.txt
+python -m cogniweave demo my_session --config-file config.toml
 ```
 
-The `--index` argument sets the file names for the SQLite database and FAISS index, while `--folder` chooses the directory used to store them. The optional `--prompt-file` points to a text file whose content becomes the system prompt for the demo.
+The `--index` argument sets the file names for the SQLite database and FAISS index, while `--folder` chooses the directory used to store them. The optional `--config-file` points to a toml, json or yaml file that contains all the necessary settings for the demo.
 
 ## Quick build
 
 The `quickstart.py` module assembles the entire pipeline for you:
 
 ```python
-from cogniweave.quickstart import build_pipeline
+from cogniweave import init_config, build_pipeline
 
+init_config()
 pipeline = build_pipeline(index_name="demo")
 ```
 
