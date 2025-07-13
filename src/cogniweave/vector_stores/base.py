@@ -131,12 +131,6 @@ class LazyFAISS(FAISS):
             in float for each. Lower score represents more similarity.
         """
         if self.index is None:
-            warnings.warn(
-                "Cannot similarity search before initialization. "
-                "Only 'add' methods are allowed when FAISS is uninitialized.",
-                UninitializedWarning,
-                stacklevel=2,
-            )
             return []
         return super().similarity_search_with_score_by_vector(
             embedding, k, filter, fetch_k, **kwargs
@@ -172,12 +166,6 @@ class LazyFAISS(FAISS):
                 relevance and score for each.
         """
         if self.index is None:
-            warnings.warn(
-                "Cannot max marginal relevance search before initialization. "
-                "Only 'add' methods are allowed when FAISS is uninitialized.",
-                UninitializedWarning,
-                stacklevel=2,
-            )
             return []
         return super().max_marginal_relevance_search_with_score_by_vector(
             embedding, k=k, fetch_k=fetch_k, lambda_mult=lambda_mult, filter=filter
@@ -195,12 +183,6 @@ class LazyFAISS(FAISS):
             False otherwise, None if not implemented.
         """
         if self.index is None:
-            warnings.warn(
-                "Cannot delete before initialization. "
-                "Only 'add' methods are allowed when FAISS is uninitialized.",
-                UninitializedWarning,
-                stacklevel=2,
-            )
             return None
         return super().delete(ids, **kwargs)
 
@@ -217,12 +199,6 @@ class LazyFAISS(FAISS):
             None.
         """
         if self.index is None:
-            warnings.warn(
-                "Merging into an uninitialized FAISS object. "
-                "The current object has been replaced with the target.",
-                UninitializedWarning,
-                stacklevel=2,
-            )
             self.index = target.index
             self.docstore = target.docstore
             self.index_to_docstore_id = target.index_to_docstore_id
