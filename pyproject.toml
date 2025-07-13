@@ -1,6 +1,6 @@
 [project]
 name = "cogniweave"
-version = "0.1.0"
+version = "0.1.01"
 description = "Experimental agent framework built on top of LangChain"
 authors = [
     { name = "Kotodama", email = "2682064633@qq.com" },
