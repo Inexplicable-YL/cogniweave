@@ -34,7 +34,7 @@ The agent relies on several environment variables. Reasonable defaults are used 
 | `AGENT_MODEL` | Agent model in the form `provider/model` | `openai/gpt-4.1` |
 | `EMBEDDINGS_MODEL` | Embedding model in the form `provider/model` | `openai/text-embedding-ada-002` |
 | `SHORT_MEMORY_MODEL` | Model used to summarise recent messages | `openai/gpt-4.1-mini` |
-| `LONG_MEMORY_MODEL` | Model used for long‑term memory extraction | `openai/gpt-o3` |
+| `LONG_MEMORY_MODEL` | Model used for long‑term memory extraction | `openai/o3` |
 | `END_DETECTOR_MODEL` | Model that decides when a conversation is over | `openai/gpt-4.1-mini` |
 
 Model providers usually require credentials such as `*_API_KEY` and `*_API_BASE`. These can be supplied via a `.env` file in the project root.

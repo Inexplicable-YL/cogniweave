@@ -511,7 +511,7 @@ class Config(BaseSettings):
     agent_temperature: float = 1.0
 
     short_memory_model: str = "openai/gpt-4.1-mini"
-    long_memory_model: str = "openai/gpt-o3"
+    long_memory_model: str = "openai/o3"
     end_detector_model: str = "openai/gpt-4.1-mini"
 
     prompt_values: PromptValuesConfig = PromptValuesConfig()
