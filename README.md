@@ -16,6 +16,14 @@ CogniWeave is an experimental agent framework built on top of [LangChain](https:
 
 Additional helper functions for building the pipeline are available in the `cogniweave.quickstart` module.
 
+## Installation
+
+Install CogniWeave from PyPI:
+
+```bash
+pip install cogniweave
+```
+
 ## Environment variables
 
 The agent relies on several environment variables. Reasonable defaults are used when a variable is not provided.
