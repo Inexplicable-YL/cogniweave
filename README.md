@@ -16,6 +16,14 @@ CogniWeave is an experimental agent framework built on top of [LangChain](https:
 
 Additional helper functions for building the pipeline are available in the `cogniweave.quickstart` module.
 
+## Installation
+
+Install CogniWeave from PyPI:
+
+```bash
+pip install cogniweave
+```
+
 ## Environment variables
 
 The agent relies on several environment variables. Reasonable defaults are used when a variable is not provided.
@@ -215,3 +223,7 @@ For full control you can construct the components step by step.
    ```
 
 With these steps you can tailor the pipeline to your own requirements.
+
+## Thanks
+- **[LangChain](https://github.com/langchain-ai/langchain)** : Our project is developed entirely based on Langchain.
+- **[NoneBot](https://github.com/nonebot/nonebot2)** : The configuration extraction module in our project was developed with reference to certain parts of the NoneBot codebase.
