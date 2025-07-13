@@ -15,17 +15,17 @@ from cogniweave.core.prompt_values.short_memory import (
 from cogniweave.core.prompts.short_memory import ShortMemoryPromptTemplate
 from cogniweave.llms import PydanticSingleTurnChat, StringSingleTurnChat
 from cogniweave.prompt_values import MultilingualSystemPromptValue
-from cogniweave.utils import get_model_from_env, get_provider_from_env
+from cogniweave.utils import get_model_from_config_or_env, get_provider_from_config_or_env
 
 
 class ShortTermSummary(StringSingleTurnChat[Literal["zh", "en"]]):
     """Short-term memory updater for chat models."""
 
     provider: str = Field(
-        default_factory=get_provider_from_env("SHORT_MEMORY_MODEL", default="openai")
+        default_factory=get_provider_from_config_or_env("SHORT_MEMORY_MODEL", default="openai")
     )
     model_name: str = Field(
-        default_factory=get_model_from_env("SHORT_MEMORY_MODEL", default="gpt-4.1-mini")
+        default_factory=get_model_from_config_or_env("SHORT_MEMORY_MODEL", default="gpt-4.1-mini")
     )
     temperature: float = 0.7
 
@@ -44,10 +44,10 @@ class ShortTermTags(PydanticSingleTurnChat[Literal["zh", "en"], ContextTags]):
     """Short-term memory updater for chat models."""
 
     provider: str = Field(
-        default_factory=get_provider_from_env("SHORT_MEMORY_MODEL", default="openai")
+        default_factory=get_provider_from_config_or_env("SHORT_MEMORY_MODEL", default="openai")
     )
     model_name: str = Field(
-        default_factory=get_model_from_env("SHORT_MEMORY_MODEL", default="gpt-4.1-mini")
+        default_factory=get_model_from_config_or_env("SHORT_MEMORY_MODEL", default="gpt-4.1-mini")
     )
     temperature: float = 0.7
 

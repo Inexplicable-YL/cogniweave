@@ -18,7 +18,7 @@ from cogniweave.core.prompts.long_memory import (
 )
 from cogniweave.llms import PydanticSingleTurnChat
 from cogniweave.prompt_values import MultilingualSystemPromptValue
-from cogniweave.utils import get_model_from_env, get_provider_from_env
+from cogniweave.utils import get_model_from_config_or_env, get_provider_from_config_or_env
 
 
 class LongTermOutput(BaseModel):
@@ -31,10 +31,10 @@ class LongTermPydanticSummary(PydanticSingleTurnChat[Literal["zh", "en"], LongTe
     """Long-term memory chain that outputs a Pydantic model."""
 
     provider: str = Field(
-        default_factory=get_provider_from_env("LONG_MEMORY_MODEL", default="openai")
+        default_factory=get_provider_from_config_or_env("LONG_MEMORY_MODEL", default="openai")
     )
     model_name: str = Field(
-        default_factory=get_model_from_env("LONG_MEMORY_MODEL", default="gpt-4.1-mini")
+        default_factory=get_model_from_config_or_env("LONG_MEMORY_MODEL", default="gpt-4.1-mini")
     )
     temperature: float = Field(default=1.0)
     prompt: MultilingualSystemPromptValue[Literal["zh", "en"]] | None = Field(
@@ -47,9 +47,11 @@ class LongTermJsonExtract(PydanticSingleTurnChat[Literal["zh", "en"], LongTermOu
     """Long-term memory extraction chain that outputs JSON."""
 
     provider: str = Field(
-        default_factory=get_provider_from_env("LONG_MEMORY_MODEL", default="openai")
+        default_factory=get_provider_from_config_or_env("LONG_MEMORY_MODEL", default="openai")
     )
-    model_name: str = Field(default_factory=get_model_from_env("LONG_MEMORY_MODEL", default="o3"))
+    model_name: str = Field(
+        default_factory=get_model_from_config_or_env("LONG_MEMORY_MODEL", default="o3")
+    )
     temperature: float = Field(default=1.0)
     prompt: MultilingualSystemPromptValue[Literal["zh", "en"]] | None = Field(
         default=LongMemoryExtractPromptValue()

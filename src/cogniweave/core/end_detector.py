@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from cogniweave.core.prompt_values.end_detector import EndDetectorPromptValue
 from cogniweave.llms import PydanticSingleTurnChat
 from cogniweave.prompt_values import MultilingualSystemPromptValue
-from cogniweave.utils import get_model_from_env, get_provider_from_env
+from cogniweave.utils import get_model_from_config_or_env, get_provider_from_config_or_env
 
 if TYPE_CHECKING:
     from langchain_core.runnables.config import RunnableConfig
@@ -24,10 +24,10 @@ class ConversationEndClassifier(PydanticSingleTurnChat[Literal["zh", "en"], Conv
     """Conversation end detector."""
 
     provider: str = Field(
-        default_factory=get_provider_from_env("END_DETECTOR_MODEL", default="openai")
+        default_factory=get_provider_from_config_or_env("END_DETECTOR_MODEL", default="openai")
     )
     model_name: str = Field(
-        default_factory=get_model_from_env("END_DETECTOR_MODEL", default="gpt-4.1-mini")
+        default_factory=get_model_from_config_or_env("END_DETECTOR_MODEL", default="gpt-4.1-mini")
     )
     temperature: float = 1.0  # add some randomness, does not affect that much tbh.
 

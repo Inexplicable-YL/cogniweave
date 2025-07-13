@@ -1,4 +1,3 @@
-import os
 from typing import Any, Self
 from typing_extensions import override
 
@@ -7,6 +6,8 @@ from langchain_openai import ChatOpenAI as BaseChatOpenAI
 from langchain_openai import OpenAIEmbeddings as BaseOpenAIEmbeddings
 from langchain_openai.chat_models.base import global_ssl_context
 from pydantic import Field, SecretStr, model_validator
+
+from cogniweave.utils import get_from_config_or_env
 
 
 class ChatOpenAI(BaseChatOpenAI):
@@ -33,14 +34,18 @@ class ChatOpenAI(BaseChatOpenAI):
         # Check OPENAI_ORGANIZATION for backwards compatibility.
         self.openai_organization = (
             self.openai_organization
-            or os.getenv(f"{provider}_ORG_ID")
-            or os.getenv(f"{provider}_ORGANIZATION")
+            or get_from_config_or_env(f"{provider}_ORG_ID", default=None)()
+            or get_from_config_or_env(f"{provider}_ORGANIZATION", default=None)()
         )
         self.openai_api_key = self.openai_api_key or SecretStr(
-            os.getenv(f"{provider}_API_KEY") or ""
+            get_from_config_or_env(f"{provider}_API_KEY", default=None)() or ""
         )
-        self.openai_api_base = self.openai_api_base or os.getenv(f"{provider}_API_BASE")
-        self.openai_proxy = self.openai_proxy or os.getenv(f"{provider}_PROXY")
+        self.openai_api_base = (
+            self.openai_api_base or get_from_config_or_env(f"{provider}_API_BASE", default=None)()
+        )
+        self.openai_proxy = (
+            self.openai_proxy or get_from_config_or_env(f"{provider}_PROXY", default=None)()
+        )
         client_params: dict[str, Any] = {
             "api_key": (self.openai_api_key.get_secret_value() if self.openai_api_key else None),
             "organization": self.openai_organization,
@@ -123,16 +128,25 @@ class OpenAIEmbeddings(BaseOpenAIEmbeddings):
 
         self.openai_organization = (
             self.openai_organization
-            or os.getenv(f"{provider}_ORG_ID")
-            or os.getenv(f"{provider}_ORGANIZATION")
+            or get_from_config_or_env(f"{provider}_ORG_ID", default=None)()
+            or get_from_config_or_env(f"{provider}_ORGANIZATION", default=None)()
         )
         self.openai_api_key = self.openai_api_key or SecretStr(
-            os.getenv(f"{provider}_API_KEY") or ""
+            get_from_config_or_env(f"{provider}_API_KEY", default=None)() or ""
         )
-        self.openai_api_base = self.openai_api_base or os.getenv(f"{provider}_API_BASE")
-        self.openai_proxy = self.openai_proxy or os.getenv(f"{provider}_PROXY")
-        self.openai_api_version = self.openai_api_version or os.getenv(f"{provider}_API_VERSION")
-        self.openai_api_type = self.openai_api_type or os.getenv(f"{provider}_API_TYPE")
+        self.openai_api_base = (
+            self.openai_api_base or get_from_config_or_env(f"{provider}_API_BASE", default=None)()
+        )
+        self.openai_proxy = (
+            self.openai_proxy or get_from_config_or_env(f"{provider}_PROXY", default=None)()
+        )
+        self.openai_api_version = (
+            self.openai_api_version
+            or get_from_config_or_env(f"{provider}_API_VERSION", default=None)()
+        )
+        self.openai_api_type = (
+            self.openai_api_type or get_from_config_or_env(f"{provider}_API_TYPE", default=None)()
+        )
         client_params: dict[str, Any] = {
             "api_key": (self.openai_api_key.get_secret_value() if self.openai_api_key else None),
             "organization": self.openai_organization,

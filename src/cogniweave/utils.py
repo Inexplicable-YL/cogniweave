@@ -45,24 +45,89 @@ def deep_update(mapping: dict[_K, Any], *updating_mappings: dict[_K, Any]) -> di
 
 
 @overload
-def get_provider_from_env(key: str, /) -> Callable[[], str]: ...
+def get_from_config_or_env(key: str, /) -> Callable[[], str]: ...
 
 
 @overload
-def get_provider_from_env(key: str, /, *, default: str) -> Callable[[], str]: ...
+def get_from_config_or_env(key: str, /, *, default: str) -> Callable[[], str]: ...
 
 
 @overload
-def get_provider_from_env(key: str, /, *, error_message: str) -> Callable[[], str]: ...
+def get_from_config_or_env(key: str, /, *, error_message: str) -> Callable[[], str]: ...
 
 
 @overload
-def get_provider_from_env(
-    key: str, /, *, default: None, error_message: str | None
+def get_from_config_or_env(
+    key: str, /, *, default: None, error_message: str | None = ...
 ) -> Callable[[], str | None]: ...
 
 
-def get_provider_from_env(
+def get_from_config_or_env(
+    key: str,
+    /,
+    *,
+    default: str | NotGiven | None = NOT_GIVEN,
+    error_message: str | None = None,
+) -> Callable[[], str] | Callable[[], str | None]:
+    """Create a factory method that gets a value from the configuration.
+
+    Args:
+        key: The configuration key to look up. If a list of keys is provided,
+            the first key found in the configuration will be used.
+            If no key is found, the default value will be used if set,
+            otherwise an error will be raised.
+        default: The default value to return if the configuration key is not set.
+        error_message: The error message which will be raised if the key is not found
+            and no default value is provided.
+            This will be raised as a ValueError.
+    """
+
+    def get_from_config_or_env_fn() -> str | None:
+        """Get a value from the configuration."""
+        from cogniweave.config import get_config
+
+        _config = get_config()
+        if (
+            isinstance(key, str)
+            and _config is not None
+            and hasattr(_config, lower_key := key.lower())
+            and (content := getattr(_config, lower_key))
+        ) or (isinstance(key, str) and key in os.environ and (content := os.environ[key])):
+            return content
+
+        if isinstance(default, (str, type(None))):
+            return default
+        if error_message:
+            raise ValueError(error_message)
+        msg = (
+            f"Did not find {key}, please add an environment variable"
+            f" `{key}` which contains it, or pass"
+            f" `{key}` as a named parameter."
+        )
+        raise ValueError(msg)
+
+    return get_from_config_or_env_fn
+
+
+@overload
+def get_provider_from_config_or_env(key: str, /) -> Callable[[], str]: ...
+
+
+@overload
+def get_provider_from_config_or_env(key: str, /, *, default: str) -> Callable[[], str]: ...
+
+
+@overload
+def get_provider_from_config_or_env(key: str, /, *, error_message: str) -> Callable[[], str]: ...
+
+
+@overload
+def get_provider_from_config_or_env(
+    key: str, /, *, default: None, error_message: str | None = ...
+) -> Callable[[], str | None]: ...
+
+
+def get_provider_from_config_or_env(
     key: str,
     /,
     *,
@@ -82,9 +147,17 @@ def get_provider_from_env(
             This will be raised as a ValueError.
     """
 
-    def get_from_env_fn() -> str | None:
+    def get_from_config_or_env_fn() -> str | None:
         """Get a value from an environment variable."""
+        from cogniweave.config import get_config
+
+        _config = get_config()
         if (
+            isinstance(key, str)
+            and _config is not None
+            and hasattr(_config, lower_key := key.lower())
+            and (match := re.fullmatch(r"([^/]+)/([^/]+)", getattr(_config, lower_key)))
+        ) or (
             isinstance(key, str)
             and key in os.environ
             and (match := re.fullmatch(r"([^/]+)/([^/]+)", os.environ[key]))
@@ -102,28 +175,28 @@ def get_provider_from_env(
         )
         raise ValueError(msg)
 
-    return get_from_env_fn
+    return get_from_config_or_env_fn
 
 
 @overload
-def get_model_from_env(key: str, /) -> Callable[[], str]: ...
+def get_model_from_config_or_env(key: str, /) -> Callable[[], str]: ...
 
 
 @overload
-def get_model_from_env(key: str, /, *, default: str) -> Callable[[], str]: ...
+def get_model_from_config_or_env(key: str, /, *, default: str) -> Callable[[], str]: ...
 
 
 @overload
-def get_model_from_env(key: str, /, *, error_message: str) -> Callable[[], str]: ...
+def get_model_from_config_or_env(key: str, /, *, error_message: str) -> Callable[[], str]: ...
 
 
 @overload
-def get_model_from_env(
-    key: str, /, *, default: None, error_message: str | None
+def get_model_from_config_or_env(
+    key: str, /, *, default: None, error_message: str | None = ...
 ) -> Callable[[], str | None]: ...
 
 
-def get_model_from_env(
+def get_model_from_config_or_env(
     key: str,
     /,
     *,
@@ -143,9 +216,17 @@ def get_model_from_env(
             This will be raised as a ValueError.
     """
 
-    def get_from_env_fn() -> str | None:
+    def get_from_config_or_env_fn() -> str | None:
         """Get a value from an environment variable."""
+        from cogniweave.config import get_config
+
+        _config = get_config()
         if (
+            isinstance(key, str)
+            and _config is not None
+            and hasattr(_config, lower_key := key.lower())
+            and (match := re.fullmatch(r"([^/]+)/([^/]+)", getattr(_config, lower_key)))
+        ) or (
             isinstance(key, str)
             and key in os.environ
             and (match := re.fullmatch(r"([^/]+)/([^/]+)", os.environ[key]))
@@ -163,7 +244,7 @@ def get_model_from_env(
         )
         raise ValueError(msg)
 
-    return get_from_env_fn
+    return get_from_config_or_env_fn
 
 
 def format_datetime_relative(old_time: datetime, now: datetime | None = None) -> str:

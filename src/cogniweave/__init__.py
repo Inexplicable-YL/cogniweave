@@ -4,6 +4,12 @@ from typing import Any
 
 from cogniweave.config import DOTENV_TYPE, Config, Env
 
+__all__ = [
+    "get_config",
+    "init_config",
+]
+
+
 _config: Config | None = None
 
 

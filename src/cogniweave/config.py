@@ -32,6 +32,34 @@ from cogniweave.typing import (
 )
 from cogniweave.utils import deep_update
 
+DOTENV_TYPE: TypeAlias = Path | str | list[Path | str] | tuple[Path | str, ...]
+
+ENV_FILE_SENTINEL = Path()
+
+_config: "Config | None" = None
+
+
+def get_config() -> "Config | None":
+    """Get the global configuration object."""
+    return _config
+
+
+def init_config(
+    *, _env_file: DOTENV_TYPE | None = None, _config_file: str | Path | None = None, **kwargs: Any
+) -> None:
+    """Initialize the global configuration object."""
+    global _config  # noqa: PLW0603
+    if not _config:
+        env = Env()
+        _env_file = _env_file or f".env.{env.environment}"
+        _config = Config(
+            **kwargs,
+            _env_file=(
+                (".env", _env_file) if isinstance(_env_file, (str, os.PathLike)) else _env_file
+            ),
+            _config_file=_config_file,
+        )
+
 
 @dataclass
 class ModelField:
@@ -62,11 +90,6 @@ def model_fields(model: type[BaseModel]) -> list[ModelField]:
         )
         for name, field in getattr(model, "__fields__", {}).items()
     ]
-
-
-DOTENV_TYPE: TypeAlias = Path | str | list[Path | str] | tuple[Path | str, ...]
-
-ENV_FILE_SENTINEL = Path()
 
 
 class SettingsError(ValueError): ...
@@ -435,6 +458,40 @@ class Env(BaseSettings):
     environment: str = "prod"
 
 
+class PromptValues(BaseModel):
+    """Base class for prompt values."""
+
+    en: str | None = None
+    zh: str | None = None
+
+
+class ShortMemoryConfig(BaseModel):
+    """Configuration for short-term memory prompt values."""
+
+    summary: PromptValues = PromptValues()
+    tags: PromptValues = PromptValues()
+    prompt: PromptValues = PromptValues()
+
+
+class LongMemoryConfig(BaseModel):
+    """Configuration for long-term memory prompt values."""
+
+    extract: PromptValues = PromptValues()
+    update: PromptValues = PromptValues()
+    prompt: PromptValues = PromptValues()
+
+
+class PromptValuesConfig(BaseModel):
+    """Configuration for prompt values."""
+
+    chat: PromptValues = PromptValues()
+    agent: PromptValues = PromptValues()
+
+    end_detector: PromptValues = PromptValues()
+    short_memory: ShortMemoryConfig = ShortMemoryConfig()
+    long_memory: LongMemoryConfig = LongMemoryConfig()
+
+
 class Config(BaseSettings):
     if TYPE_CHECKING:
         _env_file: DOTENV_TYPE | None = ".env", ".env.prod"
@@ -442,5 +499,21 @@ class Config(BaseSettings):
 
     index_name: str = "demo"
     folder_path: str | Path = Path("./.cache/")
+
+    language: str = "zh"
+
+    embeddings_model: str = "openai/text-embedding-ada-002"
+
+    chat_model: str = "openai/gpt-4.1"
+    chat_temperature: float = 1.0
+
+    agent_model: str = "openai/gpt-4.1"
+    agent_temperature: float = 1.0
+
+    short_memory_model: str = "openai/gpt-4.1-mini"
+    long_memory_model: str = "openai/gpt-o3"
+    end_detector_model: str = "openai/gpt-4.1-mini"
+
+    prompt_values: PromptValuesConfig = PromptValuesConfig()
 
     model_config = SettingsConfig(env_file=(".env", ".env.prod"))

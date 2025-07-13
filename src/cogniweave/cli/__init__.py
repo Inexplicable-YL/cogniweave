@@ -14,6 +14,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 
+from cogniweave.config import init_config
 from cogniweave.quickstart import DEF_FOLDER_PATH, build_pipeline
 
 if TYPE_CHECKING:
@@ -52,14 +53,16 @@ def demo(
     *,
     index: str = "demo",
     folder: str | Path = DEF_FOLDER_PATH,
-    prompt_file: str | Path | None = None,
+    config_file: str | Path | None = None,
 ) -> None:
     """Run the interactive demo."""
 
-    prompt: str | None = None
-    if prompt_file:
-        prompt = Path(prompt_file).read_text(encoding="utf-8")
-    pipeline = build_pipeline(index_name=index, folder_path=folder, prompt=prompt)
+    if config_file:
+        init_config(_config_file=config_file)
+    else:
+        init_config()
+
+    pipeline = build_pipeline(index_name=index, folder_path=folder)
     history_store = pipeline.history_store
     console = Console()
 
@@ -112,7 +115,7 @@ def main() -> None:
         help="Folder used to store cache files",
     )
     demo_cmd.add_argument(
-        "--prompt-file",
+        "--config-file",
         help="Path to a file containing the system prompt",
         default=None,
     )
@@ -124,7 +127,7 @@ def main() -> None:
             args.session,
             index=args.index,
             folder=Path(args.folder),
-            prompt_file=args.prompt_file,
+            config_file=args.config_file,
         )
     else:
         parser.print_help()
