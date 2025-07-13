@@ -4,7 +4,6 @@ import argparse
 import sys
 import time
 import warnings
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -15,7 +14,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from cogniweave.config import init_config
-from cogniweave.quickstart import DEF_FOLDER_PATH, build_pipeline
+from cogniweave.quickstart import build_pipeline
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -51,9 +50,9 @@ def _print_output(console: Console, message: str) -> None:
 def demo(
     session_id: str,
     *,
-    index: str = "demo",
-    folder: str | Path = DEF_FOLDER_PATH,
-    config_file: str | Path | None = None,
+    index: str | None = None,
+    folder: str | None = None,
+    config_file: str | None = None,
 ) -> None:
     """Run the interactive demo."""
 
@@ -106,12 +105,12 @@ def main() -> None:
     demo_cmd.add_argument("session", nargs="?", default="demo", help="Session identifier")
     demo_cmd.add_argument(
         "--index",
-        default="demo",
+        default=None,
         help="Index name for history and vector store",
     )
     demo_cmd.add_argument(
         "--folder",
-        default=str(DEF_FOLDER_PATH),
+        default=None,
         help="Folder used to store cache files",
     )
     demo_cmd.add_argument(
@@ -126,7 +125,7 @@ def main() -> None:
         demo(
             args.session,
             index=args.index,
-            folder=Path(args.folder),
+            folder=args.folder,
             config_file=args.config_file,
         )
     else:

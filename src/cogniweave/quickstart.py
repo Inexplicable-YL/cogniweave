@@ -154,9 +154,9 @@ def create_agent(
 
 
 def build_pipeline(
+    *,
     lang: str | None = None,
     prompt: str | None = None,
-    *,
     temperature: float | None = None,
     index_name: str | None = None,
     folder_path: str | Path | None = None,
