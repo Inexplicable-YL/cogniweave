@@ -70,11 +70,11 @@ placeholder is replaced with CogniWeave's built-in prompt so you can extend it
 easily:
 
 ```toml
-[prompt_values.chat]
-en = "Your name is CogniWeave. {default}"
+[prompt_values.end_detector]
+en = "The agent's name is CogniWeave. {default}"
 ```
 
-which becomes `"Your name is CogniWeave. You are a helpful assistant."`.
+which becomes `"The agent's name is CogniWeave. You are a "message completeness detector. ..."`.
 
 If you supply a configuration file or define nested options via environment
 variables, make sure to call `cogniweave.init_config()` before invoking
