@@ -346,7 +346,7 @@ class RunnableWithMemoryMaker(RunnableBindingBase):
                     ],
                     "</ChatMemory>",
                 ]
-                content = self._get_message_content(input_message)
+                content = self._get_message_content(input_msg)
                 prompt_template: RichHumanMessagePromptTemplate | None = None
                 if isinstance(content, str):
                     prompt_template = RichHumanMessagePromptTemplate.from_template(
