@@ -18,24 +18,23 @@ classifiers = [
 requires-python = ">=3.11,<4"
 dependencies = [
     "aiohttp==3.11.14",
-    "aiosqlite",
+    "aiosqlite==0.21.0",
     "anyio==4.9.0",
     "exceptiongroup==1.2.2",
     "httpx[socks]",
-    "langchain",
-    "langchain-community==0.3.24",
-    "langchain-core",
-    "langchain-openai",
-    "langgraph",
+    "langchain==0.3.26",
+    "langchain-community==0.3.25",
+    "langchain-core==0.3.68",
+    "langchain-openai==0.3.27",
     "pyahocorasick==2.1.0",
-    "pydantic==2.11.5",
+    "pydantic==2.11.7",
     "pygtrie==2.5.0",
     "pypinyin==0.54.0",
     "python-dotenv",
     "PyYAML==6.0.2",
-    "sqlalchemy>=2.0",
-    "structlog==25.2.0",
-    "typing_extensions==4.13.2",
+    "sqlalchemy==2.0.41",
+    "rich==14.0.0",
+    "typing_extensions==4.14.1",
 ]
 
 [project.urls]
