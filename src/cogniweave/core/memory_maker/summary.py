@@ -8,8 +8,8 @@ from pydantic import ConfigDict, Field, model_validator
 
 from cogniweave.core.memory_maker.long_memory import LongTermMemoryMaker
 from cogniweave.core.memory_maker.short_memory import ShortTermMemoryMaker
-from cogniweave.core.vector_stores import TagsVectorStore  # noqa: TC001
 from cogniweave.history_stores import BaseHistoryStore  # noqa: TC001
+from cogniweave.vector_stores import TagsVectorStore  # noqa: TC001
 
 if TYPE_CHECKING:
     from langchain_core.runnables.config import RunnableConfig

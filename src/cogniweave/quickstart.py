@@ -10,7 +10,6 @@ from cogniweave.core.runnables.end_detector import RunnableWithEndDetector
 from cogniweave.core.runnables.history_store import RunnableWithHistoryStore
 from cogniweave.core.runnables.memory_maker import RunnableWithMemoryMaker
 from cogniweave.core.time_splitter import TimeSplitter
-from cogniweave.core.vector_stores import TagsVectorStore
 from cogniweave.history_stores import BaseHistoryStore as HistoryStore
 from cogniweave.llms import AgentBase, OpenAIEmbeddings, StringSingleTurnChat
 from cogniweave.prompt_values import MultilingualStringPromptValue
@@ -20,6 +19,7 @@ from cogniweave.utils import (
     get_model_from_config_or_env,
     get_provider_from_config_or_env,
 )
+from cogniweave.vector_stores import TagsVectorStore
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
@@ -66,8 +66,8 @@ def create_vector_store(
 
 
 def create_chat(
-    lang: str | None = None,
     *,
+    lang: str | None = None,
     prompt: str | None = None,
     temperature: float | None = None,
     provider: str | None = None,
@@ -109,8 +109,8 @@ def create_chat(
 
 
 def create_agent(
-    lang: str | None = None,
     *,
+    lang: str | None = None,
     prompt: str | None = None,
     temperature: float = 1.0,
     tools: list[BaseTool] | None = None,
@@ -165,8 +165,19 @@ def build_pipeline(
     from cogniweave.config import get_config
 
     _config = get_config()
-    index_name = index_name or (_config.index_name if _config else "demo")
-    folder_path = folder_path or (_config.folder_path if _config else DEF_FOLDER_PATH)
+
+    index_name = (
+        index_name
+        or get_from_config_or_env("INDEX_NAME", default=None)()
+        or (_config.index_name if _config else "demo")
+    )
+    folder_path = (
+        folder_path
+        or get_from_config_or_env("FOLDER_PATH", default=None)()
+        or (_config.folder_path if _config else DEF_FOLDER_PATH)
+    )
+    lang = lang or get_from_config_or_env("LANGUAGE", default="zh")()
+
     embeddings = create_embeddings()
     history_store = create_history_store(index_name=index_name, folder_path=folder_path)
     vector_store = create_vector_store(embeddings, index_name=index_name, folder_path=folder_path)

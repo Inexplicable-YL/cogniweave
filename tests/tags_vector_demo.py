@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 
-from cogniweave.core.vector_stores.tags import TagsVectorStore
 from cogniweave.llms import OpenAIEmbeddings
+from cogniweave.vector_stores.tags import TagsVectorStore
 
 
 # 定义测试用的 Pydantic 模型

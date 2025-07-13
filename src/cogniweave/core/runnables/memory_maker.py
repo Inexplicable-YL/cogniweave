@@ -24,9 +24,9 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from cogniweave.core.memory_maker import SummaryMemoryMaker
 from cogniweave.core.prompt_values.long_memory import LongTermMemoryPromptValue
 from cogniweave.core.prompt_values.short_memory import ShortTermMemoryPromptValue
-from cogniweave.core.vector_stores import TagsVectorStore  # noqa: TC001
 from cogniweave.history_stores import BaseHistoryStore  # noqa: TC001
 from cogniweave.prompts import RichHumanMessagePromptTemplate
+from cogniweave.vector_stores import TagsVectorStore  # noqa: TC001
 
 if TYPE_CHECKING:
     from langchain_core.prompts.string import StringPromptTemplate
