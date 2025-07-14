@@ -516,4 +516,6 @@ class Config(BaseSettings):
 
     prompt_values: PromptValuesConfig = PromptValuesConfig()
 
+    history_limit: int | None = None
+
     model_config = SettingsConfig(env_file=(".env", ".env.prod"))

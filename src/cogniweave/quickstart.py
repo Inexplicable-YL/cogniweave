@@ -160,6 +160,7 @@ def build_pipeline(
     temperature: float | None = None,
     index_name: str | None = None,
     folder_path: str | Path | None = None,
+    history_limit: int | None = None,
 ) -> RunnableWithHistoryStore:
     """Assemble the runnable pipeline used in the demos."""
     from cogniweave.config import get_config
@@ -177,6 +178,11 @@ def build_pipeline(
         or (_config.folder_path if _config else DEF_FOLDER_PATH)
     )
     lang = lang or get_from_config_or_env("LANGUAGE", default="zh")()
+    history_limit = (
+        history_limit
+        if history_limit is not None
+        else int(get_from_config_or_env("HISTORY_LIMIT", default="0")()) or None
+    )
 
     embeddings = create_embeddings()
     history_store = create_history_store(index_name=index_name, folder_path=folder_path)
@@ -204,4 +210,5 @@ def build_pipeline(
         time_splitter=TimeSplitter(),
         input_messages_key="input",
         history_messages_key="history",
+        history_limit=history_limit,
     )
