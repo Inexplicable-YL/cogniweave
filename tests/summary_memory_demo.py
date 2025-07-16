@@ -85,7 +85,7 @@ def _add_block(
 
 def prepare_history(store: BaseHistoryStore, session_id: str) -> None:
     """Insert test messages into history store."""
-    store.add_user_name("演示用户", session_id=session_id)
+    store.add_session_name("演示用户", session_id=session_id)
     ts = time.time()
     _add_block(store, session_id, "b1", ts, create_block1())
     _add_block(store, session_id, "b2", ts + 100, create_block2())

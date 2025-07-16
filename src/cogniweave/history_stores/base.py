@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
 from pydantic import BaseModel, PrivateAttr
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -175,6 +175,44 @@ class BaseHistoryStore(BaseModel):
             await session.flush()
         return block
 
+    def add_session_name(self, session_name: str, *, session_id: str) -> None:
+        """Add user name to the history store.
+
+        Args:
+            user_name: User name to be stored.
+            session_id: Optional session/user ID. Uses user_name if not provided.
+
+        Return:
+            None: User name is persisted to the database.
+        """
+        with self._session_local() as session:
+            try:
+                user = self._get_or_create_user(session, session_id)
+                user.name = session_name
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+
+    async def aadd_session_name(self, session_name: str, *, session_id: str) -> None:
+        """Async add user name to the history store.
+
+        Args:
+            user_name: User name to be stored.
+            session_id: Optional session/user ID. Uses user_name if not provided.
+
+        Return:
+            None: User name is persisted to the database.
+        """
+        async with self._async_session_local() as session:
+            try:
+                user = await self._a_get_or_create_user(session, session_id)
+                user.name = session_name
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
     def add_messages(
         self,
         messages: list[tuple[BaseMessage, float]],
@@ -302,17 +340,21 @@ class BaseHistoryStore(BaseModel):
             try:
                 db_user = self._get_or_create_user(session, sid)
                 block = self._get_or_create_block(session, db_user, block_id, start_ts)
-
-                attr_recs = [
-                    ChatBlockAttribute(
-                        block_id=block.id,
-                        type=attr["type"],
-                        value=attr.get("value"),
+                for attr in attributes:
+                    rec = (
+                        session.query(ChatBlockAttribute)
+                        .filter_by(block_id=block.id, type=attr["type"])
+                        .first()
                     )
-                    for attr in attributes
-                ]
-
-                session.add_all(attr_recs)
+                    if rec is None:
+                        rec = ChatBlockAttribute(
+                            block_id=block.id,
+                            type=attr["type"],
+                            value=attr.get("value"),
+                        )
+                        session.add(rec)
+                    else:
+                        rec.value = attr.get("value")
                 session.commit()
             except Exception:
                 session.rollback()
@@ -350,23 +392,26 @@ class BaseHistoryStore(BaseModel):
             try:
                 db_user = await self._a_get_or_create_user(session, sid)
                 block = await self._a_get_or_create_block(session, db_user, block_id, start_ts)
-
-                attr_recs = [
-                    ChatBlockAttribute(
-                        block_id=block.id,
-                        type=attr["type"],
-                        value=attr.get("value"),
+                for attr in attributes:
+                    result = await session.execute(
+                        select(ChatBlockAttribute).filter_by(block_id=block.id, type=attr["type"])
                     )
-                    for attr in attributes
-                ]
-
-                session.add_all(attr_recs)
+                    rec = result.scalar_one_or_none()
+                    if rec is None:
+                        rec = ChatBlockAttribute(
+                            block_id=block.id,
+                            type=attr["type"],
+                            value=attr.get("value"),
+                        )
+                        session.add(rec)
+                    else:
+                        rec.value = attr.get("value")
                 await session.commit()
             except Exception:
                 await session.rollback()
                 raise
 
-    def add_user_attributes(
+    def add_session_attributes(
         self,
         attributes: list[UserAttributeData],
         *,
@@ -400,7 +445,7 @@ class BaseHistoryStore(BaseModel):
                 session.rollback()
                 raise
 
-    async def aadd_user_attributes(
+    async def aadd_session_attributes(
         self,
         attributes: list[UserAttributeData],
         *,
@@ -433,6 +478,103 @@ class BaseHistoryStore(BaseModel):
                 await session.rollback()
                 raise
 
+    def add_short_memory(
+        self,
+        short_memory: ShortMemoryPromptTemplate,
+        *,
+        block_id: str,
+        block_ts: float | None = None,
+        session_id: str | None = None,
+    ) -> None:
+        """Add short memory data for a specific block.
+
+        This is a convenience method that combines message storage with
+        short memory attribute storage.
+
+        Args:
+            short_memory: Short memory prompt template instance.
+            block_id: Unique identifier for the message block.
+            block_ts: Unix timestamp for the block start time.
+            session_id: Optional session/user ID. Uses block_id if not provided.
+
+        Return:
+            None: Messages and attributes are persisted to the database.
+        """
+        short_memory_data = short_memory.to_template_dict()
+
+        self.add_block_attributes(
+            [BlockAttributeData(type=_SHORT_MEMORY_KEY, value=short_memory_data)],
+            block_id=block_id,
+            block_ts=block_ts,
+            session_id=session_id,
+        )
+
+    async def aadd_short_memory(
+        self,
+        short_memory: ShortMemoryPromptTemplate,
+        *,
+        block_id: str,
+        block_ts: float | None = None,
+        session_id: str | None = None,
+    ) -> None:
+        """Async add short memory data for a specific block.
+
+        This is a convenience method that combines message storage with
+        short memory attribute storage.
+
+        Args:
+            short_memory: Short memory prompt template instance.
+            block_id: Unique identifier for the message block.
+            block_ts: Unix timestamp for the block start time.
+            session_id: Optional session/user ID. Uses block_id if not provided.
+
+        Return:
+            None: Messages and attributes are persisted to the database."""
+        short_memory_data = short_memory.to_template_dict()
+
+        await self.aadd_block_attributes(
+            [BlockAttributeData(type=_SHORT_MEMORY_KEY, value=short_memory_data)],
+            block_id=block_id,
+            block_ts=block_ts,
+            session_id=session_id,
+        )
+
+    def add_long_memory(self, long_memory: LongMemoryPromptTemplate, *, session_id: str) -> None:
+        """Add long memory data for a specific block.
+
+        Args:
+            long_memory: Long memory prompt template instance.
+            session_id: session/user ID.
+
+        Return:
+            None: Messages and attributes are persisted to the database.
+        """
+        long_memory_data = long_memory.to_template_dict()
+
+        self.add_session_attributes(
+            [UserAttributeData(type=_LONG_MEMORY_KEY, value=long_memory_data)],
+            session_id=session_id,
+        )
+
+    async def aadd_long_memory(
+        self, long_memory: LongMemoryPromptTemplate, *, session_id: str
+    ) -> None:
+        """Async add long memory data for a specific block.
+
+        Args:
+            long_memory: Long memory prompt template instance.
+            session_id: session/user ID.
+
+        Return:
+            None: Messages and attributes are persisted to the database.
+        """
+        long_memory_data = long_memory.to_template_dict()
+
+        await self.aadd_session_attributes(
+            [UserAttributeData(type=_LONG_MEMORY_KEY, value=long_memory_data)],
+            session_id=session_id,
+        )
+
     def get_block_timestamp(self, block_id: str) -> float | None:
         """Get the start timestamp of a chat block.
 
@@ -463,6 +605,96 @@ class BaseHistoryStore(BaseModel):
             if not block:
                 return None
             return block.timestamp.replace(tzinfo=UTC).timestamp()
+
+    def get_block_attributes(
+        self, block_id: str, *, types: list[str] | None = None
+    ) -> list[BlockAttributeData]:
+        """Get all attributes for a chat block, optionally filtered by type.
+
+        Args:
+            block_id: The ID of the chat block to query.
+            types: Optional list of attribute types to filter by.
+
+        Return:
+            list[BlockAttributeData]: List of block attributes in insertion order,
+                optionally filtered by type.
+        """
+        with self._session_local() as session:
+            block = session.query(ChatBlock).filter_by(block_id=block_id).first()
+            if not block:
+                return []
+
+            attrs = sorted(block.attributes, key=lambda a: a.id)
+            if types is not None:
+                attrs = [attr for attr in attrs if attr.type in types]
+            return [
+                BlockAttributeData(
+                    type=attr.type,
+                    value=attr.value,
+                )
+                for attr in attrs
+            ]
+
+    async def aget_block_attributes(
+        self, block_id: str, *, types: list[str] | None = None
+    ) -> list[BlockAttributeData]:
+        """Async version of get_block_attributes.
+
+        Args:
+            block_id: The ID of the chat block to query.
+            types: Optional list of attribute types to filter by.
+
+        Return:
+            list[BlockAttributeData]: List of block attributes in insertion order,
+                optionally filtered by type.
+        """
+        async with self._async_session_local() as session:
+            result = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
+            block = result.scalar_one_or_none()
+            if not block:
+                return []
+
+            attrs = sorted(block.attributes, key=lambda a: a.id)
+            if types is not None:
+                attrs = [attr for attr in attrs if attr.type in types]
+            return [
+                BlockAttributeData(
+                    type=attr.type,
+                    value=attr.value,
+                )
+                for attr in attrs
+            ]
+
+    def get_session_attributes(
+        self, session_id: str, *, types: list[str] | None = None
+    ) -> list[UserAttributeData]:
+        """Get user attributes, optionally filtered by type."""
+
+        with self._session_local() as session:
+            user = session.query(User).filter_by(session_id=session_id).first()
+            if not user:
+                return []
+
+            attrs = sorted(user.attributes, key=lambda a: a.id)
+            if types is not None:
+                attrs = [attr for attr in attrs if attr.type in types]
+            return [UserAttributeData(type=attr.type, value=attr.value) for attr in attrs]
+
+    async def aget_session_attributes(
+        self, session_id: str, *, types: list[str] | None = None
+    ) -> list[UserAttributeData]:
+        """Async version of :meth:`get_user_attributes`."""
+
+        async with self._async_session_local() as session:
+            result = await session.execute(select(User).filter_by(session_id=session_id))
+            user = result.scalar_one_or_none()
+            if not user:
+                return []
+
+            attrs = sorted(user.attributes, key=lambda a: a.id)
+            if types is not None:
+                attrs = [attr for attr in attrs if attr.type in types]
+            return [UserAttributeData(type=attr.type, value=attr.value) for attr in attrs]
 
     def get_block_history_with_timestamps(self, block_id: str) -> list[tuple[BaseMessage, float]]:
         """Get all messages in a block with their timestamps.
@@ -673,37 +905,6 @@ class BaseHistoryStore(BaseModel):
             for rec in result
         ]
 
-    def get_user_attributes(
-        self, session_id: str, *, types: list[str] | None = None
-    ) -> list[UserAttributeData]:
-        """Get user attributes, optionally filtered by type."""
-
-        with self._session_local() as session:
-            user = session.query(User).filter_by(session_id=session_id).first()
-            if not user:
-                return []
-
-            attrs = sorted(user.attributes, key=lambda a: a.id)
-            if types is not None:
-                attrs = [attr for attr in attrs if attr.type in types]
-            return [UserAttributeData(type=attr.type, value=attr.value) for attr in attrs]
-
-    async def aget_user_attributes(
-        self, session_id: str, *, types: list[str] | None = None
-    ) -> list[UserAttributeData]:
-        """Async version of :meth:`get_user_attributes`."""
-
-        async with self._async_session_local() as session:
-            result = await session.execute(select(User).filter_by(session_id=session_id))
-            user = result.scalar_one_or_none()
-            if not user:
-                return []
-
-            attrs = sorted(user.attributes, key=lambda a: a.id)
-            if types is not None:
-                attrs = [attr for attr in attrs if attr.type in types]
-            return [UserAttributeData(type=attr.type, value=attr.value) for attr in attrs]
-
     def get_block_histories_with_timestamps(
         self, block_ids: list[str]
     ) -> list[tuple[BaseMessage, float]]:
@@ -758,65 +959,6 @@ class BaseHistoryStore(BaseModel):
         """
         pairs = await self.aget_block_histories_with_timestamps(block_ids)
         return [msg for msg, _ in pairs]
-
-    def get_block_attributes(
-        self, block_id: str, *, types: list[str] | None = None
-    ) -> list[BlockAttributeData]:
-        """Get all attributes for a chat block, optionally filtered by type.
-
-        Args:
-            block_id: The ID of the chat block to query.
-            types: Optional list of attribute types to filter by.
-
-        Return:
-            list[BlockAttributeData]: List of block attributes in insertion order,
-                optionally filtered by type.
-        """
-        with self._session_local() as session:
-            block = session.query(ChatBlock).filter_by(block_id=block_id).first()
-            if not block:
-                return []
-
-            attrs = sorted(block.attributes, key=lambda a: a.id)
-            if types is not None:
-                attrs = [attr for attr in attrs if attr.type in types]
-            return [
-                BlockAttributeData(
-                    type=attr.type,
-                    value=attr.value,
-                )
-                for attr in attrs
-            ]
-
-    async def aget_block_attributes(
-        self, block_id: str, *, types: list[str] | None = None
-    ) -> list[BlockAttributeData]:
-        """Async version of get_block_attributes.
-
-        Args:
-            block_id: The ID of the chat block to query.
-            types: Optional list of attribute types to filter by.
-
-        Return:
-            list[BlockAttributeData]: List of block attributes in insertion order,
-                optionally filtered by type.
-        """
-        async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
-            block = result.scalar_one_or_none()
-            if not block:
-                return []
-
-            attrs = sorted(block.attributes, key=lambda a: a.id)
-            if types is not None:
-                attrs = [attr for attr in attrs if attr.type in types]
-            return [
-                BlockAttributeData(
-                    type=attr.type,
-                    value=attr.value,
-                )
-                for attr in attrs
-            ]
 
     def get_session_block_ids_with_timestamps(
         self,
@@ -1132,45 +1274,7 @@ class BaseHistoryStore(BaseModel):
         )
         return [msg for msg, _ in pairs]
 
-    def add_user_name(self, user_name: str, *, session_id: str) -> None:
-        """Add user name to the history store.
-
-        Args:
-            user_name: User name to be stored.
-            session_id: Optional session/user ID. Uses user_name if not provided.
-
-        Return:
-            None: User name is persisted to the database.
-        """
-        with self._session_local() as session:
-            try:
-                user = self._get_or_create_user(session, session_id)
-                user.name = user_name
-                session.commit()
-            except Exception:
-                session.rollback()
-                raise
-
-    async def aadd_user_name(self, user_name: str, *, session_id: str) -> None:
-        """Async add user name to the history store.
-
-        Args:
-            user_name: User name to be stored.
-            session_id: Optional session/user ID. Uses user_name if not provided.
-
-        Return:
-            None: User name is persisted to the database.
-        """
-        async with self._async_session_local() as session:
-            try:
-                user = await self._a_get_or_create_user(session, session_id)
-                user.name = user_name
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
-
-    def get_user_name(self, session_id: str) -> str | None:
+    def get_session_name(self, session_id: str) -> str | None:
         """Get user name from the history store.
 
         Args:
@@ -1185,7 +1289,7 @@ class BaseHistoryStore(BaseModel):
                 return user.name
             return None
 
-    async def aget_user_name(self, session_id: str) -> str | None:
+    async def aget_session_name(self, session_id: str) -> str | None:
         """Async get user name from the history store.
 
         Args:
@@ -1200,67 +1304,6 @@ class BaseHistoryStore(BaseModel):
             if user:
                 return user.name
             return None
-
-    def add_short_memory(
-        self,
-        short_memory: ShortMemoryPromptTemplate,
-        *,
-        block_id: str,
-        block_ts: float | None = None,
-        session_id: str | None = None,
-    ) -> None:
-        """Add short memory data for a specific block.
-
-        This is a convenience method that combines message storage with
-        short memory attribute storage.
-
-        Args:
-            short_memory: Short memory prompt template instance.
-            block_id: Unique identifier for the message block.
-            block_ts: Unix timestamp for the block start time.
-            session_id: Optional session/user ID. Uses block_id if not provided.
-
-        Return:
-            None: Messages and attributes are persisted to the database.
-        """
-        short_memory_data = short_memory.to_template_dict()
-
-        self.add_block_attributes(
-            [BlockAttributeData(type=_SHORT_MEMORY_KEY, value=short_memory_data)],
-            block_id=block_id,
-            block_ts=block_ts,
-            session_id=session_id,
-        )
-
-    async def aadd_short_memory(
-        self,
-        short_memory: ShortMemoryPromptTemplate,
-        *,
-        block_id: str,
-        block_ts: float | None = None,
-        session_id: str | None = None,
-    ) -> None:
-        """Async add short memory data for a specific block.
-
-        This is a convenience method that combines message storage with
-        short memory attribute storage.
-
-        Args:
-            short_memory: Short memory prompt template instance.
-            block_id: Unique identifier for the message block.
-            block_ts: Unix timestamp for the block start time.
-            session_id: Optional session/user ID. Uses block_id if not provided.
-
-        Return:
-            None: Messages and attributes are persisted to the database."""
-        short_memory_data = short_memory.to_template_dict()
-
-        await self.aadd_block_attributes(
-            [BlockAttributeData(type=_SHORT_MEMORY_KEY, value=short_memory_data)],
-            block_id=block_id,
-            block_ts=block_ts,
-            session_id=session_id,
-        )
 
     def get_short_memory(self, block_id: str) -> ShortMemoryPromptTemplate | None:
         """Get short memory data for a specific block.
@@ -1296,42 +1339,6 @@ class BaseHistoryStore(BaseModel):
             return ShortMemoryPromptTemplate.load(attributes[0].get("value"))
         return None
 
-    def add_long_memory(self, long_memory: LongMemoryPromptTemplate, *, session_id: str) -> None:
-        """Add long memory data for a specific block.
-
-        Args:
-            long_memory: Long memory prompt template instance.
-            session_id: session/user ID.
-
-        Return:
-            None: Messages and attributes are persisted to the database.
-        """
-        long_memory_data = long_memory.to_template_dict()
-
-        self.add_user_attributes(
-            [UserAttributeData(type=_LONG_MEMORY_KEY, value=long_memory_data)],
-            session_id=session_id,
-        )
-
-    async def aadd_long_memory(
-        self, long_memory: LongMemoryPromptTemplate, *, session_id: str
-    ) -> None:
-        """Async add long memory data for a specific block.
-
-        Args:
-            long_memory: Long memory prompt template instance.
-            session_id: session/user ID.
-
-        Return:
-            None: Messages and attributes are persisted to the database.
-        """
-        long_memory_data = long_memory.to_template_dict()
-
-        await self.aadd_user_attributes(
-            [UserAttributeData(type=_LONG_MEMORY_KEY, value=long_memory_data)],
-            session_id=session_id,
-        )
-
     def get_long_memory(self, session_id: str) -> LongMemoryPromptTemplate | None:
         """Get long memory data for a specific block.
 
@@ -1341,7 +1348,7 @@ class BaseHistoryStore(BaseModel):
         Return:
             LongMemoryPromptTemplate | None: Long memory data if found, None otherwise.
         """
-        attributes = self.get_user_attributes(session_id, types=[_LONG_MEMORY_KEY])
+        attributes = self.get_session_attributes(session_id, types=[_LONG_MEMORY_KEY])
         if attributes:
             return LongMemoryPromptTemplate.load(attributes[0].get("value"))
         return None
@@ -1355,10 +1362,172 @@ class BaseHistoryStore(BaseModel):
         Return:
             LongMemoryPromptTemplate | None: Long memory data if found, None otherwise.
         """
-        attributes = await self.aget_user_attributes(session_id, types=[_LONG_MEMORY_KEY])
+        attributes = await self.aget_session_attributes(session_id, types=[_LONG_MEMORY_KEY])
         if attributes:
             return LongMemoryPromptTemplate.load(attributes[0].get("value"))
         return None
+
+    def delete_session(self, session_id: str) -> None:
+        """Delete a user session and all associated data.
+
+        Args:
+            session_id: The session/user ID to delete.
+        """
+        with self._session_local() as session:
+            user = session.query(User).filter_by(session_id=session_id).first()
+            if not user:
+                return
+            session.delete(user)
+            session.commit()
+
+    async def adelete_session(self, session_id: str) -> None:
+        """Async delete a user session and all associated data.
+
+        Args:
+            session_id: The session/user ID to delete.
+        """
+        async with self._async_session_local() as session:
+            user = await session.execute(select(User).filter_by(session_id=session_id))
+            user = user.scalar_one_or_none()
+            if not user:
+                return
+            await session.delete(user)
+            await session.commit()
+
+    def delete_session_blocks(self, session_id: str) -> None:
+        """Delete all chat blocks for a user session.
+
+        Args:
+            session_id: The session/user ID to delete blocks for.
+        """
+        with self._session_local() as session:
+            user = session.query(User).filter_by(session_id=session_id).first()
+            if not user:
+                return
+            session.query(ChatBlock).filter_by(session_id=user.id).delete()
+            session.commit()
+
+    async def adelete_session_blocks(self, session_id: str) -> None:
+        """Async delete all chat blocks for a user session.
+
+        Args:
+            session_id: The session/user ID to delete blocks for.
+        """
+        async with self._async_session_local() as session:
+            result = await session.execute(select(User).filter_by(session_id=session_id))
+            user = result.scalar_one_or_none()
+            if not user:
+                return
+            await session.execute(delete(ChatBlock).filter_by(session_id=user.id))
+            await session.commit()
+
+    def delete_session_histories(self, session_id: str) -> None:
+        """Delete all chat messages for a user session.
+
+        Args:
+            session_id: The session/user ID to delete history for.
+        """
+        with self._session_local() as session:
+            user = session.query(User).filter_by(session_id=session_id).first()
+            if not user:
+                return
+            session.query(ChatMessage).filter_by(session_id=user.id).delete()
+            session.commit()
+
+    async def adelete_session_histories(self, session_id: str) -> None:
+        """Async delete all chat messages for a user session.
+
+        Args:
+            session_id: The session/user ID to delete history for.
+        """
+        async with self._async_session_local() as session:
+            result = await session.execute(select(User).filter_by(session_id=session_id))
+            user = result.scalar_one_or_none()
+            if not user:
+                return
+            await session.execute(delete(ChatMessage).filter_by(session_id=user.id))
+            await session.commit()
+
+    def delete_session_attributes(self, session_id: str) -> None:
+        """Delete all user attributes for a session.
+
+        Args:
+            session_id: The session/user ID to delete attributes for.
+        """
+        with self._session_local() as session:
+            user = session.query(User).filter_by(session_id=session_id).first()
+            if not user:
+                return
+            session.query(UserAttribute).filter_by(user_id=user.id).delete()
+            session.commit()
+
+    async def adelete_session_attributes(self, session_id: str) -> None:
+        """Async delete all user attributes for a session.
+
+        Args:
+            session_id: The session/user ID to delete attributes for.
+        """
+        async with self._async_session_local() as session:
+            result = await session.execute(select(User).filter_by(session_id=session_id))
+            user = result.scalar_one_or_none()
+            if not user:
+                return
+            await session.execute(delete(UserAttribute).filter_by(user_id=user.id))
+            await session.commit()
+
+    def delete_block(self, block_id: str) -> None:
+        """Delete a chat block and all its messages and attributes.
+
+        Args:
+            block_id: The ID of the chat block to delete.
+        """
+        with self._session_local() as session:
+            block = session.query(ChatBlock).filter_by(block_id=block_id).first()
+            if not block:
+                return
+            session.delete(block)
+            session.commit()
+
+    async def adelete_block(self, block_id: str) -> None:
+        """Async delete a chat block and all its messages and attributes.
+
+        Args:
+            block_id: The ID of the chat block to delete.
+        """
+        async with self._async_session_local() as session:
+            block = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
+            block = block.scalar_one_or_none()
+            if not block:
+                return
+            await session.delete(block)
+            await session.commit()
+
+    def delete_block_attributes(self, block_id: str) -> None:
+        """Delete all attributes for a specific chat block.
+
+        Args:
+            block_id: The ID of the chat block to delete attributes for.
+        """
+        with self._session_local() as session:
+            block = session.query(ChatBlock).filter_by(block_id=block_id).first()
+            if not block:
+                return
+            session.query(ChatBlockAttribute).filter_by(block_id=block.id).delete()
+            session.commit()
+
+    async def adelete_block_attributes(self, block_id: str) -> None:
+        """Async delete all attributes for a specific chat block.
+
+        Args:
+            block_id: The ID of the chat block to delete attributes for.
+        """
+        async with self._async_session_local() as session:
+            block = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
+            block = block.scalar_one_or_none()
+            if not block:
+                return
+            await session.execute(delete(ChatBlockAttribute).filter_by(block_id=block.id))
+            await session.commit()
 
 
 def get_datetime_from_timestamp(timestamp: float | None) -> datetime | None:

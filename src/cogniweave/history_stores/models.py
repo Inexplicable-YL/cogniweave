@@ -60,7 +60,7 @@ class UserAttribute(Base):
         nullable=False,
         index=True,
     )
-    type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String, nullable=False, index=True, unique=True)
     value: Mapped[Any] = mapped_column(JSON, nullable=False)
 
     user: Mapped[User] = relationship("User", back_populates="attributes", lazy="joined")
@@ -154,7 +154,7 @@ class ChatBlockAttribute(Base):
         nullable=False,
         index=True,
     )
-    type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String, nullable=False, index=True, unique=True)
     value: Mapped[Any] = mapped_column(JSON, nullable=False)
 
     block: Mapped[ChatBlock] = relationship("ChatBlock", back_populates="attributes", lazy="joined")

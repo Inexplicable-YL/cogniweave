@@ -173,11 +173,11 @@ async def test_async_block_attributes_operations(tmp_path: Path) -> None:
 def test_user_attributes_operations(tmp_path: Path) -> None:
     store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/user_attrs.sqlite")
 
-    store.add_user_attributes(
+    store.add_session_attributes(
         [{"type": "color", "value": "blue"}],
         session_id="u",
     )
-    store.add_user_attributes(
+    store.add_session_attributes(
         [{"type": "color", "value": "red"}, {"type": "role", "value": "admin"}],
         session_id="u",
     )
@@ -189,12 +189,12 @@ def test_user_attributes_operations(tmp_path: Path) -> None:
         assert attrs == {"color": "red", "role": "admin"}
 
     # Test retrieval helpers
-    result = store.get_user_attributes("u")
+    result = store.get_session_attributes("u")
     assert {a["type"]: a["value"] for a in result} == {
         "color": "red",
         "role": "admin",
     }
-    filtered = store.get_user_attributes("u", types=["role"])
+    filtered = store.get_session_attributes("u", types=["role"])
     assert len(filtered) == 1
     assert filtered[0]["type"] == "role"
 
@@ -202,11 +202,11 @@ def test_user_attributes_operations(tmp_path: Path) -> None:
 async def test_async_user_attributes_operations(tmp_path: Path) -> None:
     store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/user_attrs_async.sqlite")
 
-    await store.aadd_user_attributes(
+    await store.aadd_session_attributes(
         [{"type": "color", "value": "blue"}],
         session_id="u",
     )
-    await store.aadd_user_attributes(
+    await store.aadd_session_attributes(
         [{"type": "color", "value": "red"}, {"type": "role", "value": "admin"}],
         session_id="u",
     )
@@ -218,12 +218,12 @@ async def test_async_user_attributes_operations(tmp_path: Path) -> None:
         attrs = {a.type: a.value for a in attrs_db}
         assert attrs == {"color": "red", "role": "admin"}
 
-    result = await store.aget_user_attributes("u")
+    result = await store.aget_session_attributes("u")
     assert {a["type"]: a["value"] for a in result} == {
         "color": "red",
         "role": "admin",
     }
-    filtered = await store.aget_user_attributes("u", types=["color"])
+    filtered = await store.aget_session_attributes("u", types=["color"])
     assert len(filtered) == 1
     assert filtered[0]["type"] == "color"
 

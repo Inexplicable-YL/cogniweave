@@ -55,7 +55,7 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
             if self.history_store.get_short_memory(short_block_id) is None:
                 history = self.history_store.get_block_history(short_block_id)
                 ts = self.history_store.get_block_timestamp(short_block_id) or 0.0
-                user_name = self.history_store.get_user_name(session_id) or ""
+                user_name = self.history_store.get_session_name(session_id) or ""
                 assert self.short_maker is not None
                 short_mem = self.short_maker.invoke(
                     {"history": history, "timestamp": ts, "name": user_name},
@@ -115,7 +115,7 @@ class SummaryMemoryMaker(RunnableSerializable[dict[str, Any], None]):
             if await self.history_store.aget_short_memory(short_block_id) is None:
                 history = await self.history_store.aget_block_history(short_block_id)
                 ts = await self.history_store.aget_block_timestamp(short_block_id) or 0.0
-                user_name = await self.history_store.aget_user_name(session_id) or ""
+                user_name = await self.history_store.aget_session_name(session_id) or ""
                 assert self.short_maker is not None
                 short_mem = await self.short_maker.ainvoke(
                     {"history": history, "timestamp": ts, "name": user_name},
