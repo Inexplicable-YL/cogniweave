@@ -1448,31 +1448,41 @@ class BaseHistoryStore(BaseModel):
             await session.execute(delete(ChatMessage).filter_by(session_id=user.id))
             await session.commit()
 
-    def delete_session_attributes(self, session_id: str) -> None:
-        """Delete all user attributes for a session.
+    def delete_session_attributes(self, session_id: str, *, types: list[str] | None = None) -> None:
+        """Delete all user attributes for a session, optionally filtered by type.
 
         Args:
             session_id: The session/user ID to delete attributes for.
+            types: Optional list of attribute types to filter by.
         """
         with self._session_local() as session:
             user = session.query(User).filter_by(session_id=session_id).first()
             if not user:
                 return
-            session.query(UserAttribute).filter_by(user_id=user.id).delete()
+            if types is not None:
+                user.attributes = [attr for attr in user.attributes if attr.type not in types]
+            else:
+                user.attributes = []
             session.commit()
 
-    async def adelete_session_attributes(self, session_id: str) -> None:
-        """Async delete all user attributes for a session.
+    async def adelete_session_attributes(
+        self, session_id: str, *, types: list[str] | None = None
+    ) -> None:
+        """Async delete all user attributes for a session, optionally filtered by type.
 
         Args:
             session_id: The session/user ID to delete attributes for.
+            types: Optional list of attribute types to filter by.
         """
         async with self._async_session_local() as session:
             result = await session.execute(select(User).filter_by(session_id=session_id))
             user = result.scalar_one_or_none()
             if not user:
                 return
-            await session.execute(delete(UserAttribute).filter_by(user_id=user.id))
+            if types is not None:
+                user.attributes = [attr for attr in user.attributes if attr.type not in types]
+            else:
+                user.attributes = []
             await session.commit()
 
     def delete_block(self, block_id: str) -> None:
@@ -1502,31 +1512,41 @@ class BaseHistoryStore(BaseModel):
             await session.delete(block)
             await session.commit()
 
-    def delete_block_attributes(self, block_id: str) -> None:
+    def delete_block_attributes(self, block_id: str, *, types: list[str] | None = None) -> None:
         """Delete all attributes for a specific chat block.
 
         Args:
             block_id: The ID of the chat block to delete attributes for.
+            types: Optional list of attribute types to filter by.
         """
         with self._session_local() as session:
             block = session.query(ChatBlock).filter_by(block_id=block_id).first()
             if not block:
                 return
-            session.query(ChatBlockAttribute).filter_by(block_id=block.id).delete()
+            if types is not None:
+                block.attributes = [attr for attr in block.attributes if attr.type not in types]
+            else:
+                block.attributes = []
             session.commit()
 
-    async def adelete_block_attributes(self, block_id: str) -> None:
+    async def adelete_block_attributes(
+        self, block_id: str, *, types: list[str] | None = None
+    ) -> None:
         """Async delete all attributes for a specific chat block.
 
         Args:
             block_id: The ID of the chat block to delete attributes for.
+            types: Optional list of attribute types to filter by.
         """
         async with self._async_session_local() as session:
-            block = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
-            block = block.scalar_one_or_none()
+            result = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
+            block = result.scalar_one_or_none()
             if not block:
                 return
-            await session.execute(delete(ChatBlockAttribute).filter_by(block_id=block.id))
+            if types is not None:
+                block.attributes = [attr for attr in block.attributes if attr.type not in types]
+            else:
+                block.attributes = []
             await session.commit()
 
 
