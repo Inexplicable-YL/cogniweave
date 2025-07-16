@@ -1374,11 +1374,15 @@ class BaseHistoryStore(BaseModel):
             session_id: The session/user ID to delete.
         """
         with self._session_local() as session:
-            user = session.query(User).filter_by(session_id=session_id).first()
-            if not user:
-                return
-            session.delete(user)
-            session.commit()
+            try:
+                user = session.query(User).filter_by(session_id=session_id).first()
+                if not user:
+                    return
+                session.delete(user)
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
     async def adelete_session(self, session_id: str) -> None:
         """Async delete a user session and all associated data.
@@ -1387,12 +1391,16 @@ class BaseHistoryStore(BaseModel):
             session_id: The session/user ID to delete.
         """
         async with self._async_session_local() as session:
-            user = await session.execute(select(User).filter_by(session_id=session_id))
-            user = user.scalar_one_or_none()
-            if not user:
-                return
-            await session.delete(user)
-            await session.commit()
+            try:
+                user = await session.execute(select(User).filter_by(session_id=session_id))
+                user = user.scalar_one_or_none()
+                if not user:
+                    return
+                await session.delete(user)
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     def delete_session_blocks(self, session_id: str) -> None:
         """Delete all chat blocks for a user session.
@@ -1401,11 +1409,16 @@ class BaseHistoryStore(BaseModel):
             session_id: The session/user ID to delete blocks for.
         """
         with self._session_local() as session:
-            user = session.query(User).filter_by(session_id=session_id).first()
-            if not user:
-                return
-            session.query(ChatBlock).filter_by(session_id=user.id).delete()
-            session.commit()
+            try:
+                user = session.query(User).filter_by(session_id=session_id).first()
+                if not user:
+                    return
+                for block in session.query(ChatBlock).filter_by(session_id=user.id):
+                    session.delete(block)
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
     async def adelete_session_blocks(self, session_id: str) -> None:
         """Async delete all chat blocks for a user session.
@@ -1414,12 +1427,18 @@ class BaseHistoryStore(BaseModel):
             session_id: The session/user ID to delete blocks for.
         """
         async with self._async_session_local() as session:
-            result = await session.execute(select(User).filter_by(session_id=session_id))
-            user = result.scalar_one_or_none()
-            if not user:
-                return
-            await session.execute(delete(ChatBlock).filter_by(session_id=user.id))
-            await session.commit()
+            try:
+                result = await session.execute(select(User).filter_by(session_id=session_id))
+                user = result.scalar_one_or_none()
+                if not user:
+                    return
+                blocks = await session.execute(select(ChatBlock).filter_by(session_id=user.id))
+                for block in blocks.scalars().all():
+                    await session.delete(block)
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     def delete_session_histories(self, session_id: str) -> None:
         """Delete all chat messages for a user session.
@@ -1428,11 +1447,15 @@ class BaseHistoryStore(BaseModel):
             session_id: The session/user ID to delete history for.
         """
         with self._session_local() as session:
-            user = session.query(User).filter_by(session_id=session_id).first()
-            if not user:
-                return
-            session.query(ChatMessage).filter_by(session_id=user.id).delete()
-            session.commit()
+            try:
+                user = session.query(User).filter_by(session_id=session_id).first()
+                if not user:
+                    return
+                session.query(ChatMessage).filter_by(session_id=user.id).delete()
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
     async def adelete_session_histories(self, session_id: str) -> None:
         """Async delete all chat messages for a user session.
@@ -1441,12 +1464,16 @@ class BaseHistoryStore(BaseModel):
             session_id: The session/user ID to delete history for.
         """
         async with self._async_session_local() as session:
-            result = await session.execute(select(User).filter_by(session_id=session_id))
-            user = result.scalar_one_or_none()
-            if not user:
-                return
-            await session.execute(delete(ChatMessage).filter_by(session_id=user.id))
-            await session.commit()
+            try:
+                result = await session.execute(select(User).filter_by(session_id=session_id))
+                user = result.scalar_one_or_none()
+                if not user:
+                    return
+                await session.execute(delete(ChatMessage).filter_by(session_id=user.id))
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     def delete_session_attributes(self, session_id: str, *, types: list[str] | None = None) -> None:
         """Delete all user attributes for a session, optionally filtered by type.
@@ -1456,14 +1483,18 @@ class BaseHistoryStore(BaseModel):
             types: Optional list of attribute types to filter by.
         """
         with self._session_local() as session:
-            user = session.query(User).filter_by(session_id=session_id).first()
-            if not user:
-                return
-            if types is not None:
-                user.attributes = [attr for attr in user.attributes if attr.type not in types]
-            else:
-                user.attributes = []
-            session.commit()
+            try:
+                user = session.query(User).filter_by(session_id=session_id).first()
+                if not user:
+                    return
+                if types is not None:
+                    user.attributes = [attr for attr in user.attributes if attr.type not in types]
+                else:
+                    user.attributes = []
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
     async def adelete_session_attributes(
         self, session_id: str, *, types: list[str] | None = None
@@ -1475,15 +1506,19 @@ class BaseHistoryStore(BaseModel):
             types: Optional list of attribute types to filter by.
         """
         async with self._async_session_local() as session:
-            result = await session.execute(select(User).filter_by(session_id=session_id))
-            user = result.scalar_one_or_none()
-            if not user:
-                return
-            if types is not None:
-                user.attributes = [attr for attr in user.attributes if attr.type not in types]
-            else:
-                user.attributes = []
-            await session.commit()
+            try:
+                result = await session.execute(select(User).filter_by(session_id=session_id))
+                user = result.scalar_one_or_none()
+                if not user:
+                    return
+                if types is not None:
+                    user.attributes = [attr for attr in user.attributes if attr.type not in types]
+                else:
+                    user.attributes = []
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     def delete_block(self, block_id: str) -> None:
         """Delete a chat block and all its messages and attributes.
@@ -1492,11 +1527,15 @@ class BaseHistoryStore(BaseModel):
             block_id: The ID of the chat block to delete.
         """
         with self._session_local() as session:
-            block = session.query(ChatBlock).filter_by(block_id=block_id).first()
-            if not block:
-                return
-            session.delete(block)
-            session.commit()
+            try:
+                block = session.query(ChatBlock).filter_by(block_id=block_id).first()
+                if not block:
+                    return
+                session.delete(block)
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
     async def adelete_block(self, block_id: str) -> None:
         """Async delete a chat block and all its messages and attributes.
@@ -1505,12 +1544,51 @@ class BaseHistoryStore(BaseModel):
             block_id: The ID of the chat block to delete.
         """
         async with self._async_session_local() as session:
-            block = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
-            block = block.scalar_one_or_none()
-            if not block:
-                return
-            await session.delete(block)
-            await session.commit()
+            try:
+                block = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
+                block = block.scalar_one_or_none()
+                if not block:
+                    return
+                await session.delete(block)
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    def delete_blocks(self, block_ids: list[str]) -> None:
+        """Delete multiple chat blocks and all their messages and attributes.
+
+        Args:
+            block_ids: List of block IDs to delete.
+        """
+        with self._session_local() as session:
+            try:
+                for block_id in block_ids:
+                    block = session.query(ChatBlock).filter_by(block_id=block_id).first()
+                    if block:
+                        session.delete(block)
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+
+    async def adelete_blocks(self, block_ids: list[str]) -> None:
+        """Async delete multiple chat blocks and all their messages and attributes.
+
+        Args:
+            block_ids: List of block IDs to delete.
+        """
+        async with self._async_session_local() as session:
+            try:
+                for block_id in block_ids:
+                    result = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
+                    block = result.scalar_one_or_none()
+                    if block:
+                        await session.delete(block)
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     def delete_block_attributes(self, block_id: str, *, types: list[str] | None = None) -> None:
         """Delete all attributes for a specific chat block.
@@ -1520,14 +1598,18 @@ class BaseHistoryStore(BaseModel):
             types: Optional list of attribute types to filter by.
         """
         with self._session_local() as session:
-            block = session.query(ChatBlock).filter_by(block_id=block_id).first()
-            if not block:
-                return
-            if types is not None:
-                block.attributes = [attr for attr in block.attributes if attr.type not in types]
-            else:
-                block.attributes = []
-            session.commit()
+            try:
+                block = session.query(ChatBlock).filter_by(block_id=block_id).first()
+                if not block:
+                    return
+                if types is not None:
+                    block.attributes = [attr for attr in block.attributes if attr.type not in types]
+                else:
+                    block.attributes = []
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
     async def adelete_block_attributes(
         self, block_id: str, *, types: list[str] | None = None
@@ -1539,15 +1621,19 @@ class BaseHistoryStore(BaseModel):
             types: Optional list of attribute types to filter by.
         """
         async with self._async_session_local() as session:
-            result = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
-            block = result.scalar_one_or_none()
-            if not block:
-                return
-            if types is not None:
-                block.attributes = [attr for attr in block.attributes if attr.type not in types]
-            else:
-                block.attributes = []
-            await session.commit()
+            try:
+                result = await session.execute(select(ChatBlock).filter_by(block_id=block_id))
+                block = result.scalar_one_or_none()
+                if not block:
+                    return
+                if types is not None:
+                    block.attributes = [attr for attr in block.attributes if attr.type not in types]
+                else:
+                    block.attributes = []
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
 
 def get_datetime_from_timestamp(timestamp: float | None) -> datetime | None:

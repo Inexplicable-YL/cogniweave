@@ -4,7 +4,7 @@ from datetime import datetime  # noqa: TC003
 from typing import Any
 from typing_extensions import override
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -27,17 +27,20 @@ class User(Base):
         cascade="all, delete-orphan",
         order_by="ChatBlock.timestamp",
         lazy="selectin",
+        passive_deletes=True,
     )
     messages: Mapped[list[ChatMessage]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         order_by="ChatMessage.timestamp",
         lazy="selectin",
+        passive_deletes=True,
     )
     attributes: Mapped[list[UserAttribute]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
+        passive_deletes=True,
     )
 
     __table_args__ = (
@@ -60,12 +63,17 @@ class UserAttribute(Base):
         nullable=False,
         index=True,
     )
-    type: Mapped[str] = mapped_column(String, nullable=False, index=True, unique=True)
+    type: Mapped[str] = mapped_column(String, nullable=False, index=True)
     value: Mapped[Any] = mapped_column(JSON, nullable=False)
 
-    user: Mapped[User] = relationship("User", back_populates="attributes", lazy="joined")
+    user: Mapped[User] = relationship(
+        "User", back_populates="attributes", lazy="joined", passive_deletes=True
+    )
 
-    __table_args__ = (Index("idx_user_attributes_user_type", "user_id", "type"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "type", name="uix_user_attr_unique_type"),
+        Index("idx_user_attributes_user_type", "user_id", "type"),
+    )
 
     @override
     def __repr__(self) -> str:
@@ -85,17 +93,21 @@ class ChatBlock(Base):
     )
     timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
 
-    user: Mapped[User] = relationship("User", back_populates="chat_blocks", lazy="joined")
+    user: Mapped[User] = relationship(
+        "User", back_populates="chat_blocks", lazy="joined", passive_deletes=True
+    )
     messages: Mapped[list[ChatMessage]] = relationship(
         back_populates="block",
         cascade="all, delete-orphan",
         order_by="ChatMessage.timestamp",
         lazy="selectin",
+        passive_deletes=True,
     )
     attributes: Mapped[list[ChatBlockAttribute]] = relationship(
         back_populates="block",
         cascade="all, delete-orphan",
         lazy="selectin",
+        passive_deletes=True,
     )
 
     __table_args__ = (Index("idx_chat_blocks_session_start", "session_id", "timestamp"),)
@@ -127,8 +139,12 @@ class ChatMessage(Base):
         index=True,
     )
 
-    block: Mapped[ChatBlock] = relationship("ChatBlock", back_populates="messages", lazy="joined")
-    user: Mapped[User] = relationship("User", back_populates="messages", lazy="joined")
+    block: Mapped[ChatBlock] = relationship(
+        "ChatBlock", back_populates="messages", lazy="joined", passive_deletes=True
+    )
+    user: Mapped[User] = relationship(
+        "User", back_populates="messages", lazy="joined", passive_deletes=True
+    )
 
     __table_args__ = (
         Index("idx_messages_block_timestamp", "block_id", "timestamp"),
@@ -154,12 +170,17 @@ class ChatBlockAttribute(Base):
         nullable=False,
         index=True,
     )
-    type: Mapped[str] = mapped_column(String, nullable=False, index=True, unique=True)
+    type: Mapped[str] = mapped_column(String, nullable=False, index=True)
     value: Mapped[Any] = mapped_column(JSON, nullable=False)
 
-    block: Mapped[ChatBlock] = relationship("ChatBlock", back_populates="attributes", lazy="joined")
+    block: Mapped[ChatBlock] = relationship(
+        "ChatBlock", back_populates="attributes", lazy="joined", passive_deletes=True
+    )
 
-    __table_args__ = (Index("idx_block_attributes_block_type", "block_id", "type"),)
+    __table_args__ = (
+        UniqueConstraint("block_id", "type", name="uix_block_attr_unique_type"),
+        Index("idx_block_attributes_block_type", "block_id", "type"),
+    )
 
     @override
     def __repr__(self) -> str:

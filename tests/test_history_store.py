@@ -531,3 +531,247 @@ async def test_async_histories_with_multiple_blocks_order_no_ts(tmp_path: Path) 
         "b1-2",
         "b2-3",
     ]
+
+
+def test_delete_session(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/del_session.sqlite")
+    store.add_messages([(HumanMessage("hi"), 1.0)], block_id="b1", block_ts=1.0, session_id="s")
+    store.add_block_attributes(
+        [{"type": "tag", "value": "v"}], block_id="b1", block_ts=1.0, session_id="s"
+    )
+    store.add_session_attributes([{"type": "role", "value": "admin"}], session_id="s")
+    store.add_messages([(HumanMessage("other"), 2.0)], block_id="b2", block_ts=2.0, session_id="o")
+    store.delete_session("s")
+
+    with store._session_local() as session:
+        assert session.query(User).filter_by(session_id="s").first() is None
+        assert session.query(ChatBlock).filter_by(block_id="b1").first() is None
+        assert session.query(ChatMessage).count() == 1
+        assert session.query(ChatBlockAttribute).count() == 0
+        assert session.query(User).filter_by(session_id="o").count() == 1
+
+
+async def test_adelete_session(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/adel_session.sqlite")
+    await store.aadd_messages(
+        [(HumanMessage("hi"), 1.0)], block_id="b1", block_ts=1.0, session_id="s"
+    )
+    await store.aadd_block_attributes(
+        [{"type": "tag", "value": "v"}], block_id="b1", block_ts=1.0, session_id="s"
+    )
+    await store.aadd_session_attributes([{"type": "role", "value": "admin"}], session_id="s")
+    await store.aadd_messages(
+        [(HumanMessage("other"), 2.0)], block_id="b2", block_ts=2.0, session_id="o"
+    )
+    await store.adelete_session("s")
+
+    async with store._async_session_local() as session:
+        result = await session.execute(select(User).filter_by(session_id="s"))
+        assert result.scalar_one_or_none() is None
+        result_blocks = await session.execute(select(ChatBlock))
+        assert len(result_blocks.scalars().all()) == 1
+        result_attrs = await session.execute(select(ChatBlockAttribute))
+        assert result_attrs.scalars().all() == []
+
+
+def test_delete_block(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/del_block.sqlite")
+    store.add_messages([(HumanMessage("a"), 1.0)], block_id="b1", block_ts=1.0)
+    store.add_block_attributes([{"type": "tag", "value": "v"}], block_id="b1", block_ts=1.0)
+    store.add_messages([(HumanMessage("b"), 2.0)], block_id="b2", block_ts=2.0)
+    store.delete_block("b1")
+
+    with store._session_local() as session:
+        assert session.query(ChatBlock).filter_by(block_id="b1").first() is None
+        assert session.query(ChatBlock).filter_by(block_id="b2").count() == 1
+        assert session.query(ChatMessage).count() == 1
+        assert session.query(ChatBlockAttribute).count() == 0
+
+
+async def test_adelete_block(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/adel_block.sqlite")
+    await store.aadd_messages([(HumanMessage("a"), 1.0)], block_id="b1", block_ts=1.0)
+    await store.aadd_block_attributes([{"type": "tag", "value": "v"}], block_id="b1", block_ts=1.0)
+    await store.aadd_messages([(HumanMessage("b"), 2.0)], block_id="b2", block_ts=2.0)
+    await store.adelete_block("b1")
+
+    async with store._async_session_local() as session:
+        result_block = await session.execute(select(ChatBlock).filter_by(block_id="b1"))
+        assert result_block.scalar_one_or_none() is None
+        result_msgs = await session.execute(select(ChatMessage))
+        assert len(result_msgs.scalars().all()) == 1
+        result_attrs = await session.execute(select(ChatBlockAttribute))
+        assert result_attrs.scalars().all() == []
+
+
+def test_delete_session_attributes_filter(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/del_sattr.sqlite")
+    store.add_session_attributes(
+        [{"type": "color", "value": "blue"}, {"type": "role", "value": "admin"}],
+        session_id="s",
+    )
+    store.delete_session_attributes("s", types=["color"])
+    with store._session_local() as session:
+        user = session.query(User).filter_by(session_id="s").first()
+        assert user is not None
+        assert {a.type for a in user.attributes} == {"role"}
+    store.delete_session_attributes("s")
+    with store._session_local() as session:
+        user = session.query(User).filter_by(session_id="s").first()
+        assert user is not None
+        assert user.attributes == []
+
+
+def test_delete_block_attributes_filter(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/del_battr.sqlite")
+    store.add_messages([(HumanMessage("a"), 1.0)], block_id="b1", block_ts=1.0)
+    store.add_block_attributes(
+        [{"type": "tag", "value": "v"}, {"type": "summary", "value": "s"}],
+        block_id="b1",
+        block_ts=1.0,
+    )
+    store.delete_block_attributes("b1", types=["tag"])
+    with store._session_local() as session:
+        block = session.query(ChatBlock).filter_by(block_id="b1").first()
+        assert block is not None
+        assert {a.type for a in block.attributes} == {"summary"}
+    store.delete_block_attributes("b1")
+    with store._session_local() as session:
+        block = session.query(ChatBlock).filter_by(block_id="b1").first()
+        assert block is not None
+        assert block.attributes == []
+
+
+async def test_adelete_session_attributes_filter(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/adel_sattr.sqlite")
+    await store.aadd_session_attributes(
+        [
+            {"type": "color", "value": "blue"},
+            {"type": "role", "value": "admin"},
+        ],
+        session_id="s",
+    )
+    await store.adelete_session_attributes("s", types=["role"])
+    async with store._async_session_local() as session:
+        result = await session.execute(select(User).filter_by(session_id="s"))
+        user = result.scalar_one()
+        assert {a.type for a in user.attributes} == {"color"}
+    await store.adelete_session_attributes("s")
+    async with store._async_session_local() as session:
+        result = await session.execute(select(User).filter_by(session_id="s"))
+        user = result.scalar_one()
+        assert user.attributes == []
+
+
+async def test_adelete_block_attributes_filter(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/adel_battr.sqlite")
+    await store.aadd_messages([(HumanMessage("a"), 1.0)], block_id="b1", block_ts=1.0)
+    await store.aadd_block_attributes(
+        [
+            {"type": "tag", "value": "v"},
+            {"type": "summary", "value": "s"},
+        ],
+        block_id="b1",
+        block_ts=1.0,
+    )
+    await store.adelete_block_attributes("b1", types=["summary"])
+    async with store._async_session_local() as session:
+        result = await session.execute(select(ChatBlock).filter_by(block_id="b1"))
+        block = result.scalar_one()
+        assert {a.type for a in block.attributes} == {"tag"}
+    await store.adelete_block_attributes("b1")
+    async with store._async_session_local() as session:
+        result = await session.execute(select(ChatBlock).filter_by(block_id="b1"))
+        block = result.scalar_one()
+        assert block.attributes == []
+
+
+def test_delete_session_blocks(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/del_sblocks.sqlite")
+    store.add_messages([(HumanMessage("hi"), 1.0)], block_id="b1", block_ts=1.0, session_id="s")
+    store.add_block_attributes(
+        [{"type": "tag", "value": "v"}], block_id="b1", block_ts=1.0, session_id="s"
+    )
+    store.add_messages([(HumanMessage("other"), 2.0)], block_id="b2", block_ts=2.0, session_id="o")
+    store.delete_session_blocks("s")
+
+    with store._session_local() as session:
+        user_s = session.query(User).filter_by(session_id="s").first()
+        user_o = session.query(User).filter_by(session_id="o").first()
+        assert user_s is not None
+        assert session.query(ChatBlock).filter_by(session_id=user_s.id).count() == 0
+        assert session.query(ChatMessage).filter_by(session_id=user_s.id).count() == 0
+        assert session.query(ChatBlockAttribute).count() == 0
+        assert user_o is not None
+        assert session.query(ChatBlock).filter_by(session_id=user_o.id).count() == 1
+
+
+async def test_adelete_session_blocks(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/adel_sblocks.sqlite")
+    await store.aadd_messages(
+        [(HumanMessage("hi"), 1.0)], block_id="b1", block_ts=1.0, session_id="s"
+    )
+    await store.aadd_block_attributes(
+        [{"type": "tag", "value": "v"}], block_id="b1", block_ts=1.0, session_id="s"
+    )
+    await store.aadd_messages(
+        [(HumanMessage("other"), 2.0)], block_id="b2", block_ts=2.0, session_id="o"
+    )
+    await store.adelete_session_blocks("s")
+
+    async with store._async_session_local() as session:
+        result_user_s = await session.execute(select(User).filter_by(session_id="s"))
+        user_s = result_user_s.scalar_one()
+        result_user_o = await session.execute(select(User).filter_by(session_id="o"))
+        user_o = result_user_o.scalar_one()
+        result_blocks_s = await session.execute(select(ChatBlock).filter_by(session_id=user_s.id))
+        assert result_blocks_s.scalars().all() == []
+        result_msgs_s = await session.execute(select(ChatMessage).filter_by(session_id=user_s.id))
+        assert result_msgs_s.scalars().all() == []
+        result_attrs = await session.execute(select(ChatBlockAttribute))
+        assert result_attrs.scalars().all() == []
+        result_blocks_o = await session.execute(select(ChatBlock).filter_by(session_id=user_o.id))
+        assert len(result_blocks_o.scalars().all()) == 1
+
+
+def test_delete_session_histories(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/del_shist.sqlite")
+    store.add_messages([(HumanMessage("a"), 1.0)], block_id="b1", block_ts=1.0, session_id="s")
+    store.add_messages([(HumanMessage("b"), 2.0)], block_id="b2", block_ts=2.0, session_id="s")
+    store.add_messages([(HumanMessage("c"), 3.0)], block_id="b3", block_ts=3.0, session_id="o")
+    store.delete_session_histories("s")
+
+    with store._session_local() as session:
+        user_s = session.query(User).filter_by(session_id="s").first()
+        user_o = session.query(User).filter_by(session_id="o").first()
+        assert user_s is not None
+        assert session.query(ChatMessage).filter_by(session_id=user_s.id).count() == 0
+        assert session.query(ChatBlock).filter_by(session_id=user_s.id).count() == 2
+        assert user_o is not None
+        assert session.query(ChatMessage).filter_by(session_id=user_o.id).count() == 1
+
+
+async def test_adelete_session_histories(tmp_path: Path) -> None:
+    store = BaseHistoryStore(db_url=f"sqlite:///{tmp_path}/adel_shist.sqlite")
+    await store.aadd_messages(
+        [(HumanMessage("a"), 1.0)], block_id="b1", block_ts=1.0, session_id="s"
+    )
+    await store.aadd_messages(
+        [(HumanMessage("b"), 2.0)], block_id="b2", block_ts=2.0, session_id="s"
+    )
+    await store.aadd_messages(
+        [(HumanMessage("c"), 3.0)], block_id="b3", block_ts=3.0, session_id="o"
+    )
+    await store.adelete_session_histories("s")
+
+    async with store._async_session_local() as session:
+        result_user_s = await session.execute(select(User).filter_by(session_id="s"))
+        user_s = result_user_s.scalar_one()
+        result_user_o = await session.execute(select(User).filter_by(session_id="o"))
+        user_o = result_user_o.scalar_one()
+        result_msgs_s = await session.execute(select(ChatMessage).filter_by(session_id=user_s.id))
+        assert result_msgs_s.scalars().all() == []
+        result_blocks_s = await session.execute(select(ChatBlock).filter_by(session_id=user_s.id))
+        assert len(result_blocks_s.scalars().all()) == 2
+        result_msgs_o = await session.execute(select(ChatMessage).filter_by(session_id=user_o.id))
+        assert len(result_msgs_o.scalars().all()) == 1
