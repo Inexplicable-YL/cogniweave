@@ -104,8 +104,14 @@ class RunnableWithHistoryStore(RunnableBindingBase):
         ).with_config(run_name="RunnableWithMessageHistory")
 
         bound = RunnableBranch(
-            (self._is_delete_session, self._handle_delete_session),
-            (self._is_clear_history, self._handle_clear_history),
+            (
+                self._is_delete_session,
+                RunnableLambda(self._handle_delete_session, self._a_handle_delete_session),
+            ),
+            (
+                self._is_clear_history,
+                RunnableLambda(self._handle_clear_history, self._a_handle_clear_history),
+            ),
             runnable_with_history,
         )
 
@@ -146,6 +152,11 @@ class RunnableWithHistoryStore(RunnableBindingBase):
         session_id: str = config["configurable"]["_unique_session_id"]  # type: ignore
         self.history_store.delete_session(session_id)
 
+    async def _a_handle_delete_session(self, _: Any, config: RunnableConfig) -> None:
+        """Handle the deletion of a session asynchronously."""
+        session_id: str = config["configurable"]["_unique_session_id"]  # type: ignore
+        await self.history_store.adelete_session(session_id)
+
     def _is_clear_history(self, input: Any) -> bool:
         """Check if the history should be cleared."""
         return isinstance(input, dict) and input.get("action") == "clear_history"
@@ -154,6 +165,11 @@ class RunnableWithHistoryStore(RunnableBindingBase):
         """Handle the clearing of history."""
         session_id: str = config["configurable"]["_unique_session_id"]  # type: ignore
         self.history_store.delete_session_histories(session_id)
+
+    async def _a_handle_clear_history(self, _: Any, config: RunnableConfig) -> None:
+        """Handle the clearing of history asynchronously."""
+        session_id: str = config["configurable"]["_unique_session_id"]  # type: ignore
+        await self.history_store.adelete_session_histories(session_id)
 
     @property
     @override
