@@ -133,17 +133,6 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
         block_ts: float | None = None,
         session_id: str | None = None,
     ) -> None:
-        """Persist a list of messages with timestamps to the store.
-
-        Args:
-            messages: List of (message, timestamp) pairs to store.
-            block_id: Unique identifier for the message block.
-            block_ts: Unix timestamp for the block start time.
-            session_id: Optional session/user ID. Uses block_id if not provided.
-
-        Return:
-            None: Messages are persisted to the database.
-        """
         if not messages:
             return
         session_id = session_id or block_id
@@ -160,19 +149,6 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
         block_ts: float | None = None,
         session_id: str | None = None,
     ) -> None:
-        """Async version of :meth:`add_messages`.
-
-        Persist a list of messages with timestamps to the store asynchronously.
-
-        Args:
-            messages: List of (message, timestamp) pairs to store.
-            block_id: Unique identifier for the message block.
-            block_ts: Unix timestamp for the block start time.
-            session_id: Optional session/user ID. Uses block_id if not provided.
-
-        Return:
-            None: Messages are persisted to the database.
-        """
         if not messages:
             return
         session_id = session_id or block_id
@@ -184,42 +160,18 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
 
     @override
     def get_block_timestamp(self, block_id: str) -> float | None:
-        """Get the start timestamp of a chat block.
-
-        Args:
-            block_id: The ID of the chat block to query.
-
-        Return:
-            float | None: Unix timestamp of block start time, or None if not found.
-        """
         if block_id in self._blocks_time_session_ids:
             return self._blocks_time_session_ids[block_id][0]
         return super().get_block_timestamp(block_id)
 
     @override
     async def aget_block_timestamp(self, block_id: str) -> float | None:
-        """Async version of get_block_timestamp.
-
-        Args:
-            block_id: The ID of the chat block to query.
-
-        Return:
-            float | None: Unix timestamp of block start time, or None if not found.
-        """
         if block_id in self._blocks_time_session_ids:
             return self._blocks_time_session_ids[block_id][0]
         return await super().aget_block_timestamp(block_id)
 
     @override
     def get_block_history_with_timestamps(self, block_id: str) -> list[tuple[BaseMessage, float]]:
-        """Get all messages in a block with their timestamps.
-
-        Args:
-            block_id: The ID of the chat block to query.
-
-        Return:
-            list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
-        """
         if block_id in self._blocks_time_session_ids:
             cache = self._session_caches[self._blocks_time_session_ids[block_id][1]]
             return cache.get_block_histories_with_timestamps([block_id])
@@ -229,14 +181,6 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
     async def aget_block_history_with_timestamps(
         self, block_id: str
     ) -> list[tuple[BaseMessage, float]]:
-        """Async version of get_history_with_timestamps.
-
-        Args:
-            block_id: The ID of the chat block to query.
-
-        Return:
-            list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
-        """
         if block_id in self._blocks_time_session_ids:
             cache = self._session_caches[self._blocks_time_session_ids[block_id][1]]
             return cache.get_block_histories_with_timestamps([block_id])
@@ -246,15 +190,6 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
     def get_block_histories_with_timestamps(
         self, block_ids: list[str]
     ) -> list[tuple[BaseMessage, float]]:
-        """Get messages with timestamps from multiple blocks, concatenated in order.
-
-        Args:
-            block_ids: List of block IDs to retrieve messages from.
-
-        Return:
-            list[tuple[BaseMessage, float]]: Combined list of (message, timestamp) pairs
-                from all blocks, in chronological order.
-        """
         existing_ids = set(block_ids) & set(self._blocks_time_session_ids.keys())
         session_blocks: dict[str, list[tuple[str, float]]] = defaultdict(list)
         ordered_history = SortedList(key=lambda x: x[1])
@@ -278,15 +213,6 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
     async def aget_block_histories_with_timestamps(
         self, block_ids: list[str]
     ) -> list[tuple[BaseMessage, float]]:
-        """Async version of get_histories_with_timestamps.
-
-        Args:
-            block_ids: List of block IDs to retrieve messages from.
-
-        Return:
-            list[tuple[BaseMessage, float]]: Combined list of (message, timestamp) pairs
-                from all blocks, in chronological order.
-        """
         existing_ids = set(block_ids) & set(self._blocks_time_session_ids.keys())
         session_blocks: dict[str, list[tuple[str, float]]] = defaultdict(list)
         ordered_history = SortedList(key=lambda x: x[1])
@@ -316,18 +242,6 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
         end_time: float | None = None,
         **kwargs: Any,
     ) -> list[tuple[str, float]]:
-        """Get block IDs and their start timestamps for a session, optionally filtered by time range.
-
-        Args:
-            session_id: The session/user ID to query.
-            limit: Maximum number of blocks to return (returns most recent if specified).
-            start_time: Optional minimum timestamp (inclusive) to filter blocks.
-            end_time: Optional maximum timestamp (inclusive) to filter blocks.
-
-        Return:
-            list[tuple[str, float]]: List of (block_id, start_timestamp) pairs in chronological order.
-                Returns empty list if session not found or no matching blocks.
-        """
         if limit is not None and limit <= 0:
             return []
 
@@ -392,18 +306,6 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
         end_time: float | None = None,
         **kwargs: Any,
     ) -> list[tuple[str, float]]:
-        """Async version of get_session_block_ids_with_timestamps.
-
-        Args:
-            session_id: The session/user ID to query.
-            limit: Maximum number of blocks to return (returns most recent if specified).
-            start_time: Optional minimum timestamp (inclusive) to filter blocks.
-            end_time: Optional maximum timestamp (inclusive) to filter blocks.
-
-        Return:
-            list[tuple[str, float]]: List of (block_id, start_timestamp) pairs in chronological order.
-                Returns empty list if session not found or no matching blocks.
-        """
         if limit is not None and limit <= 0:
             return []
 
@@ -468,18 +370,6 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
         end_time: float | None = None,
         **kwargs: Any,
     ) -> list[tuple[BaseMessage, float]]:
-        """Get all messages with timestamps for a session, optionally filtered by time range.
-
-        Args:
-            session_id: The session/user ID to query.
-            limit: Maximum number of messages to return (returns most recent if specified).
-            start_time: Optional minimum timestamp (inclusive) to filter messages.
-            end_time: Optional maximum timestamp (inclusive) to filter messages.
-
-        Return:
-            list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
-                Returns empty list if session not found or no matching messages.
-        """
         if limit is not None and limit <= 0:
             return []
 
@@ -544,18 +434,6 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
         end_time: float | None = None,
         **kwargs: Any,
     ) -> list[tuple[BaseMessage, float]]:
-        """Async version of get_session_history_with_timestamps.
-
-        Args:
-            session_id: The session/user ID to query.
-            limit: Maximum number of messages to return (returns most recent if specified).
-            start_time: Optional minimum timestamp (inclusive) to filter messages.
-            end_time: Optional maximum timestamp (inclusive) to filter messages.
-
-        Return:
-            list[tuple[BaseMessage, float]]: List of (message, timestamp) pairs in chronological order.
-                Returns empty list if session not found or no matching messages.
-        """
         if limit is not None and limit <= 0:
             return []
 
@@ -609,6 +487,65 @@ class BaseHistoryStoreWithCache(BaseHistoryStore):
             end_time=end_time,
             **kwargs,
         )
+
+    def _remove_session_cache(self, session_id: str) -> None:
+        """Remove the session cache and clean up associated data."""
+        cache = self._session_caches.pop(session_id, None)
+        if cache is not None:
+            for block_id in cache.blocks:
+                self._blocks_time_session_ids.pop(block_id[0], None)
+
+    @override
+    def delete_session(self, session_id: str) -> None:
+        self._remove_session_cache(session_id)
+        return super().delete_session(session_id)
+
+    @override
+    async def adelete_session(self, session_id: str) -> None:
+        self._remove_session_cache(session_id)
+        return await super().adelete_session(session_id)
+
+    @override
+    def delete_session_blocks(self, session_id: str) -> None:
+        self._remove_session_cache(session_id)
+        return super().delete_session_blocks(session_id)
+
+    @override
+    async def adelete_session_blocks(self, session_id: str) -> None:
+        self._remove_session_cache(session_id)
+        return await super().adelete_session_blocks(session_id)
+
+    @override
+    def delete_session_histories(self, session_id: str) -> None:
+        self._remove_session_cache(session_id)
+        return super().delete_session_histories(session_id)
+
+    @override
+    async def adelete_session_histories(self, session_id: str) -> None:
+        self._remove_session_cache(session_id)
+        return await super().adelete_session_histories(session_id)
+
+    def _remove_block_from_cache(self, block_id: str) -> None:
+        """Remove the block from the cache and clean up associated data."""
+        block_ts, session_id = self._blocks_time_session_ids.pop(block_id, (None, None))
+        if (
+            block_ts is not None
+            and session_id is not None
+            and (cache := self._session_caches.get(session_id, None))
+        ):
+            cache.blocks.pop((block_id, block_ts), None)
+            if not cache.blocks:
+                self._remove_session_cache(session_id)
+
+    @override
+    def delete_block(self, block_id: str) -> None:
+        self._remove_block_from_cache(block_id)
+        return super().delete_block(block_id)
+
+    @override
+    async def adelete_block(self, block_id: str) -> None:
+        self._remove_block_from_cache(block_id)
+        return await super().adelete_block(block_id)
 
     @staticmethod
     def deduplicate_unhashable(
