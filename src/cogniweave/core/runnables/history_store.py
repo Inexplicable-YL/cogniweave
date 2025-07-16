@@ -16,6 +16,7 @@ from typing_extensions import override
 from langchain_core.load.load import load
 from langchain_core.messages.base import BaseMessage
 from langchain_core.runnables.base import Runnable, RunnableBindingBase, RunnableLambda
+from langchain_core.runnables.branch import RunnableBranch
 from langchain_core.runnables.passthrough import RunnablePassthrough
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
@@ -94,13 +95,19 @@ class RunnableWithHistoryStore(RunnableBindingBase):
         async def _call_runnable_async(_input: Any) -> Runnable:
             return runnable_async
 
-        bound: Runnable = (
+        runnable_with_history: Runnable = (
             history_chain
             | RunnableLambda(
                 _call_runnable_sync,
                 _call_runnable_async,
             ).with_config(run_name="check_sync_or_async")
         ).with_config(run_name="RunnableWithMessageHistory")
+
+        bound = RunnableBranch(
+            (self._is_delete_session, self._handle_delete_session),
+            (self._is_clear_history, self._handle_clear_history),
+            runnable_with_history,
+        )
 
         if history_factory_config:
             _config_specs = history_factory_config
@@ -129,6 +136,24 @@ class RunnableWithHistoryStore(RunnableBindingBase):
             **kwargs,
         )
         self._history_chain = history_chain
+
+    def _is_delete_session(self, input: Any) -> bool:
+        """Check if the session should be deleted."""
+        return isinstance(input, dict) and input.get("action") == "delete_session"
+
+    def _handle_delete_session(self, _: Any, config: RunnableConfig) -> None:
+        """Handle the deletion of a session."""
+        session_id: str = config["configurable"]["_unique_session_id"]  # type: ignore
+        self.history_store.delete_session(session_id)
+
+    def _is_clear_history(self, input: Any) -> bool:
+        """Check if the history should be cleared."""
+        return isinstance(input, dict) and input.get("action") == "clear_history"
+
+    def _handle_clear_history(self, _: Any, config: RunnableConfig) -> None:
+        """Handle the clearing of history."""
+        session_id: str = config["configurable"]["_unique_session_id"]  # type: ignore
+        self.history_store.delete_session_histories(session_id)
 
     @property
     @override

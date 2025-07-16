@@ -5,9 +5,9 @@ from typing import Any
 
 from test_runnable import RunnableForTest
 
-from cogniweave.core.time_splitter import TimeSplitter
-from cogniweave.history_stores import BaseHistoryStore as HistoryStore
 from cogniweave.core.runnables.history_store import RunnableWithHistoryStore
+from cogniweave.core.time_splitter import TimeSplitter
+from cogniweave.history_stores import BaseHistoryStoreWithCache as HistoryStore
 
 sleep_time = 0.1
 
