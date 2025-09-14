@@ -46,6 +46,8 @@ class RunnableWithEndDetector(RunnableBindingBase):
     ) -> None:
         lambda_end_detector = RunnableLambda(self._end_detect, self._a_end_detect)
         bound = RunnableBranch(
+            (self._is_pass, runnable),
+            (self._is_not_pass, lambda _: default),
             (lambda_end_detector, runnable),
             lambda _: default,
         )
@@ -57,6 +59,12 @@ class RunnableWithEndDetector(RunnableBindingBase):
             **kwargs,
         )
         self._default = default
+
+    def _is_pass(self, input: Any) -> bool:
+        return isinstance(input, dict) and input.get("pass") is True
+
+    def _is_not_pass(self, input: Any) -> bool:
+        return isinstance(input, dict) and input.get("pass") is False
 
     @override
     def get_input_schema(self, config: RunnableConfig | None = None) -> type[BaseModel]:
