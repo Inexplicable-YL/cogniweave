@@ -112,7 +112,7 @@ def create_agent(
     *,
     lang: str | None = None,
     prompt: str | None = None,
-    temperature: float = 1.0,
+    temperature: float | None = None,
     tools: list[BaseTool] | None = None,
     provider: str | None = None,
     model: str | None = None,
@@ -161,6 +161,7 @@ def build_pipeline(
     index_name: str | None = None,
     folder_path: str | Path | None = None,
     history_limit: int | None = None,
+    tools: list[BaseTool] | None = None,
 ) -> RunnableWithHistoryStore:
     """Assemble the runnable pipeline used in the demos."""
     from cogniweave.config import get_config
@@ -187,7 +188,12 @@ def build_pipeline(
     embeddings = create_embeddings()
     history_store = create_history_store(index_name=index_name, folder_path=folder_path)
     vector_store = create_vector_store(embeddings, index_name=index_name, folder_path=folder_path)
-    chat = create_chat(lang=lang, prompt=prompt, temperature=temperature)
+    if tools is not None and len(tools) > 0:
+        chat = create_agent(
+            lang=lang, prompt=prompt, temperature=temperature, tools=tools
+        )
+    else:
+        chat = create_chat(lang=lang, prompt=prompt, temperature=temperature)
 
     pipeline = RunnableWithMemoryMaker(
         chat,
